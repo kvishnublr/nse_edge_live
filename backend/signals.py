@@ -8,9 +8,27 @@ import logging
 import statistics
 from typing import Optional, List
 from collections import deque
+import requests as _requests
 from config import GATE as TH, LOT_SIZES
 
 logger = logging.getLogger("signals")
+
+# ─── TELEGRAM ALERT ───────────────────────────────────────────────────────────
+_last_telegram_verdict = None   # debounce — only alert on verdict change
+
+def _send_telegram(msg: str):
+    from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+    try:
+        _requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML"},
+            timeout=5,
+        )
+    except Exception as e:
+        logger.debug(f"Telegram send failed: {e}")
+
 
 # ─── GLOBAL STATE (read by WebSocket broadcaster) ─────────────────────────────
 state = {
@@ -511,6 +529,22 @@ def run_signal_engine(indices: dict, chain: dict, fii: dict,
         "position_size_lots": position_size_lots,
         "position_size_rupees": position_size_rupees,
     })
+
+    # ── Telegram alert on verdict change ──
+    global _last_telegram_verdict
+    if verdict != _last_telegram_verdict:
+        _last_telegram_verdict = verdict
+        if verdict == "EXECUTE":
+            nifty  = indices.get("nifty", 0)
+            msg = (
+                f"🟢 <b>NSE EDGE — EXECUTE SIGNAL</b>\n"
+                f"Nifty: <b>{nifty:.0f}</b>  |  VIX: {vix:.1f}  |  PCR: {pcr:.2f}\n"
+                f"FII: ₹{fii_net:.0f} Cr  |  Confidence: {confidence}/10\n"
+                f"All 5 gates PASS — <b>trade now</b>"
+            )
+            _send_telegram(msg)
+        elif verdict == "NO TRADE" and _last_telegram_verdict == "EXECUTE":
+            _send_telegram("🔴 <b>NSE EDGE — EXECUTE cancelled</b>\nGate failed — stand down.")
 
     # ── Log to DB for backtest analysis (non-blocking) ──
     try:

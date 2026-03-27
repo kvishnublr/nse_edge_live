@@ -163,6 +163,10 @@ GATE = {
     "spike_oi_pct":      12.0,
 }
 
+# ─── TELEGRAM ALERTS ──────────────────────────────────────────────────────────
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID",   "").strip()
+
 # ─── SESSION ZONES (IST minutes from midnight) ────────────────────────────────
 ZONES = {
     "pre_open":  (555, 560),   # 9:15–9:20

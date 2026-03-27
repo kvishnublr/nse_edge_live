@@ -192,7 +192,7 @@ def _fetch_bhavcopy_pcr(dt: date):
                         content = z.read(z.namelist()[0])
                 except Exception:
                     continue
-            result = _parse_pcr(content.decode("utf-8", errors="ignore"))
+            result = _parse_pcr(content.decode("utf-8", errors="ignore"), ref_date=dt)
             if result:
                 return result
         except Exception as e:
@@ -200,7 +200,7 @@ def _fetch_bhavcopy_pcr(dt: date):
     return None
 
 
-def _parse_pcr(csv_text: str):
+def _parse_pcr(csv_text: str, ref_date=None):
     try:
         reader = csv.DictReader(io.StringIO(csv_text))
         rows   = []
@@ -215,7 +215,6 @@ def _parse_pcr(csv_text: str):
         if not rows:
             return None
 
-        # Nearest expiry on or after today
         def _parse_exp(s):
             for fmt in ("%d-%b-%Y", "%d-%b-%y", "%Y-%m-%d", "%d/%m/%Y"):
                 try:
@@ -224,12 +223,13 @@ def _parse_pcr(csv_text: str):
                     pass
             return None
 
-        today   = datetime.now().date()
+        # Use ref_date (the bhavcopy date) to find nearest expiry, not today
+        anchor  = ref_date if ref_date else datetime.now().date()
         exps    = sorted(set(r["exp"] for r in rows))
         nearest = None
         for e in exps:
             d = _parse_exp(e)
-            if d and d >= today:
+            if d and d >= anchor:
                 nearest = e
                 break
         if not nearest:
@@ -255,6 +255,77 @@ def _parse_pcr(csv_text: str):
     except Exception as e:
         logger.debug(f"PCR parse error: {e}")
         return None
+
+
+# ─── FII HISTORICAL DOWNLOAD ───────────────────────────────────────────────────
+def download_fii_history(days: int = 1095):
+    """Download NSE FII/DII daily net flow data for historical backtest."""
+    to_dt   = datetime.now(IST).date()
+    from_dt = to_dt - timedelta(days=days)
+
+    conn     = get_conn()
+    existing = set(r[0] for r in conn.execute("SELECT date FROM fii_daily").fetchall())
+    conn.close()
+
+    _nse_cookie()
+
+    downloaded = 0
+    failed     = 0
+    chunk_days = 90
+
+    cur = from_dt
+    while cur <= to_dt:
+        chunk_end = min(cur + timedelta(days=chunk_days - 1), to_dt)
+        from_str  = cur.strftime("%d-%m-%Y")
+        to_str    = chunk_end.strftime("%d-%m-%Y")
+
+        try:
+            resp = _NSE.get(
+                f"https://www.nseindia.com/api/historical/fiiDii"
+                f"?from={from_str}&to={to_str}",
+                timeout=15
+            )
+            if resp.status_code == 200:
+                raw  = resp.json()
+                data = raw if isinstance(raw, list) else raw.get("data", [])
+                conn = get_conn()
+                for rec in data:
+                    # Parse date — NSE returns "01-Apr-2023" or "01-04-2023"
+                    dt_raw = rec.get("date", "")
+                    dt_obj = None
+                    for fmt in ("%d-%b-%Y", "%d-%m-%Y", "%Y-%m-%d"):
+                        try:
+                            dt_obj = datetime.strptime(dt_raw, fmt).date()
+                            break
+                        except Exception:
+                            pass
+                    if not dt_obj:
+                        continue
+                    dt_str = dt_obj.strftime("%Y-%m-%d")
+                    if dt_str in existing:
+                        continue
+                    fii_net = round(float(rec.get("fiiNet", rec.get("fiinet", 0)) or 0), 2)
+                    dii_net = round(float(rec.get("diiNet", rec.get("diinet", 0)) or 0), 2)
+                    conn.execute(
+                        "INSERT OR REPLACE INTO fii_daily VALUES (?,?,?)",
+                        (dt_str, fii_net, dii_net)
+                    )
+                    existing.add(dt_str)
+                    downloaded += 1
+                conn.commit()
+                conn.close()
+            else:
+                logger.debug(f"FII history {from_str}→{to_str}: HTTP {resp.status_code}")
+                failed += 1
+        except Exception as e:
+            logger.debug(f"FII history chunk {from_str}→{to_str}: {e.__class__.__name__}")
+            failed += 1
+
+        time.sleep(0.5)
+        cur = chunk_end + timedelta(days=1)
+
+    logger.info(f"FII history: {downloaded} days downloaded, {failed} chunks failed")
+    return {"downloaded": downloaded, "failed": failed}
 
 
 # ─── DATA SUMMARY ─────────────────────────────────────────────────────────────

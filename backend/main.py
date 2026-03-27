@@ -340,6 +340,7 @@ async def backtest_download():
             kite = get_kite()
             await loop.run_in_executor(None, lambda: bd.download_kite_history(kite, days=1095))
             await loop.run_in_executor(None, lambda: bd.download_chain_history(days=1095))
+            await loop.run_in_executor(None, lambda: bd.download_fii_history(days=1095))
             await loop.run_in_executor(None, bd.fill_outcomes)
             logger.info("Backtest data download complete")
         except Exception as e:
@@ -426,6 +427,58 @@ async def backtest_gate_weights():
         return JSONResponse(gw.get_gate_analysis())
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/backtest/optimize")
+async def backtest_optimize():
+    """Grid-search gate thresholds to maximise profit factor."""
+    try:
+        import asyncio, threshold_optimizer as opt
+        loop    = asyncio.get_event_loop()
+        results = await loop.run_in_executor(None, opt.run_optimizer)
+        return JSONResponse(results)
+    except Exception as e:
+        logger.error(f"Optimizer error: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/token-status")
+async def token_status():
+    """Check if Kite access token is still valid."""
+    from config import KITE_ACCESS_TOKEN
+    import time as _time
+    try:
+        from feed import get_kite
+        kite = get_kite()
+        profile = kite.profile()
+        return JSONResponse({
+            "valid":    True,
+            "user":     profile.get("user_name", ""),
+            "uptime_h": round((_time.time() - _start_time) / 3600, 1),
+        })
+    except Exception as e:
+        return JSONResponse({
+            "valid":   False,
+            "error":   str(e),
+            "uptime_h": round((_time.time() - _start_time) / 3600, 1),
+        })
+
+
+@app.post("/api/backtest/download-fii")
+async def backtest_download_fii():
+    """Download 3-year FII/DII daily net flow history from NSE."""
+    import asyncio, backtest_data as bd
+
+    async def _dl():
+        loop = asyncio.get_event_loop()
+        try:
+            await loop.run_in_executor(None, lambda: bd.download_fii_history(days=1095))
+            logger.info("FII history download complete")
+        except Exception as e:
+            logger.error(f"FII download error: {e}", exc_info=True)
+
+    asyncio.create_task(_dl())
+    return JSONResponse({"message": "FII history download started. Check /api/backtest/status."})
 
 
 if __name__ == "__main__":

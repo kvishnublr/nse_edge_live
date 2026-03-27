@@ -204,12 +204,13 @@ def run_backtest(from_date: str, to_date: str, mode: str = "intraday") -> dict:
 
         verdict, pass_cnt = _verdict([g1, g2, g3, g4, g5])
 
-        # Outcome: next calendar day
+        # Outcome: next calendar day (ATR-based threshold — adapts to volatility)
         nxt_close   = ohlcv[i + 1]["close"] if i + 1 < len(ohlcv) else None
         outcome_pts = round(nxt_close - day["close"], 2) if nxt_close else None
         outcome     = None
         if outcome_pts is not None:
-            outcome = "WIN" if outcome_pts >= 30 else "LOSS" if outcome_pts <= -30 else "NEUTRAL"
+            threshold = max(20, round(atr_v * 0.4))   # 40% of ATR, min 20 pts
+            outcome   = "WIN" if outcome_pts >= threshold else "LOSS" if outcome_pts <= -threshold else "NEUTRAL"
 
         record = {
             "date":        dt,

@@ -393,6 +393,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   </div>
 </div>
 
+<!-- TOKEN EXPIRY WARNING BANNER -->
+<div id="token-banner" style="display:none;background:#ff335522;border-bottom:1px solid #ff335566;padding:5px 14px;font-size:9px;color:#ff3355;letter-spacing:.5px;display:flex;align-items:center;gap:8px;flex-shrink:0">
+  <span>⚠</span>
+  <span id="token-banner-msg">Kite access token may be expired — live data may be stale. Regenerate token and restart backend.</span>
+  <span style="margin-left:auto;cursor:pointer;opacity:.6" onclick="document.getElementById('token-banner').style.display='none'">✕</span>
+</div>
+
 <!-- MAIN GRID -->
 <div id="grid">
 
@@ -999,6 +1006,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
         </div>
         <button class="btn btn-g" style="font-size:9px;padding:4px 14px" onclick="bt2Run()">▶ RUN BACKTEST</button>
         <button class="btpre" onclick="bt2Download()" style="margin-left:4px">⬇ DOWNLOAD DATA</button>
+        <button class="btpre" onclick="bt2DownloadFii()" style="margin-left:2px">⬇ FII DATA</button>
+        <button class="btpre" onclick="bt2Optimize()" style="margin-left:2px;color:var(--am);border-color:var(--am)">⚙ OPTIMIZE</button>
         <button class="btrst" onclick="bt2CalcWeights()">RECALC WEIGHTS</button>
       </div>
       <div style="margin-top:5px;font-size:8px;color:var(--t2)" id="bt2-status">Loading data status...</div>
@@ -2654,12 +2663,57 @@ async function bt2RefreshStatus() {
   try {
     const r = await fetch(API+'/api/backtest/status');
     const d = await r.json();
-    const s = `OHLCV: ${d.ohlcv?.count||0} days · VIX: ${d.vix?.count||0} days · Chain PCR: ${d.chain?.count||0} days · Live signals: ${d.signal_log?.count||0}`;
+    const fii = d.fii?.count || 0;
+    const s = `OHLCV: ${d.ohlcv?.count||0} days · VIX: ${d.vix?.count||0} days · Chain: ${d.chain?.count||0} days · FII: ${fii} days · Signals: ${d.signal_log?.count||0}`;
     document.getElementById('bt2-status').textContent = s;
   } catch(e) {
     document.getElementById('bt2-status').textContent = 'Status unavailable';
   }
 }
+
+async function bt2DownloadFii() {
+  try {
+    notify('Downloading FII history from NSE...');
+    const r = await fetch(API+'/api/backtest/download-fii', {method:'POST'});
+    const d = await r.json();
+    document.getElementById('bt2-status').textContent = d.message || 'FII download started';
+    setTimeout(bt2RefreshStatus, 5000);
+  } catch(e) {
+    notify('FII download failed — check backend');
+  }
+}
+
+async function bt2Optimize() {
+  notify('Running threshold optimizer — may take 30-60 sec...');
+  document.getElementById('bt2-status').textContent = 'Optimizer running...';
+  try {
+    const r = await fetch(API+'/api/backtest/optimize', {method:'POST'});
+    const d = await r.json();
+    if(d.error){ notify('Optimizer error: '+d.error); return; }
+    const b = d.best;
+    const msg = `Optimizer done (${d.tested} combos · ${d.days} days)\n`
+      + `Best: PF=${b.profit_factor}  WR=${b.win_rate}%  Signals=${b.signals}\n`
+      + `VIX: ${b.vix_low}/${b.vix_medium}/${b.vix_high}  PCR: ${b.pcr_bearish}/${b.pcr_bullish}  Vol: ${b.vol_surge_min}×`;
+    document.getElementById('bt2-status').textContent = msg;
+    notify(`Optimizer: best PF=${b.profit_factor} WR=${b.win_rate}% — see status bar`);
+  } catch(e) {
+    notify('Optimizer failed — check backend');
+  }
+}
+
+// ── Token expiry check — runs once on load ──
+(async function checkToken() {
+  try {
+    const r = await fetch(API+'/api/token-status');
+    const d = await r.json();
+    if(!d.valid) {
+      const banner = document.getElementById('token-banner');
+      document.getElementById('token-banner-msg').textContent =
+        'Kite access token expired — live data is stale. Regenerate token and restart backend. Error: ' + (d.error||'unknown');
+      if(banner) banner.style.display = 'flex';
+    }
+  } catch(e) {}
+})();
 </script>
 </body>
 </html>
