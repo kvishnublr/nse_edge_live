@@ -8,7 +8,7 @@ import logging
 import statistics
 from typing import Optional, List
 from collections import deque
-from config import GATE as TH
+from config import GATE as TH, LOT_SIZES
 
 logger = logging.getLogger("signals")
 
@@ -334,16 +334,36 @@ def gate5_risk(indices: dict, chain: dict, mode: str) -> dict:
     st = "go" if (rr >= rr_min and mult >= 0.5) else \
          "st" if (rr < 1.5 or mult <= 0.25) else "am"
 
+    # Calculate position sizing
+    position_size_lots = 0
+    position_size_rupees = 0
+    if st == "go" and rr > 0 and mult > 0:
+        # Account risk parameters (can be made configurable later)
+        account_value = 500000  # ₹5 lakh trading capital
+        risk_per_trade = 0.01   # 1% risk per trade
+        monetary_risk = account_value * risk_per_trade  # ₹5,000 risk per trade
+        
+        # Risk per lot = stop points * lot size
+        lot_size = LOT_SIZES.get("NIFTY", 25)  # Default to NIFTY lot size
+        risk_per_lot = stop_pts * lot_size
+        
+        if risk_per_lot > 0:
+            raw_lots = monetary_risk / (risk_per_lot * mult)  # Adjust for VIX sizing
+            position_size_lots = max(1, int(round(raw_lots)))  # At least 1 lot
+            position_size_rupees = position_size_lots * lot_size * nifty
+
     rows = [
         {"k": "R:R ratio",     "v": rr_lbl,  "c": rr_col},
         {"k": "Target (CE wall)","v": f"{target:,} (+{target-nifty:.0f} pts)","c": "cg"},
         {"k": "Stop distance", "v": f"{stop_pts} pts → SL {stop_price:,}", "c": "ca"},
         {"k": "VIX sizing",    "v": size_lbl, "c": size_col},
+        {"k": "Position Size", "v": f"{position_size_lots} lot{'s' if position_size_lots > 1 else ''} (₹{position_size_rupees:,})", "c": "cg" if position_size_lots > 0 else "st"},
         {"k": "Risk verdict",  "v": "VALID ✓" if st == "go" else
-              "FAIL — R:R too low" if st == "st" else "MARGINAL",
-         "c": "cg" if st == "go" else "cr" if st == "st" else "ca"},
+               "FAIL — R:R too low" if st == "st" else "MARGINAL",
+          "c": "cg" if st == "go" else "cr" if st == "st" else "ca"},
     ]
-    return {"name": "RISK VALID", "state": st, "score": score, "rows": rows}
+    return {"name": "RISK VALID", "state": st, "score": score, "rows": rows, 
+            "position_size_lots": position_size_lots, "position_size_rupees": position_size_rupees}
 
 
 # ─── VERDICT ──────────────────────────────────────────────────────────────────
@@ -468,6 +488,13 @@ def run_signal_engine(indices: dict, chain: dict, fii: dict,
     except Exception:
         confidence = 0.0
 
+    # Extract position sizing data from RISK VALID gate (gate 5)
+    position_size_lots = 0
+    position_size_rupees = 0
+    if 5 in gates_dict:
+        position_size_lots = gates_dict[5].get("position_size_lots", 0)
+        position_size_rupees = gates_dict[5].get("position_size_rupees", 0)
+
     state.update({
         "gates":       gates_dict,
         "verdict":     verdict,
@@ -481,6 +508,8 @@ def run_signal_engine(indices: dict, chain: dict, fii: dict,
         "last_stocks": stocks,
         "last_fii":    fii,
         "last_updated":time.time(),
+        "position_size_lots": position_size_lots,
+        "position_size_rupees": position_size_rupees,
     })
 
     # ── Log to DB for backtest analysis (non-blocking) ──

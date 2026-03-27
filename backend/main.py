@@ -224,6 +224,8 @@ async def _send_initial(ws: WebSocket):
             "verdict_sub": signals.state["verdict_sub"],
             "pass_count":  signals.state["pass_count"],
             "confidence":  signals.state.get("confidence", 0.0),
+            "position_size_lots": signals.state.get("position_size_lots", 0),
+            "position_size_rupees": signals.state.get("position_size_rupees", 0),
         }}))
         prices = get_all_prices()
         if prices:
@@ -292,6 +294,8 @@ async def get_state():
         "stocks":      signals.state.get("last_stocks"),
         "fii":         signals.state.get("last_fii"),
         "spikes":      signals.state.get("spikes", []),
+        "position_size_lots": signals.state.get("position_size_lots", 0),
+        "position_size_rupees": signals.state.get("position_size_rupees", 0),
     })
 
 
