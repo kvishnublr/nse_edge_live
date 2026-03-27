@@ -64,7 +64,9 @@ def get_all_prices() -> dict:
 _kite: Optional[KiteConnect] = None
 _ticker: Optional[KiteTicker] = None
 _ticker_connected = False
+_ticker_lock = threading.Lock()  # Protect _ticker_connected from race conditions
 _reconnect_count = 0
+_reconnect_lock = threading.Lock()  # Protect _reconnect_count
 
 
 def get_kite() -> KiteConnect:
@@ -119,7 +121,8 @@ def fetch_quotes_rest():
 def _on_ticks(ws, ticks: list):
     """Called by KiteTicker on every tick. Updates price_cache instantly."""
     global _ticker_connected
-    _ticker_connected = True
+    with _ticker_lock:
+        _ticker_connected = True
     for tick in ticks:
         token  = tick.get("instrument_token")
         symbol = KITE_TOKEN_TO_SYMBOL.get(token)
@@ -147,7 +150,8 @@ def _on_ticks(ws, ticks: list):
 
 def _on_connect(ws, response):
     global _reconnect_count
-    _reconnect_count = 0
+    with _reconnect_lock:
+        _reconnect_count = 0
     tokens = list(KITE_TOKENS.values())
     logger.info(f"KiteTicker connected — subscribing {len(tokens)} instruments")
     ws.subscribe(tokens)
@@ -157,7 +161,8 @@ def _on_connect(ws, response):
 
 def _on_close(ws, code, reason):
     global _ticker_connected
-    _ticker_connected = False
+    with _ticker_lock:
+        _ticker_connected = False
     logger.warning(f"KiteTicker closed ({code}): {reason}")
 
 
@@ -167,25 +172,38 @@ def _on_error(ws, code, reason):
 
 def _on_reconnect(ws, attempts_count):
     global _reconnect_count
-    _reconnect_count = attempts_count
+    with _reconnect_lock:
+        _reconnect_count = attempts_count
     logger.info(f"KiteTicker reconnecting... attempt {attempts_count}")
 
 
 def _on_noreconnect(ws):
     global _ticker_connected
-    _ticker_connected = False
+    with _ticker_lock:
+        _ticker_connected = False
     logger.error("KiteTicker gave up reconnecting — falling back to REST quotes")
     # Start REST polling fallback
     threading.Thread(target=_rest_fallback_loop, daemon=True).start()
 
 
 def _rest_fallback_loop():
-    """Poll REST quotes every 2 seconds when ticker is down."""
+    """Poll REST quotes every 2 seconds when ticker is down (max 10 minutes)."""
     logger.info("REST quote fallback loop started")
-    while not _ticker_connected:
+    max_iterations = 300  # 10 minutes (300 * 2 seconds)
+    iteration = 0
+
+    while iteration < max_iterations:
+        with _ticker_lock:
+            if _ticker_connected:
+                logger.info("Ticker reconnected — stopping REST fallback")
+                return
+
         fetch_quotes_rest()
         time.sleep(2)
-    logger.info("Ticker reconnected — stopping REST fallback")
+        iteration += 1
+
+    logger.error(f"REST fallback timeout after {max_iterations * 2}s — ticker not recovered")
+    logger.warning("System will continue with stale data. Please check Kite API status and restart.")
 
 
 # ─── FEED MANAGER ─────────────────────────────────────────────────────────────

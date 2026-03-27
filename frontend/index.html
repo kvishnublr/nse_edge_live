@@ -1965,10 +1965,19 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
     };
 
     ws.onmessage = (evt) => {
-      try { handle(JSON.parse(evt.data)); } catch(e) {}
+      try {
+        handle(JSON.parse(evt.data));
+      } catch(e) {
+        console.error("WebSocket message parse error:", e, evt.data);
+        notify("Error: Invalid data from server");
+      }
     };
 
-    ws.onerror = () => {};
+    ws.onerror = (ev) => {
+      console.error("WebSocket error:", ev);
+      notify("Connection error - will reconnect");
+      setStatus(false);
+    };
 
     ws.onclose = () => {
       setStatus(false);

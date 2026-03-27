@@ -19,7 +19,7 @@ import fetcher
 import signals
 import scheduler as sched
 from feed import feed_manager, get_all_prices
-from config import HOST, PORT, KITE_API_KEY, KITE_ACCESS_TOKEN
+from config import HOST, PORT, KITE_API_KEY, KITE_ACCESS_TOKEN, is_market_open, get_market_status
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,16 +35,17 @@ _start_time = time.time()
 
 
 def broadcast(payload: dict):
+    """Broadcast payload to all connected WebSocket clients."""
     if _bcast_queue:
         try:
             _bcast_queue.put_nowait(payload)
         except asyncio.QueueFull:
-            pass
+            logger.warning("Broadcast queue full - dropping message (consider increasing maxsize)")
 
 
 async def _bcast_loop():
     global _bcast_queue
-    _bcast_queue = asyncio.Queue(maxsize=1000)
+    _bcast_queue = asyncio.Queue(maxsize=5000)  # Increased from 1000 to handle high-frequency updates
     logger.info("Broadcast loop started")
     while True:
         payload = await _bcast_queue.get()
@@ -55,9 +56,16 @@ async def _bcast_loop():
         for ws in list(connected_clients):
             try:
                 await ws.send_text(msg)
-            except Exception:
+            except ConnectionResetError:
+                dead.add(ws)
+            except RuntimeError:  # Connection already closed
+                dead.add(ws)
+            except Exception as e:
+                logger.debug(f"WebSocket send error: {e.__class__.__name__}")
                 dead.add(ws)
         connected_clients.difference_update(dead)
+        if dead:
+            logger.debug(f"Removed {len(dead)} dead WebSocket connections (remaining: {len(connected_clients)})")
 
 
 # ─── LIFESPAN ─────────────────────────────────────────────────────────────────
@@ -130,8 +138,24 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="NSE EDGE v5", version="5.0.0", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["*"],
-                   allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+# ─── CORS CONFIGURATION ─────────────────────────────────────────────────────────
+# Only allow specific origins to prevent CSRF attacks
+ALLOWED_ORIGINS = [
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+    "localhost:8080",
+    "127.0.0.1:8080",
+]
+# Note: file:// protocol cannot be in CORS allow_origins, so local file:// loads are unrestricted by browser
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,  # Disabled for better security
+    allow_methods=["GET", "POST"],  # Only GET and POST
+    allow_headers=["Content-Type", "Authorization"],
+)
 
 
 # ─── WEBSOCKET ────────────────────────────────────────────────────────────────
@@ -149,15 +173,31 @@ async def ws_endpoint(websocket: WebSocket):
                 text = await asyncio.wait_for(websocket.receive_text(), timeout=60)
                 msg  = json.loads(text)
                 if msg.get("type") == "set_mode":
-                    sched.set_mode(msg.get("mode", "intraday"))
+                    mode = msg.get("mode", "intraday").lower()
+                    # Validate mode is in allowed list
+                    if mode in ["intraday", "swing", "positional"]:
+                        sched.set_mode(mode)
+                        logger.info(f"Trading mode changed to: {mode}")
+                    else:
+                        logger.warning(f"Invalid mode received from WebSocket: {mode}")
+                        await websocket.send_text(json.dumps({
+                            "type": "error",
+                            "message": f"Invalid mode '{mode}'. Allowed: intraday, swing, positional"
+                        }))
                 elif msg.get("type") == "ping":
-                    await websocket.send_text(json.dumps({"type": "pong"}))
+                    await websocket.send_text(json.dumps({"type": "pong", "timestamp": time.time()}))
+            except json.JSONDecodeError as e:
+                logger.warning(f"WebSocket JSON decode error: {e}")
+                await websocket.send_text(json.dumps({"type": "error", "message": "Invalid JSON"}))
             except asyncio.TimeoutError:
                 await websocket.send_text(json.dumps({"type": "ping"}))
+            except Exception as e:
+                logger.error(f"WebSocket message handling error: {e.__class__.__name__}")
+                break
     except WebSocketDisconnect:
         pass
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"WebSocket exception: {e.__class__.__name__}: {e}")
     finally:
         connected_clients.discard(websocket)
         logger.info(f"WS disconnected: {ip} (remaining: {len(connected_clients)})")
@@ -166,7 +206,8 @@ async def ws_endpoint(websocket: WebSocket):
 async def _send_initial(ws: WebSocket):
     """Burst full state to a freshly connected client."""
     try:
-        await ws.send_text(json.dumps({"type": "gates", "data": {
+        now = time.time()
+        await ws.send_text(json.dumps({"type": "gates", "timestamp": now, "data": {
             "gates":       {str(k): v for k, v in signals.state["gates"].items()},
             "verdict":     signals.state["verdict"],
             "verdict_sub": signals.state["verdict_sub"],
@@ -174,35 +215,54 @@ async def _send_initial(ws: WebSocket):
         }}))
         prices = get_all_prices()
         if prices:
-            await ws.send_text(json.dumps({"type": "prices", "data": prices}))
+            await ws.send_text(json.dumps({"type": "prices", "timestamp": now, "data": prices}))
         if signals.state.get("last_chain"):
-            await ws.send_text(json.dumps({"type": "chain",  "data": signals.state["last_chain"]}))
+            await ws.send_text(json.dumps({"type": "chain", "timestamp": now, "data": signals.state["last_chain"]}))
         if signals.state.get("last_macro"):
-            await ws.send_text(json.dumps({"type": "macro",  "data": signals.state["last_macro"]}))
+            await ws.send_text(json.dumps({"type": "macro", "timestamp": now, "data": signals.state["last_macro"]}))
         if signals.state.get("last_stocks"):
-            await ws.send_text(json.dumps({"type": "stocks", "data": signals.state["last_stocks"]}))
+            await ws.send_text(json.dumps({"type": "stocks", "timestamp": now, "data": signals.state["last_stocks"]}))
         if signals.state.get("last_fii"):
-            await ws.send_text(json.dumps({"type": "fii",    "data": signals.state["last_fii"]}))
-        await ws.send_text(json.dumps({"type": "spikes", "data": signals.state.get("spikes", [])}))
-        await ws.send_text(json.dumps({"type": "ticker", "data": signals.state.get("ticker", [])}))
-        await ws.send_text(json.dumps({"type": "ready", "msg": "NSE EDGE v5 Live"}))
+            await ws.send_text(json.dumps({"type": "fii", "timestamp": now, "data": signals.state["last_fii"]}))
+        await ws.send_text(json.dumps({"type": "spikes", "timestamp": now, "data": signals.state.get("spikes", [])}))
+        await ws.send_text(json.dumps({"type": "ticker", "timestamp": now, "data": signals.state.get("ticker", [])}))
+        await ws.send_text(json.dumps({"type": "ready", "timestamp": now, "msg": "NSE EDGE v5 Live"}))
     except Exception as e:
-        logger.error(f"Initial state send: {e}")
+        logger.error(f"Initial state send: {e.__class__.__name__}: {e}")
 
 
 # ─── REST API ─────────────────────────────────────────────────────────────────
 @app.get("/api/health")
 async def health():
     from feed import price_cache, _ticker_connected
+    from feed import _ticker_lock
+
+    last_updated = signals.state.get("last_updated", 0)
+    now = time.time()
+    data_age_sec = round(now - last_updated, 1)
+
+    # Determine health status based on data staleness
+    if data_age_sec > 300:  # > 5 minutes
+        status = "critical"
+    elif data_age_sec > 60:  # > 1 minute
+        status = "stale"
+    else:
+        status = "ok"
+
+    with _ticker_lock:
+        ticker_connected = _ticker_connected
+
     return JSONResponse({
-        "status":         "ok",
+        "status":         status,
+        "market_status":  get_market_status(),
         "verdict":        signals.state["verdict"],
         "pass_count":     signals.state["pass_count"],
-        "kite_ticker":    _ticker_connected,
+        "kite_ticker":    ticker_connected,
         "prices_cached":  len(price_cache),
         "ws_clients":     len(connected_clients),
-        "uptime_sec":     round(time.time() - _start_time),
-        "last_updated":   signals.state.get("last_updated", 0),
+        "uptime_sec":     round(now - _start_time),
+        "last_updated":   last_updated,
+        "data_age_sec":   data_age_sec,
     })
 
 

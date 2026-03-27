@@ -28,25 +28,64 @@ _nse_session.headers.update(NSE_HEADERS)
 _nse_cookie_ts = 0
 
 def _nse_refresh_cookie():
+    """Refresh NSE session cookie."""
     global _nse_cookie_ts
     try:
-        _nse_session.get(NSE_BASE, timeout=NSE_TIMEOUT)
-        _nse_cookie_ts = time.time()
+        resp = _nse_session.get(NSE_BASE, timeout=NSE_TIMEOUT)
+        if resp.status_code == 200:
+            _nse_cookie_ts = time.time()
+            logger.debug("NSE cookie refreshed")
+            return True
+        else:
+            logger.warning(f"NSE cookie refresh failed: {resp.status_code}")
+            return False
     except Exception as e:
-        logger.warning(f"NSE cookie refresh: {e}")
+        logger.warning(f"NSE cookie refresh exception: {e}")
+        return False
 
-def _nse_get(url: str) -> Optional[dict]:
-    if time.time() - _nse_cookie_ts > 240:
-        _nse_refresh_cookie()
-    try:
-        r = _nse_session.get(url, timeout=NSE_TIMEOUT)
-        if r.status_code == 401:
+def _nse_get(url: str, max_retries: int = 3) -> Optional[dict]:
+    """Get data from NSE with automatic cookie refresh and retry logic."""
+    for attempt in range(max_retries):
+        # Refresh cookie if stale (every 4 minutes)
+        if attempt == 0 or time.time() - _nse_cookie_ts > 240:
             _nse_refresh_cookie()
-            r = _nse_session.get(url, timeout=NSE_TIMEOUT)
-        return r.json() if r.status_code == 200 else None
-    except Exception as e:
-        logger.warning(f"NSE GET {url}: {e}")
-        return None
+
+        try:
+            resp = _nse_session.get(url, timeout=NSE_TIMEOUT)
+
+            # Success
+            if resp.status_code == 200:
+                return resp.json()
+
+            # Unauthorized - refresh and retry
+            elif resp.status_code == 401 and attempt < max_retries - 1:
+                logger.warning(f"NSE 401 Unauthorized (attempt {attempt + 1}/{max_retries}) - refreshing cookie")
+                _nse_refresh_cookie()
+                continue
+
+            # Other HTTP errors
+            else:
+                logger.warning(f"NSE {resp.status_code} on {url} (attempt {attempt + 1}/{max_retries})")
+                if attempt < max_retries - 1:
+                    time.sleep(1)  # Wait before retry
+                continue
+
+        except requests.Timeout:
+            logger.warning(f"NSE timeout on {url} (attempt {attempt + 1}/{max_retries})")
+            if attempt < max_retries - 1:
+                time.sleep(1)
+                continue
+            return None
+
+        except Exception as e:
+            logger.warning(f"NSE exception: {e.__class__.__name__} (attempt {attempt + 1}/{max_retries})")
+            if attempt < max_retries - 1:
+                time.sleep(1)
+                continue
+            return None
+
+    logger.error(f"NSE GET {url}: Failed after {max_retries} attempts")
+    return None
 
 
 # ─── OPTION CHAIN (via Kite NFO instruments) ──────────────────────────────────
@@ -126,12 +165,18 @@ def fetch_option_chain(kite, symbol: str = "NIFTY") -> Optional[dict]:
             pq = data.get(pe_key, {})
 
             c_oi     = cq.get("oi", 0)
-            c_oi_chg = cq.get("oi_day_high", 0) - cq.get("oi_day_low", 0)  # proxy
+            # Use OI change from prev close if available, else daily range
+            c_oi_chg = cq.get("oi") - cq.get("oi_prev_day_close", c_oi) if "oi" in cq else 0
+            if c_oi_chg == 0:  # Fallback if prev_day_close not available
+                c_oi_chg = cq.get("oi_day_high", 0) - cq.get("oi_day_low", 0)
             c_ltp    = cq.get("last_price", 0)
             c_iv     = _calc_iv_proxy(c_ltp, ul_px, s, expiry, "CE")
 
             p_oi     = pq.get("oi", 0)
-            p_oi_chg = pq.get("oi_day_high", 0) - pq.get("oi_day_low", 0)
+            # Use OI change from prev close if available, else daily range
+            p_oi_chg = pq.get("oi") - pq.get("oi_prev_day_close", p_oi) if "oi" in pq else 0
+            if p_oi_chg == 0:  # Fallback if prev_day_close not available
+                p_oi_chg = pq.get("oi_day_high", 0) - pq.get("oi_day_low", 0)
             p_ltp    = pq.get("last_price", 0)
             p_iv     = _calc_iv_proxy(p_ltp, ul_px, s, expiry, "PE")
 
@@ -151,7 +196,15 @@ def fetch_option_chain(kite, symbol: str = "NIFTY") -> Optional[dict]:
                 "put_ltp":     p_ltp,
             })
 
-        pcr      = round(total_put_oi / total_call_oi, 2) if total_call_oi else 0
+        pcr = 0
+        if total_call_oi > 0 and total_put_oi > 0:
+            pcr = round(total_put_oi / total_call_oi, 2)
+        elif total_call_oi == 0 and total_put_oi == 0:
+            logger.warning(f"fetch_option_chain({symbol}): No valid OI data for both puts and calls")
+            return None
+        else:
+            logger.warning(f"fetch_option_chain({symbol}): Incomplete OI data (calls={total_call_oi}, puts={total_put_oi})")
+            pcr = round(total_put_oi / total_call_oi, 2) if total_call_oi > 0 else 0
         max_pain = _calc_max_pain(strike_data)
 
         return {

@@ -4,18 +4,50 @@ Edit backend/.env with your API key and daily access token.
 """
 
 import os
+import sys
+import logging
+import datetime
+import pytz
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger("config")
+
+# ─── ENVIRONMENT VALIDATION ───────────────────────────────────────────────────
+def _validate_config():
+    """Validate all required configuration at startup."""
+    errors = []
+
+    # Required credentials
+    if not KITE_API_KEY:
+        errors.append("KITE_API_KEY missing in .env")
+    if not KITE_API_SECRET:
+        errors.append("KITE_API_SECRET missing in .env")
+    if not KITE_ACCESS_TOKEN:
+        errors.append("KITE_ACCESS_TOKEN missing in .env")
+
+    # Port validation
+    if not (1 <= PORT <= 65535):
+        errors.append(f"Invalid PORT: {PORT} (must be 1-65535)")
+
+    if errors:
+        logger.error("Configuration validation failed:")
+        for err in errors:
+            logger.error(f"  - {err}")
+        sys.exit(1)
 
 # ─── KITE CONNECT ─────────────────────────────────────────────────────────────
-KITE_API_KEY      = os.getenv("KITE_API_KEY", "")
-KITE_API_SECRET   = os.getenv("KITE_API_SECRET", "")
-KITE_ACCESS_TOKEN = os.getenv("KITE_ACCESS_TOKEN", "")
+KITE_API_KEY      = os.getenv("KITE_API_KEY", "").strip()
+KITE_API_SECRET   = os.getenv("KITE_API_SECRET", "").strip()
+KITE_ACCESS_TOKEN = os.getenv("KITE_ACCESS_TOKEN", "").strip()
 
 # ─── SERVER ───────────────────────────────────────────────────────────────────
-HOST = os.getenv("HOST", "0.0.0.0")
-PORT = int(os.getenv("PORT", "8765"))
+HOST = os.getenv("HOST", "0.0.0.0").strip()
+try:
+    PORT = int(os.getenv("PORT", "8765"))
+except ValueError:
+    logger.error(f"Invalid PORT value: {os.getenv('PORT')}")
+    PORT = 8765
 
 # ─── NSE HEADERS (for FII/DII — only endpoint not on Kite) ────────────────────
 NSE_HEADERS = {
@@ -139,3 +171,47 @@ ZONES = {
     "drift":     (810, 870),   # 13:30–14:30
     "expiry":    (870, 930),   # 14:30–15:30
 }
+
+# ─── MARKET HOURS CHECK ───────────────────────────────────────────────────────
+def is_market_open():
+    """Check if NSE market is currently open (9:15 AM - 3:30 PM IST, weekdays only)."""
+    try:
+        ist = pytz.timezone('Asia/Kolkata')
+        now = datetime.datetime.now(ist)
+
+        # Check if weekday (Monday=0, Sunday=6)
+        if now.weekday() >= 5:  # Saturday or Sunday
+            return False
+
+        # Market hours: 9:15 AM to 3:30 PM
+        market_open = now.replace(hour=9, minute=15, second=0, microsecond=0)
+        market_close = now.replace(hour=15, minute=30, second=0, microsecond=0)
+
+        return market_open <= now <= market_close
+    except Exception as e:
+        logger.warning(f"Error checking market hours: {e}")
+        return True  # Assume open on error (safer default)
+
+def get_market_status():
+    """Get current market status for logging."""
+    try:
+        ist = pytz.timezone('Asia/Kolkata')
+        now = datetime.datetime.now(ist)
+
+        if now.weekday() >= 5:
+            return "closed (weekend)"
+
+        market_open = now.replace(hour=9, minute=15, second=0, microsecond=0)
+        market_close = now.replace(hour=15, minute=30, second=0, microsecond=0)
+
+        if now < market_open:
+            return f"pre-market (opens in {(market_open - now).seconds // 60} min)"
+        elif now <= market_close:
+            return f"OPEN (closes in {(market_close - now).seconds // 60} min)"
+        else:
+            return "closed (trading hours ended)"
+    except Exception:
+        return "open (unknown status)"
+
+# Run validation at import
+_validate_config()

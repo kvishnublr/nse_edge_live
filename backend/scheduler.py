@@ -7,6 +7,7 @@ import logging
 import time
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.events import EVENT_JOB_ERROR
+from config import is_market_open
 
 logger = logging.getLogger("scheduler")
 
@@ -16,6 +17,10 @@ _signals = None
 _ws      = None
 _cache   = {"indices": None, "chain": None, "fii": None,
             "stocks": [], "mode": "intraday"}
+
+# ─── CIRCUIT BREAKER (prevent cascading failures) ──────────────────────────────
+_job_errors = {}  # Track consecutive errors per job
+MAX_CONSECUTIVE_ERRORS = 10
 
 
 def set_dependencies(kite_instance, fetcher_mod, signals_mod, broadcast_fn):
@@ -28,6 +33,30 @@ def set_dependencies(kite_instance, fetcher_mod, signals_mod, broadcast_fn):
 
 def set_mode(mode: str):
     _cache["mode"] = mode
+
+
+def _check_circuit(job_name: str) -> bool:
+    """Check if job should run (circuit breaker pattern)."""
+    if job_name not in _job_errors:
+        _job_errors[job_name] = 0
+
+    if _job_errors[job_name] >= MAX_CONSECUTIVE_ERRORS:
+        logger.error(f"Circuit breaker OPEN for {job_name} ({_job_errors[job_name]} failures) - job disabled")
+        return False
+    return True
+
+
+def _record_error(job_name: str):
+    """Record a job failure."""
+    _job_errors[job_name] = _job_errors.get(job_name, 0) + 1
+    logger.warning(f"{job_name} failed ({_job_errors[job_name]}/{MAX_CONSECUTIVE_ERRORS})")
+
+
+def _record_success(job_name: str):
+    """Clear error counter on success."""
+    if _job_errors.get(job_name, 0) > 0:
+        logger.info(f"{job_name} recovered (errors reset)")
+    _job_errors[job_name] = 0
 
 
 # ─── JOB: BROADCAST PRICES (every 1 second) ───────────────────────────────────
@@ -44,6 +73,14 @@ def job_prices():
 
 # ─── JOB: FETCH OPTION CHAIN + RUN GATES (every 30 seconds) ──────────────────
 def job_chain():
+    """Fetch option chain and run signal engine (market hours only)."""
+    if not _check_circuit("job_chain"):
+        return
+
+    if not is_market_open():
+        # Market closed - skip but don't count as error
+        return
+
     try:
         # Option chain from Kite NFO
         chain = _fetcher.fetch_option_chain(_kite, "NIFTY")
@@ -71,37 +108,55 @@ def job_chain():
                 "verdict":     _signals.state["verdict"],
                 "verdict_sub": _signals.state["verdict_sub"],
                 "pass_count":  _signals.state["pass_count"],
-            }, "ts": time.time()})
+            }, "timestamp": time.time()})
             if chain:
-                _ws({"type": "chain",  "data": chain,              "ts": time.time()})
+                _ws({"type": "chain",  "data": chain,              "timestamp": time.time()})
             if indices:
-                _ws({"type": "macro",  "data": indices,            "ts": time.time()})
+                _ws({"type": "macro",  "data": indices,            "timestamp": time.time()})
+
+        _record_success("job_chain")
     except Exception as e:
         logger.error(f"job_chain: {e}", exc_info=True)
+        _record_error("job_chain")
 
 
 # ─── JOB: F&O STOCKS (every 30 seconds) ──────────────────────────────────────
 def job_stocks():
+    """Fetch F&O stock OI (market hours only)."""
+    if not _check_circuit("job_stocks"):
+        return
+
+    if not is_market_open():
+        return
+
     try:
         stocks = _fetcher.fetch_fno_stocks(_kite)
         if stocks:
             _cache["stocks"] = stocks
             if _ws:
-                _ws({"type": "stocks", "data": stocks, "ts": time.time()})
+                _ws({"type": "stocks", "data": stocks, "timestamp": time.time()})
+        _record_success("job_stocks")
     except Exception as e:
-        logger.error(f"job_stocks: {e}", exc_info=True)
+        logger.error(f"job_stocks: {e}")
+        _record_error("job_stocks")
 
 
 # ─── JOB: FII/DII from NSE (every 5 minutes) ─────────────────────────────────
 def job_fii():
+    """Fetch FII/DII data."""
+    if not _check_circuit("job_fii"):
+        return
+
     try:
         fii = _fetcher.fetch_fii_dii()
         if fii:
             _cache["fii"] = fii
             if _ws:
-                _ws({"type": "fii", "data": fii, "ts": time.time()})
+                _ws({"type": "fii", "data": fii, "timestamp": time.time()})
+        _record_success("job_fii")
     except Exception as e:
         logger.error(f"job_fii: {e}")
+        _record_error("job_fii")
 
 
 # ─── JOB: SPIKES + TICKER (every 10 seconds) ─────────────────────────────────
