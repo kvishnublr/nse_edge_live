@@ -1,6 +1,6 @@
 """
 NSE EDGE v5 — Backtest Data Layer
-Downloads and stores 1-year historical data:
+Downloads and stores 3-year historical data:
   - NIFTY OHLCV + VIX daily  (Kite historical_data API)
   - Option chain PCR daily    (NSE FO bhavcopy CSV)
   - Live signal log           (appended each run by signals.py)
@@ -72,7 +72,7 @@ def get_conn():
 
 
 # ─── KITE HISTORICAL OHLCV ────────────────────────────────────────────────────
-def download_kite_history(kite, days: int = 365):
+def download_kite_history(kite, days: int = 1095):
     """Download NIFTY OHLCV and VIX daily data via Kite historical API."""
     from config import KITE_TOKENS
     to_dt   = datetime.now(IST).date()
@@ -132,7 +132,7 @@ def _nse_cookie():
         pass
 
 
-def download_chain_history(days: int = 365):
+def download_chain_history(days: int = 1095):
     """Download NSE FO bhavcopy for each trading day → compute NIFTY PCR."""
     to_dt   = datetime.now(IST).date()
     from_dt = to_dt - timedelta(days=days)

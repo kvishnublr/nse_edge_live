@@ -329,7 +329,7 @@ async def backtest_status():
 
 @app.post("/api/backtest/download")
 async def backtest_download():
-    """Start 1-year historical data download (runs in background thread)."""
+    """Start 3-year historical data download (runs in background thread)."""
     import asyncio, backtest_data as bd
 
     async def _dl():
@@ -338,15 +338,15 @@ async def backtest_download():
             bd.init_db()
             from feed import get_kite
             kite = get_kite()
-            await loop.run_in_executor(None, lambda: bd.download_kite_history(kite, days=365))
-            await loop.run_in_executor(None, lambda: bd.download_chain_history(days=365))
+            await loop.run_in_executor(None, lambda: bd.download_kite_history(kite, days=1095))
+            await loop.run_in_executor(None, lambda: bd.download_chain_history(days=1095))
             await loop.run_in_executor(None, bd.fill_outcomes)
             logger.info("Backtest data download complete")
         except Exception as e:
             logger.error(f"Backtest download error: {e}", exc_info=True)
 
     asyncio.create_task(_dl())
-    return JSONResponse({"message": "Download started — NIFTY OHLCV + VIX + chain PCR for 1 year. Check /api/backtest/status."})
+    return JSONResponse({"message": "Download started — NIFTY OHLCV + VIX + chain PCR for 3 years. Check /api/backtest/status."})
 
 
 @app.post("/api/backtest/run")
@@ -358,7 +358,7 @@ async def backtest_run(from_date: str = None, to_date: str = None, mode: str = "
     if not to_date:
         to_date = datetime.now().strftime("%Y-%m-%d")
     if not from_date:
-        from_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+        from_date = (datetime.now() - timedelta(days=1095)).strftime("%Y-%m-%d")
 
     # Validate dates
     try:
