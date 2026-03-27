@@ -403,6 +403,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <div class="vtag">SYSTEM VERDICT</div>
     <div class="vword" id="vword">WAIT</div>
     <div class="vsub" id="vsub">G4 trigger pending · G5 R:R below threshold</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:7px">
+      <span style="font-size:8px;opacity:.55;letter-spacing:1px">CONFIDENCE</span>
+      <div style="display:flex;align-items:center;gap:3px">
+        <div style="display:flex;gap:2px" id="conf-dots"></div>
+        <span style="font-size:12px;font-weight:700;margin-left:4px" id="conf-score">—</span>
+        <span style="font-size:8px;opacity:.45">/10</span>
+      </div>
+    </div>
     <div class="vdirs" id="vdirs" style="display:none">
       <div class="vdir lon">▲ LONG</div>
       <div class="vdir">▼ SHORT</div>
@@ -508,6 +516,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <div class="tab" onclick="sw('journal',this)">JOURNAL</div>
     <div class="tab" onclick="sw('stats',this)">STATS</div>
     <div class="tab analytics-tab" onclick="sw('analytics',this)">EDGE ANALYTICS</div>
+    <div class="tab" style="color:var(--bl)" onclick="sw('backtest',this)">BACKTEST</div>
   </div>
 
   <div id="ta">
@@ -906,9 +915,16 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
         <tbody id="bt-body"></tbody>
       </table>
       </div>
-      <div class="afoot">
+      <div class="afoot" style="justify-content:space-between">
         <div style="display:flex;gap:5px;align-items:center"><span class="afk">Logic</span><span class="afv cm">Correct = blocked a loser OR allowed a winner</span></div>
-        <div style="display:flex;gap:5px;align-items:center"><span class="afk">Showing</span><span class="afv cb" id="bt-showing">—</span></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="afk">Showing</span><span class="afv cb" id="bt-showing">—</span>
+          <div style="display:flex;gap:3px">
+            <button class="btpre" id="bt-prev" onclick="btPageNav(-1)" style="padding:2px 8px">◀ Prev</button>
+            <span style="font-size:9px;color:var(--t2);padding:2px 4px" id="bt-page-info">1/1</span>
+            <button class="btpre" id="bt-next" onclick="btPageNav(1)" style="padding:2px 8px">Next ▶</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -951,6 +967,97 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     </div>
 
   </div><!-- /tp-analytics -->
+
+  <!-- TAB: BACKTEST -->
+  <div class="tp" id="tp-backtest" style="padding:0;gap:0">
+
+    <!-- Controls bar -->
+    <div class="btctrl">
+      <div class="btrow">
+        <div class="btgrp">
+          <span class="btlbl">PERIOD</span>
+          <button class="btpre on" onclick="bt2Pre(this,'1M')">1M</button>
+          <button class="btpre" onclick="bt2Pre(this,'3M')">3M</button>
+          <button class="btpre" onclick="bt2Pre(this,'6M')">6M</button>
+          <button class="btpre" onclick="bt2Pre(this,'1Y')">1Y</button>
+        </div>
+        <div class="btgrp"><span class="btlbl">FROM</span><input class="btdate" type="date" id="bt2-from"></div>
+        <div class="btgrp"><span class="btlbl">TO</span><input class="btdate" type="date" id="bt2-to"></div>
+        <div class="btgrp">
+          <span class="btlbl">MODE</span>
+          <select class="btsel" id="bt2-mode">
+            <option value="intraday">Intraday</option>
+            <option value="positional">Positional</option>
+          </select>
+        </div>
+        <button class="btn btn-g" style="font-size:9px;padding:4px 14px" onclick="bt2Run()">▶ RUN BACKTEST</button>
+        <button class="btpre" onclick="bt2Download()" style="margin-left:4px">⬇ DOWNLOAD DATA</button>
+        <button class="btrst" onclick="bt2CalcWeights()">RECALC WEIGHTS</button>
+      </div>
+      <div style="margin-top:5px;font-size:8px;color:var(--t2)" id="bt2-status">Loading data status...</div>
+    </div>
+
+    <!-- Scrollable content -->
+    <div style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Metrics row -->
+      <div class="strow" id="bt2-metrics" style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px">
+        <div class="stc"><div class="stck">TOTAL DAYS</div><div class="stcv cb" id="bt2-days">—</div></div>
+        <div class="stc"><div class="stck">EXECUTE SIGNALS</div><div class="stcv cb" id="bt2-sigs">—</div></div>
+        <div class="stc"><div class="stck">WIN RATE</div><div class="stcv" id="bt2-wr">—</div></div>
+        <div class="stc"><div class="stck">PROFIT FACTOR</div><div class="stcv" id="bt2-pf">—</div></div>
+        <div class="stc"><div class="stck">AVG WIN (pts)</div><div class="stcv cg" id="bt2-aw">—</div></div>
+        <div class="stc"><div class="stck">TOTAL P&amp;L (pts)</div><div class="stcv" id="bt2-pnl">—</div></div>
+      </div>
+
+      <!-- Gate analysis + weights side by side -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="acard">
+          <div class="acardt">GATE WIN RATE — WHEN GATE PASSES (EXECUTE signals only)</div>
+          <div id="bt2-gate-stats" style="margin-top:6px"></div>
+        </div>
+        <div class="acard">
+          <div class="acardt">CONFIDENCE WEIGHTS — GATE PREDICTIVE POWER</div>
+          <div style="font-size:8px;color:var(--t2);margin-bottom:6px">Higher weight = gate is a stronger predictor of winning trades</div>
+          <div id="bt2-weights" style="margin-top:4px"></div>
+          <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--b1)">
+            <div style="font-size:8px;color:var(--t2);letter-spacing:1px;margin-bottom:3px">LIVE CONFIDENCE SCORE</div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div style="display:flex;gap:2px" id="bt2-conf-dots"></div>
+              <span style="font-size:18px;font-weight:800;color:var(--bl)" id="bt2-live-conf">—</span>
+              <span style="font-size:10px;color:var(--t2)">/10</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Coverage info -->
+      <div id="bt2-coverage" style="display:none" class="acard">
+        <div class="acardt">DATA COVERAGE</div>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:4px" id="bt2-cov-detail"></div>
+      </div>
+
+      <!-- Trades table -->
+      <div class="acard" style="flex:1">
+        <div class="acardt" style="display:flex;justify-content:space-between">
+          <span>BACKTEST TRADE LOG</span>
+          <span style="font-size:8px;color:var(--t2)" id="bt2-showing">—</span>
+        </div>
+        <div style="overflow-x:auto;margin-top:6px">
+          <table class="atbl">
+            <thead><tr>
+              <th>DATE</th><th>VERDICT</th><th>GATES</th>
+              <th>NIFTY</th><th>VIX</th><th>PCR</th>
+              <th>G1</th><th>G2</th><th>G3</th><th>G4</th><th>G5</th>
+              <th>NEXT CLOSE</th><th>OUTCOME PTS</th><th>RESULT</th>
+            </tr></thead>
+            <tbody id="bt2-trades"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /scroll -->
+  </div><!-- /tp-backtest -->
 
   </div><!-- /ta -->
 </div><!-- /center -->
@@ -1937,7 +2044,7 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
 // ═══════════════════════════════════════════════
 (function startLiveData(){
   const WS_URL = (location.protocol === 'https:' ? 'wss' : 'ws') +
-                 '://' + (location.hostname || 'localhost') + ':8765/ws';
+                 '://' + (location.hostname || 'localhost') + ':8000/ws';
 
   let ws = null;
   let reconnectDelay = 2000;
@@ -2103,6 +2210,8 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
           gb.textContent = pass + ' / 5 PASS';
           gb.className = 'bd ' + (pass >= 5 ? 'bg' : pass >= 3 ? 'ba' : 'br');
         }
+        // ── Confidence score ──
+        if(d.confidence !== undefined) updateConfidence(d.confidence);
         break;
       }
 
@@ -2298,6 +2407,205 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
   // Start
   connect();
 })();
+
+// ═══════════════════════════════════════════════
+// CONFIDENCE SCORE DISPLAY
+// ═══════════════════════════════════════════════
+function updateConfidence(score) {
+  const filled = Math.round(score);
+  const col    = score >= 7 ? 'var(--go)' : score >= 4 ? 'var(--am)' : 'var(--st)';
+  const dots   = Array.from({length:10}, (_,i) =>
+    `<div style="width:7px;height:7px;border-radius:1px;background:${i < filled ? col : 'var(--b2)'}"></div>`
+  ).join('');
+  const el1 = document.getElementById('conf-dots');
+  const el2 = document.getElementById('conf-score');
+  if(el1) el1.innerHTML = dots;
+  if(el2){ el2.textContent = score.toFixed(1); el2.style.color = col; }
+
+  // Also update the backtest panel live score
+  const el3 = document.getElementById('bt2-conf-dots');
+  const el4 = document.getElementById('bt2-live-conf');
+  if(el3) el3.innerHTML = dots;
+  if(el4){ el4.textContent = score.toFixed(1); el4.style.color = col; }
+}
+
+// ═══════════════════════════════════════════════
+// BACKTEST PANEL
+// ═══════════════════════════════════════════════
+const API = 'http://localhost:8000';
+
+(function bt2Init(){
+  // Default date range: last 3 months
+  const to   = new Date();
+  const from = new Date(); from.setMonth(from.getMonth() - 3);
+  document.getElementById('bt2-to').value   = to.toISOString().split('T')[0];
+  document.getElementById('bt2-from').value = from.toISOString().split('T')[0];
+  bt2RefreshStatus();
+  bt2LoadWeights();
+})();
+
+function bt2Pre(btn, period) {
+  document.querySelectorAll('#tp-backtest .btpre').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  const to   = new Date();
+  const from = new Date();
+  if(period==='1M') from.setMonth(from.getMonth()-1);
+  else if(period==='3M') from.setMonth(from.getMonth()-3);
+  else if(period==='6M') from.setMonth(from.getMonth()-6);
+  else if(period==='1Y') from.setFullYear(from.getFullYear()-1);
+  document.getElementById('bt2-from').value = from.toISOString().split('T')[0];
+  document.getElementById('bt2-to').value   = to.toISOString().split('T')[0];
+}
+
+async function bt2Download() {
+  document.getElementById('bt2-status').textContent = 'Downloading 1-year data (NIFTY OHLCV + VIX + chain PCR)...';
+  try {
+    const r = await fetch(API+'/api/backtest/download', {method:'POST'});
+    const d = await r.json();
+    document.getElementById('bt2-status').textContent = d.message || 'Download started';
+    notify('Data download started — takes 1-2 min');
+    setTimeout(bt2RefreshStatus, 8000);
+  } catch(e) {
+    document.getElementById('bt2-status').textContent = 'Download failed — backend may not be running';
+  }
+}
+
+async function bt2Run() {
+  const from = document.getElementById('bt2-from').value;
+  const to   = document.getElementById('bt2-to').value;
+  const mode = document.getElementById('bt2-mode').value;
+  if(!from || !to) { notify('Select date range first'); return; }
+
+  document.getElementById('bt2-showing').textContent = 'Running...';
+  try {
+    const r = await fetch(`${API}/api/backtest/run?from_date=${from}&to_date=${to}&mode=${mode}`, {method:'POST'});
+    const d = await r.json();
+    if(d.error){ notify('Backtest error: '+d.error); return; }
+    bt2RenderResults(d);
+    bt2LoadWeights();
+    notify(`Backtest: ${d.metrics?.execute_signals||0} signals · WR ${d.metrics?.win_rate_pct||0}%`);
+  } catch(e) {
+    notify('Backtest failed — check backend');
+    document.getElementById('bt2-showing').textContent = 'Error';
+  }
+}
+
+async function bt2CalcWeights() {
+  try {
+    // Trigger a fresh run then reload weights
+    const from = document.getElementById('bt2-from').value;
+    const to   = document.getElementById('bt2-to').value;
+    const mode = document.getElementById('bt2-mode').value;
+    if(!from||!to){ notify('Set date range first'); return; }
+    notify('Recalculating gate weights...');
+    await fetch(`${API}/api/backtest/run?from_date=${from}&to_date=${to}&mode=${mode}`, {method:'POST'});
+    await bt2LoadWeights();
+    notify('Gate weights updated');
+  } catch(e) { notify('Weight calculation failed'); }
+}
+
+function bt2RenderResults(data) {
+  const m = data.metrics || {};
+
+  // Metrics
+  const set = (id, val, cls) => {
+    const el = document.getElementById(id);
+    if(el){ el.textContent = val; if(cls) el.className = 'stcv '+cls; }
+  };
+  set('bt2-days', m.total_days || '—');
+  set('bt2-sigs', m.execute_signals || 0, 'cb');
+  const wr = m.win_rate_pct || 0;
+  set('bt2-wr',  wr+'%', wr>=60?'cg':wr>=40?'ca':'cr');
+  const pf = m.profit_factor || 0;
+  set('bt2-pf',  pf, pf>=1.5?'cg':pf>=1?'ca':'cr');
+  set('bt2-aw',  m.avg_win_pts>=0 ? '+'+m.avg_win_pts : m.avg_win_pts, 'cg');
+  const pnl = m.total_pnl_pts || 0;
+  set('bt2-pnl', (pnl>=0?'+':'')+pnl, pnl>=0?'cg':'cr');
+
+  // Coverage
+  const cov = m.data_coverage;
+  if(cov) {
+    document.getElementById('bt2-coverage').style.display = 'block';
+    document.getElementById('bt2-cov-detail').innerHTML =
+      `<span style="font-size:9px;color:var(--t1)">OHLCV: <b style="color:var(--t0)">${cov.ohlcv}</b> days</span>
+       <span style="font-size:9px;color:var(--t1)">VIX: <b style="color:var(--t0)">${cov.vix}</b> days</span>
+       <span style="font-size:9px;color:var(--t1)">Chain PCR: <b style="color:var(--t0)">${cov.chain}</b> days</span>
+       <span style="font-size:9px;color:var(--t1)">FII: <b style="color:var(--t0)">${cov.fii}</b> days</span>`;
+  }
+
+  // Gate stats
+  const gs = data.gate_stats || {};
+  const gnames = {1:'G1 REGIME',2:'G2 SMART MONEY',3:'G3 STRUCTURE',4:'G4 TRIGGER',5:'G5 RISK'};
+  document.getElementById('bt2-gate-stats').innerHTML = Object.keys(gs).map(gi => {
+    const g  = gs[gi];
+    const wr = g.win_rate_when_go || 0;
+    const pr = g.pass_rate || 0;
+    const col = wr>=60?'var(--go)':wr>=40?'var(--am)':'var(--st)';
+    return `<div class="gr" style="margin-bottom:4px">
+      <span class="grn" style="width:100px">${gnames[gi]}</span>
+      <div class="grb"><div class="grf" style="width:${wr}%;background:${col}"></div></div>
+      <span class="grv" style="color:${col}">${wr}%</span>
+      <span style="font-size:8px;color:var(--t2);margin-left:4px">n=${g.sample} pass=${pr}%</span>
+    </div>`;
+  }).join('');
+
+  // Trades table
+  const trades = data.trades || [];
+  const stMap  = {go:'cg',am:'ca',st:'cr',wt:'cb'};
+  const stLbl  = {go:'✓',am:'~',st:'✗',wt:'?'};
+  document.getElementById('bt2-trades').innerHTML = trades.slice().reverse().map(t => {
+    const oc  = t.outcome==='WIN'?'var(--go)':t.outcome==='LOSS'?'var(--st)':'var(--t2)';
+    const vc  = t.verdict==='EXECUTE'?'var(--go)':t.verdict==='NO TRADE'?'var(--st)':'var(--am)';
+    const gs5 = [t.g1,t.g2,t.g3,t.g4,t.g5].map(g=>
+      `<span class="${stMap[g]||'cm'}" style="font-size:9px;font-weight:700">${stLbl[g]||'?'}</span>`
+    ).join(' ');
+    const pts = t.outcome_pts !== null && t.outcome_pts !== undefined
+      ? `<span style="color:${oc};font-weight:600">${t.outcome_pts>0?'+':''}${t.outcome_pts}</span>` : '—';
+    return `<tr class="${t.verdict==='EXECUTE'?'sbuy':''}">
+      <td>${t.date}</td>
+      <td style="color:${vc};font-weight:600">${t.verdict}</td>
+      <td>${t.pass_count}/5</td>
+      <td style="font-weight:600">${(t.nifty||0).toFixed(0)}</td>
+      <td style="color:${(t.vix||0)>=20?'var(--st)':(t.vix||0)>=16?'var(--am)':'var(--go)'}">${(t.vix||0).toFixed(1)}</td>
+      <td style="color:${(t.pcr||0)>=1.2?'var(--go)':(t.pcr||0)<=0.8?'var(--st)':'var(--am)'}">${(t.pcr||0).toFixed(2)}</td>
+      <td>${gs5}</td>
+      <td>${(t.nxt_close||0).toFixed(0)||'—'}</td>
+      <td>${pts}</td>
+      <td style="color:${oc};font-weight:600">${t.outcome||'—'}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('bt2-showing').textContent = `${trades.length} trades · ${m.from_date} → ${m.to_date}`;
+}
+
+async function bt2LoadWeights() {
+  try {
+    const r = await fetch(API+'/api/backtest/gate-weights');
+    const d = await r.json();
+    const gs = d.gates || {};
+    if(!Object.keys(gs).length) return;
+    document.getElementById('bt2-weights').innerHTML = Object.keys(gs).map(gi => {
+      const g = gs[gi];
+      const w = Math.round((g.weight||0) * 100);
+      return `<div class="gr" style="margin-bottom:4px">
+        <span class="grn" style="width:100px">${g.name}</span>
+        <div class="grb"><div class="grf" style="width:${w}%;background:var(--bl)"></div></div>
+        <span class="grv cb">${w}%</span>
+        <span style="font-size:8px;color:var(--t2);margin-left:4px">WR ${g.win_rate||0}%</span>
+      </div>`;
+    }).join('');
+  } catch(e) {}
+}
+
+async function bt2RefreshStatus() {
+  try {
+    const r = await fetch(API+'/api/backtest/status');
+    const d = await r.json();
+    const s = `OHLCV: ${d.ohlcv?.count||0} days · VIX: ${d.vix?.count||0} days · Chain PCR: ${d.chain?.count||0} days · Live signals: ${d.signal_log?.count||0}`;
+    document.getElementById('bt2-status').textContent = s;
+  } catch(e) {
+    document.getElementById('bt2-status').textContent = 'Status unavailable';
+  }
+}
 </script>
 </body>
 </html>

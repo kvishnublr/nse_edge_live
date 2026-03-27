@@ -24,6 +24,7 @@ state = {
     "verdict":     "WAIT",
     "verdict_sub": "Initialising...",
     "pass_count":  0,
+    "confidence":  0.0,
     "spikes":      [],
     "ticker":      [],
     "last_chain":  None,
@@ -458,11 +459,21 @@ def run_signal_engine(indices: dict, chain: dict, fii: dict,
         if sp["strength"] == "hi":
             ticker.append(f"{sp['symbol']} SPIKE — <em>{sp['signal']}</em> — {sp['trigger']}")
 
+    gates_dict = {i + 1: g for i, g in enumerate(gates)}
+
+    # ── Confidence score (0-10) using gate weights from backtest analysis ──
+    try:
+        import gate_weights as gw
+        confidence = gw.compute_confidence(gates_dict)
+    except Exception:
+        confidence = 0.0
+
     state.update({
-        "gates":       {i + 1: g for i, g in enumerate(gates)},
+        "gates":       gates_dict,
         "verdict":     verdict,
         "verdict_sub": sub,
         "pass_count":  pass_cnt,
+        "confidence":  confidence,
         "spikes":      spikes,
         "ticker":      ticker,
         "last_chain":  chain,
@@ -471,4 +482,12 @@ def run_signal_engine(indices: dict, chain: dict, fii: dict,
         "last_fii":    fii,
         "last_updated":time.time(),
     })
-    logger.info(f"Verdict: {verdict} ({pass_cnt}/5) | VIX={vix:.1f} | PCR={pcr:.2f}")
+
+    # ── Log to DB for backtest analysis (non-blocking) ──
+    try:
+        import backtest_data as bd
+        bd.log_signal(gates_dict, verdict, pass_cnt, indices, chain, fii)
+    except Exception:
+        pass
+
+    logger.info(f"Verdict: {verdict} ({pass_cnt}/5) | VIX={vix:.1f} | PCR={pcr:.2f} | Conf={confidence}")

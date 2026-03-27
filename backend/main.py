@@ -84,6 +84,14 @@ async def lifespan(app: FastAPI):
     # Start broadcast loop
     asyncio.create_task(_bcast_loop())
 
+    # Initialise backtest DB (creates tables if missing)
+    try:
+        import backtest_data as bd
+        bd.init_db()
+        logger.info("Backtest DB ready")
+    except Exception as e:
+        logger.warning(f"Backtest DB init failed (non-critical): {e}")
+
     # Start Kite feed (validates creds, starts KiteTicker)
     feed_manager.start()
 
@@ -146,6 +154,9 @@ ALLOWED_ORIGINS = [
     "http://127.0.0.1:8080",
     "localhost:8080",
     "127.0.0.1:8080",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "null",   # file:// protocol sends Origin: null
 ]
 # Note: file:// protocol cannot be in CORS allow_origins, so local file:// loads are unrestricted by browser
 
@@ -212,6 +223,7 @@ async def _send_initial(ws: WebSocket):
             "verdict":     signals.state["verdict"],
             "verdict_sub": signals.state["verdict_sub"],
             "pass_count":  signals.state["pass_count"],
+            "confidence":  signals.state.get("confidence", 0.0),
         }}))
         prices = get_all_prices()
         if prices:
@@ -273,6 +285,7 @@ async def get_state():
         "verdict":     signals.state["verdict"],
         "verdict_sub": signals.state["verdict_sub"],
         "pass_count":  signals.state["pass_count"],
+        "confidence":  signals.state.get("confidence", 0.0),
         "prices":      get_all_prices(),
         "chain":       signals.state.get("last_chain"),
         "macro":       signals.state.get("last_macro"),
@@ -297,6 +310,118 @@ async def get_indices():
 @app.get("/api/fii")
 async def get_fii():
     return JSONResponse(fetcher.fetch_fii_dii() or {"error": "no data"})
+
+
+# ─── BACKTEST API ──────────────────────────────────────────────────────────────
+@app.get("/api/backtest/status")
+async def backtest_status():
+    try:
+        import backtest_data as bd
+        bd.init_db()
+        return JSONResponse(bd.get_data_summary())
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/backtest/download")
+async def backtest_download():
+    """Start 1-year historical data download (runs in background thread)."""
+    import asyncio, backtest_data as bd
+
+    async def _dl():
+        loop = asyncio.get_event_loop()
+        try:
+            bd.init_db()
+            from feed import get_kite
+            kite = get_kite()
+            await loop.run_in_executor(None, lambda: bd.download_kite_history(kite, days=365))
+            await loop.run_in_executor(None, lambda: bd.download_chain_history(days=365))
+            await loop.run_in_executor(None, bd.fill_outcomes)
+            logger.info("Backtest data download complete")
+        except Exception as e:
+            logger.error(f"Backtest download error: {e}", exc_info=True)
+
+    asyncio.create_task(_dl())
+    return JSONResponse({"message": "Download started — NIFTY OHLCV + VIX + chain PCR for 1 year. Check /api/backtest/status."})
+
+
+@app.post("/api/backtest/run")
+async def backtest_run(from_date: str = None, to_date: str = None, mode: str = "intraday"):
+    """Run backtest over a date range and compute gate weights."""
+    import asyncio, backtest_engine as be, gate_weights as gw, backtest_data as bd
+    from datetime import datetime, timedelta
+
+    if not to_date:
+        to_date = datetime.now().strftime("%Y-%m-%d")
+    if not from_date:
+        from_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+
+    # Validate dates
+    try:
+        datetime.strptime(from_date, "%Y-%m-%d")
+        datetime.strptime(to_date,   "%Y-%m-%d")
+    except ValueError:
+        return JSONResponse({"error": "Invalid date format. Use YYYY-MM-DD."}, status_code=400)
+
+    try:
+        loop    = asyncio.get_event_loop()
+        results = await loop.run_in_executor(None, lambda: be.run_backtest(from_date, to_date, mode))
+
+        # Refresh gate weights after backtest
+        if results.get("metrics", {}).get("execute_signals", 0) >= 5:
+            await loop.run_in_executor(None, gw.compute_and_save_weights)
+
+        # Fill outcomes for live signals
+        await loop.run_in_executor(None, bd.fill_outcomes)
+
+        return JSONResponse(results)
+    except Exception as e:
+        logger.error(f"Backtest run error: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/backtest/results")
+async def backtest_results(from_date: str = None, to_date: str = None):
+    """Return last backtest results from signal_log."""
+    import backtest_data as bd
+    try:
+        conn  = bd.get_conn()
+        where = "WHERE session='backtest'"
+        params: list = []
+        if from_date:
+            where  += " AND date >= ?"
+            params.append(from_date)
+        if to_date:
+            where  += " AND date <= ?"
+            params.append(to_date)
+
+        rows = conn.execute(
+            f"SELECT date, verdict, pass_count, nifty, vix, pcr, "
+            f"outcome_pts, outcome, g1, g2, g3, g4, g5 "
+            f"FROM signal_log {where} ORDER BY date DESC LIMIT 200",
+            params
+        ).fetchall()
+        conn.close()
+
+        trades = [
+            {"date": r[0], "verdict": r[1], "pass_count": r[2], "nifty": r[3],
+             "vix": r[4], "pcr": r[5], "outcome_pts": r[6], "outcome": r[7],
+             "g1": r[8], "g2": r[9], "g3": r[10], "g4": r[11], "g5": r[12]}
+            for r in rows
+        ]
+        return JSONResponse({"trades": trades, "count": len(trades)})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/backtest/gate-weights")
+async def backtest_gate_weights():
+    """Return gate predictiveness analysis."""
+    try:
+        import gate_weights as gw
+        return JSONResponse(gw.get_gate_analysis())
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 if __name__ == "__main__":

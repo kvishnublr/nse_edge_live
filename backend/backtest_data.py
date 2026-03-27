@@ -1,0 +1,340 @@
+"""
+NSE EDGE v5 — Backtest Data Layer
+Downloads and stores 1-year historical data:
+  - NIFTY OHLCV + VIX daily  (Kite historical_data API)
+  - Option chain PCR daily    (NSE FO bhavcopy CSV)
+  - Live signal log           (appended each run by signals.py)
+"""
+
+import csv
+import io
+import logging
+import os
+import sqlite3
+import time
+import zipfile
+from datetime import date, datetime, timedelta
+from pathlib import Path
+
+import requests
+import pytz
+
+logger = logging.getLogger("backtest_data")
+IST = pytz.timezone("Asia/Kolkata")
+
+DB_PATH = Path(__file__).parent / "data" / "backtest.db"
+
+
+# ─── DB INIT ──────────────────────────────────────────────────────────────────
+def init_db():
+    DB_PATH.parent.mkdir(exist_ok=True)
+    conn = get_conn()
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS ohlcv (
+            date TEXT PRIMARY KEY,
+            open REAL, high REAL, low REAL, close REAL, volume INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS vix_daily (
+            date TEXT PRIMARY KEY,
+            vix REAL, vix_chg REAL
+        );
+        CREATE TABLE IF NOT EXISTS chain_daily (
+            date TEXT PRIMARY KEY,
+            pcr REAL, total_call_oi INTEGER, total_put_oi INTEGER,
+            max_pain_proxy INTEGER, ul_price REAL
+        );
+        CREATE TABLE IF NOT EXISTS fii_daily (
+            date TEXT PRIMARY KEY,
+            fii_net REAL, dii_net REAL
+        );
+        CREATE TABLE IF NOT EXISTS signal_log (
+            id    INTEGER PRIMARY KEY AUTOINCREMENT,
+            date  TEXT, session TEXT,
+            g1 TEXT, g2 TEXT, g3 TEXT, g4 TEXT, g5 TEXT,
+            g1_score INTEGER, g2_score INTEGER, g3_score INTEGER,
+            g4_score INTEGER, g5_score INTEGER,
+            verdict TEXT, pass_count INTEGER,
+            nifty REAL, vix REAL, pcr REAL, fii_net REAL,
+            nifty_next REAL, outcome_pts REAL, outcome TEXT,
+            ts REAL
+        );
+        CREATE TABLE IF NOT EXISTS gate_weights (
+            gate INTEGER PRIMARY KEY,
+            name TEXT, weight REAL, win_rate REAL, sample_size INTEGER
+        );
+    """)
+    conn.commit()
+    conn.close()
+
+
+def get_conn():
+    return sqlite3.connect(str(DB_PATH), timeout=10)
+
+
+# ─── KITE HISTORICAL OHLCV ────────────────────────────────────────────────────
+def download_kite_history(kite, days: int = 365):
+    """Download NIFTY OHLCV and VIX daily data via Kite historical API."""
+    from config import KITE_TOKENS
+    to_dt   = datetime.now(IST).date()
+    from_dt = to_dt - timedelta(days=days)
+
+    conn = get_conn()
+
+    # NIFTY OHLCV
+    try:
+        logger.info(f"Downloading NIFTY OHLCV {from_dt} → {to_dt} ...")
+        data = kite.historical_data(KITE_TOKENS["NIFTY"], from_dt, to_dt, "day")
+        rows = []
+        for d in data:
+            dt_str = d["date"].strftime("%Y-%m-%d") if hasattr(d["date"], "strftime") else str(d["date"])[:10]
+            rows.append((dt_str, d["open"], d["high"], d["low"], d["close"], d.get("volume", 0)))
+        conn.executemany("INSERT OR REPLACE INTO ohlcv VALUES (?,?,?,?,?,?)", rows)
+        conn.commit()
+        logger.info(f"  NIFTY OHLCV: {len(rows)} days stored")
+    except Exception as e:
+        logger.error(f"NIFTY OHLCV download failed: {e}")
+
+    # VIX
+    try:
+        logger.info(f"Downloading VIX {from_dt} → {to_dt} ...")
+        data   = kite.historical_data(KITE_TOKENS["INDIAVIX"], from_dt, to_dt, "day")
+        sorted_data = sorted(data, key=lambda d: d["date"])
+        rows   = []
+        prev   = None
+        for d in sorted_data:
+            vix    = d["close"]
+            chg    = round((vix - prev) / prev * 100, 2) if prev else 0.0
+            dt_str = d["date"].strftime("%Y-%m-%d") if hasattr(d["date"], "strftime") else str(d["date"])[:10]
+            rows.append((dt_str, vix, chg))
+            prev = vix
+        conn.executemany("INSERT OR REPLACE INTO vix_daily VALUES (?,?,?)", rows)
+        conn.commit()
+        logger.info(f"  VIX: {len(rows)} days stored")
+    except Exception as e:
+        logger.error(f"VIX download failed: {e}")
+
+    conn.close()
+
+
+# ─── NSE BHAVCOPY PCR ─────────────────────────────────────────────────────────
+_NSE = requests.Session()
+_NSE.headers.update({
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
+    "Accept":     "*/*",
+    "Referer":    "https://www.nseindia.com/",
+})
+
+
+def _nse_cookie():
+    try:
+        _NSE.get("https://www.nseindia.com", timeout=8)
+    except Exception:
+        pass
+
+
+def download_chain_history(days: int = 365):
+    """Download NSE FO bhavcopy for each trading day → compute NIFTY PCR."""
+    to_dt   = datetime.now(IST).date()
+    from_dt = to_dt - timedelta(days=days)
+
+    conn     = get_conn()
+    existing = set(r[0] for r in conn.execute("SELECT date FROM chain_daily").fetchall())
+    conn.close()
+
+    _nse_cookie()
+
+    cur_dt     = from_dt
+    downloaded = 0
+    failed     = 0
+    while cur_dt <= to_dt:
+        if cur_dt.weekday() < 5:          # skip weekends
+            dt_str = cur_dt.strftime("%Y-%m-%d")
+            if dt_str not in existing:
+                result = _fetch_bhavcopy_pcr(cur_dt)
+                if result:
+                    conn = get_conn()
+                    conn.execute(
+                        "INSERT OR REPLACE INTO chain_daily VALUES (?,?,?,?,?,?)",
+                        (dt_str, result["pcr"], result["total_call_oi"],
+                         result["total_put_oi"], result["max_pain_proxy"], 0.0)
+                    )
+                    conn.commit()
+                    conn.close()
+                    downloaded += 1
+                else:
+                    failed += 1
+                time.sleep(0.3)
+        cur_dt += timedelta(days=1)
+
+    logger.info(f"Chain history: {downloaded} downloaded, {failed} failed/missing")
+    return {"downloaded": downloaded, "failed": failed}
+
+
+def _fetch_bhavcopy_pcr(dt: date):
+    dd   = dt.strftime("%d")
+    mm   = dt.strftime("%m")
+    yyyy = dt.strftime("%Y")
+    mon  = dt.strftime("%b").upper()
+
+    urls = [
+        f"https://nsearchives.nseindia.com/content/fo/BhavCopy_NSE_FO_0_0_0_{dd}{mm}{yyyy}_F_0000.csv",
+        f"https://archives.nseindia.com/content/historical/DERIVATIVES/{yyyy}/{mon}/fo{dd}{mon}{yyyy}bhav.csv.zip",
+    ]
+    for url in urls:
+        try:
+            resp = _NSE.get(url, timeout=12)
+            if resp.status_code != 200:
+                continue
+            content = resp.content
+            if url.endswith(".zip"):
+                try:
+                    with zipfile.ZipFile(io.BytesIO(content)) as z:
+                        content = z.read(z.namelist()[0])
+                except Exception:
+                    continue
+            result = _parse_pcr(content.decode("utf-8", errors="ignore"))
+            if result:
+                return result
+        except Exception as e:
+            logger.debug(f"Bhavcopy {dt} {url}: {e.__class__.__name__}")
+    return None
+
+
+def _parse_pcr(csv_text: str):
+    try:
+        reader = csv.DictReader(io.StringIO(csv_text))
+        rows   = []
+        for row in reader:
+            sym = (row.get("SYMBOL") or row.get("TradSym") or "").strip()
+            opt = (row.get("OPTION_TYP") or row.get("OptTp") or "").strip()
+            exp = (row.get("EXPIRY_DT") or row.get("XpryDt") or "").strip()
+            oi  = int(float(row.get("OPEN_INT") or row.get("OpnIntrst") or 0))
+            if sym == "NIFTY" and opt in ("CE", "PE") and oi > 0:
+                rows.append({"opt": opt, "exp": exp, "oi": oi})
+
+        if not rows:
+            return None
+
+        # Nearest expiry on or after today
+        def _parse_exp(s):
+            for fmt in ("%d-%b-%Y", "%d-%b-%y", "%Y-%m-%d", "%d/%m/%Y"):
+                try:
+                    return datetime.strptime(s, fmt).date()
+                except Exception:
+                    pass
+            return None
+
+        today   = datetime.now().date()
+        exps    = sorted(set(r["exp"] for r in rows))
+        nearest = None
+        for e in exps:
+            d = _parse_exp(e)
+            if d and d >= today:
+                nearest = e
+                break
+        if not nearest:
+            nearest = exps[-1] if exps else None
+        if not nearest:
+            return None
+
+        filtered  = [r for r in rows if r["exp"] == nearest]
+        if not filtered:
+            filtered = rows
+
+        call_oi = sum(r["oi"] for r in filtered if r["opt"] == "CE")
+        put_oi  = sum(r["oi"] for r in filtered if r["opt"] == "PE")
+        if call_oi == 0:
+            return None
+
+        return {
+            "pcr":           round(put_oi / call_oi, 3),
+            "total_call_oi": call_oi,
+            "total_put_oi":  put_oi,
+            "max_pain_proxy": 0,
+        }
+    except Exception as e:
+        logger.debug(f"PCR parse error: {e}")
+        return None
+
+
+# ─── DATA SUMMARY ─────────────────────────────────────────────────────────────
+def get_data_summary() -> dict:
+    conn = get_conn()
+    def _cr(table, col="date"):
+        r = conn.execute(f"SELECT COUNT(*), MIN({col}), MAX({col}) FROM {table}").fetchone()
+        return {"count": r[0] or 0, "from": r[1], "to": r[2]}
+    s = {
+        "ohlcv":      _cr("ohlcv"),
+        "vix":        _cr("vix_daily"),
+        "chain":      _cr("chain_daily"),
+        "fii":        _cr("fii_daily"),
+        "signal_log": _cr("signal_log"),
+    }
+    conn.close()
+    return s
+
+
+# ─── LIVE SIGNAL LOGGING ──────────────────────────────────────────────────────
+def log_signal(gates: dict, verdict: str, pass_count: int,
+               indices: dict, chain, fii):
+    """Append every live signal verdict to the DB for future analysis."""
+    try:
+        conn = get_conn()
+        now  = datetime.now(IST)
+        conn.execute("""
+            INSERT INTO signal_log
+            (date, session, g1, g2, g3, g4, g5,
+             g1_score, g2_score, g3_score, g4_score, g5_score,
+             verdict, pass_count, nifty, vix, pcr, fii_net,
+             nifty_next, outcome_pts, outcome, ts)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            now.strftime("%Y-%m-%d"), now.strftime("%H:%M"),
+            gates.get(1, {}).get("state", ""),
+            gates.get(2, {}).get("state", ""),
+            gates.get(3, {}).get("state", ""),
+            gates.get(4, {}).get("state", ""),
+            gates.get(5, {}).get("state", ""),
+            gates.get(1, {}).get("score", 0),
+            gates.get(2, {}).get("score", 0),
+            gates.get(3, {}).get("score", 0),
+            gates.get(4, {}).get("score", 0),
+            gates.get(5, {}).get("score", 0),
+            verdict, pass_count,
+            indices.get("nifty", 0) if indices else 0,
+            indices.get("vix", 0)   if indices else 0,
+            chain.get("pcr", 0)     if chain   else 0,
+            fii.get("fii_net", 0)   if fii     else 0,
+            None, None, None,
+            time.time(),
+        ))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.debug(f"Signal log write: {e}")
+
+
+def fill_outcomes():
+    """Fill outcome_pts for live signals using next-day OHLCV close."""
+    conn    = get_conn()
+    pending = conn.execute(
+        "SELECT id, date, nifty FROM signal_log "
+        "WHERE outcome IS NULL AND nifty > 0 ORDER BY date, ts"
+    ).fetchall()
+    updated = 0
+    for sig_id, sig_date, sig_price in pending:
+        nxt = conn.execute(
+            "SELECT close FROM ohlcv WHERE date > ? ORDER BY date LIMIT 1",
+            (sig_date,)
+        ).fetchone()
+        if nxt:
+            pts     = round(nxt[0] - sig_price, 2)
+            outcome = "WIN" if pts >= 30 else "LOSS" if pts <= -30 else "NEUTRAL"
+            conn.execute(
+                "UPDATE signal_log SET nifty_next=?, outcome_pts=?, outcome=? WHERE id=?",
+                (nxt[0], pts, outcome, sig_id)
+            )
+            updated += 1
+    conn.commit()
+    conn.close()
+    return updated

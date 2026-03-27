@@ -85,7 +85,22 @@ def job_chain():
         # Option chain from Kite NFO
         chain = _fetcher.fetch_option_chain(_kite, "NIFTY")
         if chain:
-            _cache["chain"] = chain
+            # Validate Max Pain is not too stale
+            ul_price = chain.get("ul_price", 0)
+            max_pain = chain.get("max_pain", 0)
+
+            if ul_price > 0 and max_pain > 0:
+                deviation = abs(max_pain - ul_price) / ul_price * 100
+                if deviation > 5:  # More than 5% away = stale/incorrect
+                    logger.warning(
+                        f"Max Pain deviation too high: {max_pain} vs price {ul_price} ({deviation:.1f}%) "
+                        f"- data may be stale, recalculating..."
+                    )
+                    # Recalculate to ensure fresh data
+                    chain = _fetcher.fetch_option_chain(_kite, "NIFTY")
+
+            if chain:
+                _cache["chain"] = chain
 
         # Indices from price cache (Kite live)
         indices = _fetcher.fetch_indices()

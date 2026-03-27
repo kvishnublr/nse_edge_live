@@ -117,7 +117,7 @@ def fetch_option_chain(kite, symbol: str = "NIFTY") -> Optional[dict]:
         if not expiries:
             return None
         expiry     = expiries[0]
-        exp_str    = expiry.strftime("%-d %b %Y") if hasattr(expiry, 'strftime') else str(expiry)
+        exp_str    = f"{expiry.day} {expiry.strftime('%b %Y')}" if hasattr(expiry, 'strftime') else str(expiry)
 
         # Strikes for this expiry
         exp_insts  = [i for i in instruments if i["expiry"] == expiry]
@@ -128,8 +128,8 @@ def fetch_option_chain(kite, symbol: str = "NIFTY") -> Optional[dict]:
         # ATM
         atm = min(all_strikes, key=lambda s: abs(s - ul_px))
         atm_idx = all_strikes.index(atm)
-        # 6 ITM + ATM + 6 OTM = 13 strikes
-        selected = all_strikes[max(0, atm_idx - 6): atm_idx + 7]
+        # Use ALL strikes for comprehensive PCR analysis
+        selected = all_strikes
 
         # Build Kite quote keys: NFO:NIFTY24MAR25000CE etc.
         inst_map = {}  # (strike, type) → instrument
@@ -206,6 +206,14 @@ def fetch_option_chain(kite, symbol: str = "NIFTY") -> Optional[dict]:
             logger.warning(f"fetch_option_chain({symbol}): Incomplete OI data (calls={total_call_oi}, puts={total_put_oi})")
             pcr = round(total_put_oi / total_call_oi, 2) if total_call_oi > 0 else 0
         max_pain = _calc_max_pain(strike_data)
+
+        # Log Max Pain vs current price for monitoring
+        if ul_px > 0 and max_pain > 0:
+            deviation = abs(max_pain - ul_px) / ul_px * 100
+            if deviation > 5:
+                logger.warning(f"Max Pain {max_pain} deviates {deviation:.1f}% from price {ul_px} (PCR={pcr})")
+            else:
+                logger.debug(f"Max Pain {max_pain} vs price {ul_px} (deviation {deviation:.1f}%)")
 
         return {
             "symbol":        symbol,
