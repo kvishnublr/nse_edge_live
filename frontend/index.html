@@ -3754,7 +3754,12 @@ async function srBtRun() {
   try {
     const r = await fetch(`${API}/api/spikes/backtest?from_date=${from}&to_date=${to}`);
     const d = await r.json();
-    if(d.error) { status.textContent = 'Error: ' + d.error; status.style.color='var(--st)'; return; }
+    if(d.error || d.detail || !d.summary) {
+      const msg = d.error || (Array.isArray(d.detail) ? d.detail[0]?.msg : d.detail) || 'Unexpected response — check backend logs';
+      status.textContent = 'Error: ' + msg; status.style.color='var(--st)';
+      document.getElementById('srbt-empty').textContent = 'Error: ' + msg;
+      return;
+    }
 
     const s = d.summary;
     document.getElementById('srbt-total').textContent = s.total;
