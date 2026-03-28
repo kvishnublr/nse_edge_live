@@ -1064,14 +1064,14 @@ async def spikes_backtest(from_date: str = None, to_date: str = None):
         except ValueError:
             return JSONResponse({"error": "Invalid date format. Use YYYY-MM-DD"}, status_code=400)
 
+        if td < fd:
+            return JSONResponse({"error": "from_date must be before to_date"}, status_code=400)
         if (td - fd).days > 30:
             return JSONResponse({"error": "Max date range is 30 days (1-min data limit)"}, status_code=400)
 
         kite = get_kite()
-        if not kite:
-            return JSONResponse({"error": "Kite not connected"}, status_code=503)
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def _run():
             results = []
@@ -1083,7 +1083,8 @@ async def spikes_backtest(from_date: str = None, to_date: str = None):
                 token = KITE_TOKENS[sym]
                 try:
                     candles = kite.historical_data(token, fd, td, "minute")
-                except Exception:
+                except Exception as e:
+                    logger.warning(f"Spike BT: {sym} historical_data failed: {e}")
                     continue
 
                 if len(candles) < 25:
