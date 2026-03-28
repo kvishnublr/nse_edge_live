@@ -815,7 +815,8 @@ async def dayview_full(date: str):
 
         # ── Outcome check: did each pick hit target, SL, or neither? ─────────
         try:
-            kite = get_kite()
+            from feed import get_kite as _get_kite
+            kite = _get_kite()
             for pk in stock_picks:
                 try:
                     sym_token = KITE_TOKENS.get(pk["sym"])
