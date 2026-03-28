@@ -1560,6 +1560,17 @@ function renderHistPicksHtml(picks, mode) {
             <div style="font-size:10px;font-weight:700;color:var(--go)">${p.target}</div>
           </div>
         </div>` : '';
+    const outcomeMap = {
+      PROFIT:       {label:'✓ PROFIT',       col:'var(--go)', bg:'rgba(0,232,122,.12)', border:'rgba(0,232,122,.35)'},
+      LOSS:         {label:'✗ LOSS',          col:'var(--st)', bg:'rgba(255,51,85,.12)',  border:'rgba(255,51,85,.35)'},
+      NOT_EXECUTED: {label:'— NOT EXECUTED',  col:'var(--t2)', bg:'rgba(255,255,255,.05)',border:'rgba(255,255,255,.12)'},
+      NO_DATA:      {label:'? NO DATA',        col:'var(--t3)', bg:'transparent',          border:'transparent'},
+      UNKNOWN:      {label:'? UNKNOWN',        col:'var(--t3)', bg:'transparent',          border:'transparent'},
+    };
+    const oc = p.outcome && outcomeMap[p.outcome];
+    const outcomeHtml = oc && p.outcome !== 'NO_DATA' && p.outcome !== 'UNKNOWN'
+      ? `<div style="margin:4px 0 2px;padding:3px 7px;border-radius:3px;border:1px solid ${oc.border};background:${oc.bg};font-size:8px;font-weight:700;color:${oc.col};letter-spacing:.5px;text-align:center">${oc.label}</div>`
+      : '';
     const footerHtml = `<div style="display:flex;align-items:center;gap:5px;margin-top:4px">
       ${p.conf ? `<span style="font-size:7.5px;font-weight:700;padding:1px 5px;border-radius:2px;letter-spacing:.4px;${confStyle}">${p.conf}</span>` : ''}
       ${p.rr ? `<span style="font-size:8px;color:var(--t2)">R:R 1:${p.rr}</span>` : ''}
@@ -1573,6 +1584,7 @@ function renderHistPicksHtml(picks, mode) {
       <div class="rpkm">${p.meta||''}</div>
       ${levelsHtml}
       <div class="rpkr" style="color:${vc};margin-bottom:0">${p.reason||''}</div>
+      ${outcomeHtml}
       ${footerHtml}
     </div>`;
   }).join('');

@@ -813,6 +813,47 @@ async def dayview_full(date: str):
 
         stock_picks.sort(key=lambda x: -x["score"])
 
+        # ── Outcome check: did each pick hit target, SL, or neither? ─────────
+        try:
+            kite = get_kite()
+            for pk in stock_picks:
+                try:
+                    sym_token = KITE_TOKENS.get(pk["sym"])
+                    if not sym_token:
+                        pk["outcome"] = "UNKNOWN"; continue
+                    # fetch 5-min candles for that day
+                    candles_5m = kite.historical_data(sym_token, sel_date, sel_date, "5minute")
+                    if not candles_5m:
+                        pk["outcome"] = "NO_DATA"; continue
+
+                    # find candles after signal_time
+                    sig_hm = pk.get("signal_time", "09:15")
+                    sig_h, sig_m = int(sig_hm.split(":")[0]), int(sig_hm.split(":")[1])
+                    entry = float(pk["entry"])
+                    sl    = float(pk["sl"])
+                    tgt   = float(pk["target"])
+
+                    outcome = "NOT_EXECUTED"
+                    for c5 in candles_5m:
+                        ct = c5["date"]
+                        if hasattr(ct, "hour"):
+                            if ct.hour < sig_h or (ct.hour == sig_h and ct.minute < sig_m):
+                                continue
+                        hi, lo = c5["high"], c5["low"]
+                        # LONG: target=high hit, sl=low hit
+                        if lo <= sl:
+                            outcome = "LOSS"; break
+                        if hi >= tgt:
+                            outcome = "PROFIT"; break
+                        if hi >= entry:
+                            outcome = "NOT_EXECUTED"  # entry triggered but neither hit yet
+
+                    pk["outcome"] = outcome
+                except Exception:
+                    pk["outcome"] = "UNKNOWN"
+        except Exception:
+            pass  # outcome check is best-effort; don't fail the whole response
+
         # ── Synthetic option chain (strike-level distribution) ────────────────
         atm_strike = int(round(nifty_close / 50.0) * 50)
         mp_val     = atm_strike  # chain_daily has no max_pain; use ATM as proxy
