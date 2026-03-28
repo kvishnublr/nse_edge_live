@@ -217,13 +217,41 @@ def run_backtest(from_date: str, to_date: str, mode: str = "intraday") -> dict:
 
         verdict, pass_cnt = _verdict([g1, g2, g3, g4, g5])
 
-        # Outcome: next calendar day (ATR-based threshold — adapts to volatility)
-        nxt_close   = ohlcv[i + 1]["close"] if i + 1 < len(ohlcv) else None
-        outcome_pts = round(nxt_close - day["close"], 2) if nxt_close else None
+        # Next day data for entry/exit simulation
+        nxt = ohlcv[i + 1] if i + 1 < len(ohlcv) else None
+        nxt_open  = round(nxt["open"],  2) if nxt else None
+        nxt_high  = round(nxt["high"],  2) if nxt else None
+        nxt_low   = round(nxt["low"],   2) if nxt else None
+        nxt_close = round(nxt["close"], 2) if nxt else None
+
+        # Entry = next day open; target/stop derived from ATR
+        entry       = nxt_open
+        exit_price  = None
+        outcome_pts = None
         outcome     = None
-        if outcome_pts is not None:
-            threshold = max(20, round(atr_v * 0.4))   # 40% of ATR, min 20 pts
-            outcome   = "WIN" if outcome_pts >= threshold else "LOSS" if outcome_pts <= -threshold else "NEUTRAL"
+        pnl_pts     = None
+
+        if nxt:
+            stop_dist   = round(atr_v * TH["atr_multiplier"], 2)
+            rr          = TH["rr_min_intraday"] if mode == "intraday" else TH["rr_min_positional"]
+            target_dist = round(stop_dist * rr, 2)
+            target      = round(entry + target_dist, 2)
+            stop        = round(entry - stop_dist, 2)
+
+            if nxt_high >= target:                # target hit
+                exit_price  = target
+                outcome     = "WIN"
+            elif nxt_low <= stop:                 # stop hit
+                exit_price  = stop
+                outcome     = "LOSS"
+            else:                                 # neither — closed between
+                exit_price  = nxt_close
+                threshold   = max(20, round(atr_v * 0.4))
+                diff        = nxt_close - entry
+                outcome     = "WIN" if diff >= threshold else "LOSS" if diff <= -threshold else "NEUTRAL"
+
+            pnl_pts     = round(exit_price - entry, 2)
+            outcome_pts = pnl_pts   # what trader actually makes/loses
 
         record = {
             "date":        dt,
@@ -238,6 +266,10 @@ def run_backtest(from_date: str, to_date: str, mode: str = "intraday") -> dict:
             "g5": g5["state"], "g5_score": g5["score"],
             "verdict":     verdict,
             "pass_count":  pass_cnt,
+            "entry":       entry,
+            "exit":        exit_price,
+            "target":      round(entry + round(atr_v * TH["atr_multiplier"], 2) * (TH["rr_min_intraday"] if mode == "intraday" else TH["rr_min_positional"]), 2) if entry else None,
+            "stop":        round(entry - round(atr_v * TH["atr_multiplier"], 2), 2) if entry else None,
             "nxt_close":   nxt_close,
             "outcome_pts": outcome_pts,
             "outcome":     outcome,
@@ -303,8 +335,13 @@ def run_backtest(from_date: str, to_date: str, mode: str = "intraday") -> dict:
         f"{len(execute)} EXECUTE, WR={win_rate}%, PF={pf}"
     )
 
+    # Return all EXECUTE + WAIT trades, plus last 60 NO TRADE rows for context
+    important = [t for t in trades if t["verdict"] in ("EXECUTE", "WAIT")]
+    recent_no = [t for t in trades if t["verdict"] == "NO TRADE"][-60:]
+    combined  = sorted(important + recent_no, key=lambda x: x["date"])
+
     return {
-        "trades":     trades[-100:],
+        "trades":     combined,
         "metrics":    metrics,
         "gate_stats": gate_stats,
     }

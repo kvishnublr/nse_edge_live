@@ -464,6 +464,145 @@ async def token_status():
         })
 
 
+@app.get("/api/backtest/dayview")
+async def backtest_dayview(date: str):
+    """
+    Full gate drill-down for a specific date.
+    Returns intraday + positional gate states, scores, entry/exit/pnl for that day.
+    """
+    import statistics, backtest_data as bd
+    from backtest_engine import _g1, _g2, _g3, _g4, _g5, _atr, _verdict
+    from config import GATE as TH
+
+    try:
+        bd.init_db()
+        conn = bd.get_conn()
+
+        # Get OHLCV for the date and 20 prior days for ATR
+        rows = conn.execute(
+            "SELECT date, open, high, low, close, volume FROM ohlcv "
+            "WHERE date <= ? ORDER BY date DESC LIMIT 22", (date,)
+        ).fetchall()
+
+        if not rows or rows[0][0] != date:
+            conn.close()
+            return JSONResponse({"error": f"No OHLCV data for {date}"}, status_code=404)
+
+        rows = list(reversed(rows))   # oldest first
+        day_row  = rows[-1]
+        prior    = rows[:-1]
+
+        ohlcv_prior = [{"date": r[0], "open": r[1], "high": r[2],
+                        "low": r[3], "close": r[4], "volume": r[5]} for r in prior]
+        atr_v   = _atr(ohlcv_prior)
+        vols    = [r["volume"] for r in ohlcv_prior if r["volume"] > 0]
+        avg_v   = statistics.mean(vols) if vols else 1
+        prev_close = ohlcv_prior[-1]["close"] if ohlcv_prior else day_row[4]
+
+        vix_r   = conn.execute("SELECT vix, vix_chg FROM vix_daily WHERE date=?", (date,)).fetchone() or (15.0, 0.0)
+        chain_r = conn.execute("SELECT pcr, total_call_oi, total_put_oi FROM chain_daily WHERE date=?", (date,)).fetchone() or (1.0, 500000, 500000)
+        fii_net = (conn.execute("SELECT fii_net FROM fii_daily WHERE date=?", (date,)).fetchone() or (0.0,))[0]
+
+        # Next day for entry/exit
+        nxt = conn.execute(
+            "SELECT date, open, high, low, close FROM ohlcv WHERE date > ? ORDER BY date LIMIT 1", (date,)
+        ).fetchone()
+        conn.close()
+
+        dt_close = day_row[4]
+        dt_high  = day_row[2]
+        dt_low   = day_row[3]
+
+        def _sim_mode(mode):
+            g1 = _g1(vix_r[0], vix_r[1], fii_net)
+            g2 = _g2(chain_r[0], chain_r[1], chain_r[2])
+            g3 = _g3(dt_close, dt_high, dt_low)
+            g4 = _g4(dt_close, prev_close, day_row[5], avg_v)
+            g5 = _g5(dt_close, atr_v, vix_r[0], mode)
+            verdict, pass_cnt = _verdict([g1, g2, g3, g4, g5])
+
+            entry = exit_price = target = stop = pnl = outcome = None
+            if nxt:
+                entry = round(nxt[1], 2)
+                rr    = TH["rr_min_intraday"] if mode == "intraday" else TH["rr_min_positional"]
+                stop_dist   = round(atr_v * TH["atr_multiplier"], 2)
+                target_dist = round(stop_dist * rr, 2)
+                target = round(entry + target_dist, 2)
+                stop   = round(entry - stop_dist, 2)
+                if nxt[2] >= target:
+                    exit_price, outcome = target, "WIN"
+                elif nxt[3] <= stop:
+                    exit_price, outcome = stop, "LOSS"
+                else:
+                    exit_price = round(nxt[4], 2)
+                    diff = exit_price - entry
+                    threshold = max(20, round(atr_v * 0.4))
+                    outcome = "WIN" if diff >= threshold else "LOSS" if diff <= -threshold else "NEUTRAL"
+                pnl = round(exit_price - entry, 2)
+
+            return {
+                "verdict": verdict, "pass_count": pass_cnt,
+                "g1": {"state": g1["state"], "score": g1["score"]},
+                "g2": {"state": g2["state"], "score": g2["score"]},
+                "g3": {"state": g3["state"], "score": g3["score"]},
+                "g4": {"state": g4["state"], "score": g4["score"]},
+                "g5": {"state": g5["state"], "score": g5["score"]},
+                "entry": entry, "exit": exit_price,
+                "target": target, "stop": stop,
+                "pnl": pnl, "outcome": outcome,
+                "next_date": nxt[0] if nxt else None,
+            }
+
+        # Live signal_log entries for this date (if system was running)
+        conn2 = bd.get_conn()
+        live_rows = conn2.execute(
+            "SELECT ts, verdict, pass_count, g1,g2,g3,g4,g5, "
+            "g1_score,g2_score,g3_score,g4_score,g5_score, "
+            "nifty, vix, pcr, outcome_pts, outcome "
+            "FROM signal_log WHERE date=? AND session='live' ORDER BY ts",
+            (date,)
+        ).fetchall()
+        conn2.close()
+
+        import datetime as _dt
+        _live_signals = []
+        for row in live_rows:
+            ts_val = row[0]
+            try:
+                ts_str = _dt.datetime.fromtimestamp(float(ts_val)).strftime("%H:%M:%S") if ts_val else "—"
+            except Exception:
+                ts_str = str(ts_val)
+            _live_signals.append({
+                "time": ts_str, "verdict": row[1], "pass_count": row[2],
+                "g1": row[3], "g2": row[4], "g3": row[5], "g4": row[6], "g5": row[7],
+                "g1_score": row[8], "g2_score": row[9], "g3_score": row[10],
+                "g4_score": row[11], "g5_score": row[12],
+                "nifty": row[13], "vix": row[14], "pcr": row[15],
+                "outcome_pts": row[16], "outcome": row[17],
+            })
+
+        return JSONResponse({
+            "date":     date,
+            "nifty":    round(dt_close, 2),
+            "open":     round(day_row[1], 2),
+            "high":     round(dt_high, 2),
+            "low":      round(dt_low, 2),
+            "vix":      round(vix_r[0], 2),
+            "vix_chg":  round(vix_r[1], 2),
+            "pcr":      round(chain_r[0], 3),
+            "call_oi":  chain_r[1],
+            "put_oi":   chain_r[2],
+            "fii_net":  round(fii_net, 2),
+            "atr":      round(atr_v, 2),
+            "intraday":   _sim_mode("intraday"),
+            "positional": _sim_mode("positional"),
+            "live_signals": _live_signals,
+        })
+    except Exception as e:
+        logger.error(f"Dayview error: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.post("/api/backtest/download-fii")
 async def backtest_download_fii():
     """Download 3-year FII/DII daily net flow history from NSE."""

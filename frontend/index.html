@@ -380,15 +380,56 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   <div class="tbl">
     <div class="logo">NSE<em>EDGE  SYSTEM v5</em></div>
     <div class="sep"></div>
-    <div class="lpill"><div class="ldot"></div>LIVE</div>
+    <div class="lpill" id="live-pill"><div class="ldot"></div>LIVE</div>
     <div class="sep"></div>
     <span class="zlbl" id="zlbl">ZONE: —</span>
+    <div class="sep"></div>
+    <!-- DATE VIEWER CONTROL -->
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="font-size:8px;color:var(--t2);letter-spacing:1px;font-weight:600">DATE VIEW</span>
+      <input type="date" id="tb-date" style="background:var(--s3);border:1px solid var(--b1);color:var(--t0);font-family:var(--fn);font-size:9px;padding:2px 6px;border-radius:3px;outline:none;cursor:pointer;width:110px" onchange="tbDateChange(this.value)">
+      <button id="tb-live-btn" onclick="tbGoLive()" style="display:none;padding:2px 10px;font-family:var(--fn);font-size:8px;font-weight:700;border:1px solid var(--go);color:var(--go);background:transparent;border-radius:3px;cursor:pointer;letter-spacing:.5px">&#9654; BACK TO LIVE</button>
+    </div>
   </div>
   <div class="tbr">
     <span class="clk" id="clk">--:--:-- IST</span>
     <div class="mtog">
       <button class="mb on" id="bi" onclick="setMode('intraday')">INTRADAY</button>
       <button class="mb" id="bp" onclick="setMode('positional')">POSITIONAL</button>
+    </div>
+  </div>
+</div>
+
+<!-- DAY VIEW OVERLAY — covers entire content when a past date is selected -->
+<div id="day-overlay" style="display:none;position:fixed;top:44px;left:0;right:0;bottom:0;background:var(--s1);z-index:200;overflow-y:auto;padding:0">
+  <div style="background:var(--s3);border-bottom:1px solid var(--b2);padding:8px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10">
+    <span style="font-size:11px;font-weight:800;color:var(--bl);letter-spacing:1px" id="dov-title">DAY VIEW — 2024-01-12</span>
+    <span id="dov-src" style="font-size:8px;color:var(--t2);padding:2px 7px;border:1px solid var(--b1);border-radius:10px"></span>
+    <span style="margin-left:auto;display:flex;gap:6px;align-items:center">
+      <button onclick="tbGoLive()" style="padding:3px 14px;font-family:var(--fn);font-size:9px;font-weight:700;border:1px solid var(--go);color:var(--go);background:transparent;border-radius:3px;cursor:pointer">&#9654; BACK TO LIVE</button>
+    </span>
+  </div>
+  <div style="padding:12px;display:flex;flex-direction:column;gap:10px">
+    <!-- Stats row -->
+    <div style="display:flex;gap:6px;flex-wrap:wrap" id="dov-stats"></div>
+    <!-- Intraday vs Positional -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="acard" id="dov-intra"></div>
+      <div class="acard" id="dov-pos"></div>
+    </div>
+    <!-- Signal timeline -->
+    <div class="acard" id="dov-timeline" style="display:none">
+      <div class="acardt">LIVE SIGNAL LOG — THAT DAY <span id="dov-timeline-count" style="color:var(--t2);font-weight:400"></span></div>
+      <div style="overflow-x:auto;margin-top:6px">
+        <table class="atbl"><thead><tr>
+          <th>TIME</th><th>VERDICT</th><th>GATES</th><th>NIFTY</th><th>VIX</th><th>PCR</th>
+          <th>G1</th><th>G2</th><th>G3</th><th>G4</th><th>G5</th><th>P&amp;L</th><th>RESULT</th>
+        </tr></thead><tbody id="dov-timeline-body"></tbody></table>
+      </div>
+    </div>
+    <!-- No live data note -->
+    <div class="acard" id="dov-nodata" style="display:none">
+      <div style="color:var(--t2);font-size:9px;padding:8px 0">No live minute-level signals recorded for this date — showing daily simulation only. System was not running live on this day.</div>
     </div>
   </div>
 </div>
@@ -1013,16 +1054,37 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       <div style="margin-top:5px;font-size:8px;color:var(--t2)" id="bt2-status">Loading data status...</div>
     </div>
 
+    <!-- DAY VIEW panel -->
+    <div style="background:var(--b1);border-bottom:1px solid var(--b2);padding:8px 12px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:9px;letter-spacing:1px;color:var(--t2);font-weight:700">DAY VIEW</span>
+        <input type="date" id="dv-date" class="btdate" style="width:120px">
+        <button class="btn btn-g" style="font-size:9px;padding:3px 12px" onclick="dvLoad()">LOAD DAY</button>
+        <span style="font-size:8px;color:var(--t2)" id="dv-hint">Pick any date to see full gate drill-down + intraday &amp; positional signals</span>
+      </div>
+      <div id="dv-panel" style="display:none;margin-top:8px">
+        <!-- Day summary row -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px" id="dv-summary"></div>
+        <!-- Intraday vs Positional side by side -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="acard" id="dv-intra"></div>
+          <div class="acard" id="dv-pos"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Scrollable content -->
     <div style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px">
 
       <!-- Metrics row -->
-      <div class="strow" id="bt2-metrics" style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px">
+      <div class="strow" id="bt2-metrics" style="display:grid;grid-template-columns:repeat(8,1fr);gap:6px">
         <div class="stc"><div class="stck">TOTAL DAYS</div><div class="stcv cb" id="bt2-days">—</div></div>
-        <div class="stc"><div class="stck">EXECUTE SIGNALS</div><div class="stcv cb" id="bt2-sigs">—</div></div>
+        <div class="stc"><div class="stck">EXECUTE (5/5)</div><div class="stcv cg" id="bt2-sigs">—</div></div>
+        <div class="stc"><div class="stck">WATCH (4/5)</div><div class="stcv ca" id="bt2-watch">—</div></div>
         <div class="stc"><div class="stck">WIN RATE</div><div class="stcv" id="bt2-wr">—</div></div>
         <div class="stc"><div class="stck">PROFIT FACTOR</div><div class="stcv" id="bt2-pf">—</div></div>
         <div class="stc"><div class="stck">AVG WIN (pts)</div><div class="stcv cg" id="bt2-aw">—</div></div>
+        <div class="stc"><div class="stck">AVG LOSS (pts)</div><div class="stcv cr" id="bt2-al">—</div></div>
         <div class="stc"><div class="stck">TOTAL P&amp;L (pts)</div><div class="stcv" id="bt2-pnl">—</div></div>
       </div>
 
@@ -1055,8 +1117,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
       <!-- Trades table -->
       <div class="acard" style="flex:1">
-        <div class="acardt" style="display:flex;justify-content:space-between">
-          <span>BACKTEST TRADE LOG</span>
+        <div class="acardt" style="display:flex;justify-content:space-between;align-items:center">
+          <span>BACKTEST TRADE LOG
+            <span style="font-size:8px;font-weight:400;margin-left:8px;color:var(--t2)">
+              <span style="color:var(--go)">&#9646; EXECUTE</span> = all 5 gates pass &nbsp;
+              <span style="color:var(--am)">&#9646; WATCH</span> = 4/5 gates pass (near miss)
+            </span>
+          </span>
           <span style="font-size:8px;color:var(--t2)" id="bt2-showing">—</span>
         </div>
         <div style="overflow-x:auto;margin-top:6px">
@@ -1065,7 +1132,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
               <th>DATE</th><th>VERDICT</th><th>GATES</th>
               <th>NIFTY</th><th>VIX</th><th>PCR</th>
               <th>G1</th><th>G2</th><th>G3</th><th>G4</th><th>G5</th>
-              <th>NEXT CLOSE</th><th>OUTCOME PTS</th><th>RESULT</th>
+              <th>ENTRY</th><th>TARGET</th><th>STOP</th><th>EXIT</th><th>P&amp;L</th><th>RESULT</th>
             </tr></thead>
             <tbody id="bt2-trades"></tbody>
           </table>
@@ -1416,6 +1483,7 @@ function sw(name,btn){
   }
   const tp=document.getElementById('tp-'+name);
   if(tp)tp.classList.add('on');
+  if(name==='backtest') setTimeout(bt2Run, 100);
 }
 
 // ═══════════════════════════════════════════════
@@ -2496,11 +2564,13 @@ function updateConfidence(score) {
 const API = 'http://localhost:8000';
 
 (function bt2Init(){
-  // Default date range: last 3 months
   const to   = new Date();
   const from = new Date(); from.setFullYear(from.getFullYear() - 3);
   document.getElementById('bt2-to').value   = to.toISOString().split('T')[0];
   document.getElementById('bt2-from').value = from.toISOString().split('T')[0];
+  // Default day view to yesterday (last trading day)
+  const yest = new Date(); yest.setDate(yest.getDate()-1);
+  document.getElementById('dv-date').value  = yest.toISOString().split('T')[0];
   bt2RefreshStatus();
   bt2LoadWeights();
 })();
@@ -2518,6 +2588,7 @@ function bt2Pre(btn, period) {
   else if(period==='3Y') from.setFullYear(from.getFullYear()-3);
   document.getElementById('bt2-from').value = from.toISOString().split('T')[0];
   document.getElementById('bt2-to').value   = to.toISOString().split('T')[0];
+  bt2Run();
 }
 
 async function bt2Download() {
@@ -2576,12 +2647,16 @@ function bt2RenderResults(data) {
     if(el){ el.textContent = val; if(cls) el.className = 'stcv '+cls; }
   };
   set('bt2-days', m.total_days || '—');
-  set('bt2-sigs', m.execute_signals || 0, 'cb');
+  set('bt2-sigs', m.execute_signals || 0, 'cg');
+  // Count WATCH signals (pass_count=4, no st) from trades
+  const watchCount = (data.trades||[]).filter(t=>t.verdict==='WAIT'&&t.pass_count===4).length;
+  set('bt2-watch', watchCount, 'ca');
   const wr = m.win_rate_pct || 0;
   set('bt2-wr',  wr+'%', wr>=60?'cg':wr>=40?'ca':'cr');
   const pf = m.profit_factor || 0;
   set('bt2-pf',  pf, pf>=1.5?'cg':pf>=1?'ca':'cr');
-  set('bt2-aw',  m.avg_win_pts>=0 ? '+'+m.avg_win_pts : m.avg_win_pts, 'cg');
+  set('bt2-aw',  (m.avg_win_pts||0)>=0 ? '+'+(m.avg_win_pts||0) : (m.avg_win_pts||0), 'cg');
+  set('bt2-al',  (m.avg_loss_pts||0)!==0 ? (m.avg_loss_pts||0) : '0', 'cr');
   const pnl = m.total_pnl_pts || 0;
   set('bt2-pnl', (pnl>=0?'+':'')+pnl, pnl>=0?'cg':'cr');
 
@@ -2612,32 +2687,47 @@ function bt2RenderResults(data) {
     </div>`;
   }).join('');
 
-  // Trades table
-  const trades = data.trades || [];
+  // Trades table — show EXECUTE + WATCH (4/5) + recent WAIT, skip pure NO TRADE to reduce noise
+  const allTrades = data.trades || [];
   const stMap  = {go:'cg',am:'ca',st:'cr',wt:'cb'};
-  const stLbl  = {go:'✓',am:'~',st:'✗',wt:'?'};
-  document.getElementById('bt2-trades').innerHTML = trades.slice().reverse().map(t => {
+  const stLbl  = {go:'GO',am:'~',st:'NO',wt:'?'};
+  // Show EXECUTE, WAIT (pass>=3), skip NO TRADE unless recent
+  const trades = allTrades.slice().reverse().filter(t =>
+    t.verdict==='EXECUTE' || t.verdict==='WAIT' || allTrades.indexOf(t) >= allTrades.length-20
+  );
+  document.getElementById('bt2-trades').innerHTML = allTrades.slice().reverse().map(t => {
+    const isExec  = t.verdict==='EXECUTE';
+    const isWatch = t.verdict==='WAIT' && t.pass_count===4;
+    const isWait  = t.verdict==='WAIT' && t.pass_count<4;
     const oc  = t.outcome==='WIN'?'var(--go)':t.outcome==='LOSS'?'var(--st)':'var(--t2)';
-    const vc  = t.verdict==='EXECUTE'?'var(--go)':t.verdict==='NO TRADE'?'var(--st)':'var(--am)';
+    const vc  = isExec?'var(--go)':t.verdict==='NO TRADE'?'var(--t3)':isWatch?'var(--am)':'var(--t2)';
+    const vLabel = isExec?'EXECUTE':isWatch?'WATCH (4/5)':t.verdict==='WAIT'?'WAIT ('+t.pass_count+'/5)':'NO TRADE';
     const gs5 = [t.g1,t.g2,t.g3,t.g4,t.g5].map(g=>
       `<span class="${stMap[g]||'cm'}" style="font-size:9px;font-weight:700">${stLbl[g]||'?'}</span>`
     ).join(' ');
     const pts = t.outcome_pts !== null && t.outcome_pts !== undefined
       ? `<span style="color:${oc};font-weight:600">${t.outcome_pts>0?'+':''}${t.outcome_pts}</span>` : '—';
-    return `<tr class="${t.verdict==='EXECUTE'?'sbuy':''}">
-      <td>${t.date}</td>
-      <td style="color:${vc};font-weight:600">${t.verdict}</td>
-      <td>${t.pass_count}/5</td>
+    const f0 = v => v!=null ? Math.round(v) : '—';
+    const rowStyle = isExec?'background:rgba(0,200,100,0.07)':isWatch?'background:rgba(255,180,0,0.05)':'';
+    return `<tr style="${rowStyle}" onclick="dvLoadDate('${t.date}')" title="Click to drill down ${t.date}">
+      <td style="cursor:pointer;color:var(--bl)">${t.date}</td>
+      <td style="color:${vc};font-weight:600">${vLabel}</td>
+      <td style="color:${vc};font-weight:700">${t.pass_count}/5</td>
       <td style="font-weight:600">${(t.nifty||0).toFixed(0)}</td>
       <td style="color:${(t.vix||0)>=20?'var(--st)':(t.vix||0)>=16?'var(--am)':'var(--go)'}">${(t.vix||0).toFixed(1)}</td>
       <td style="color:${(t.pcr||0)>=1.2?'var(--go)':(t.pcr||0)<=0.8?'var(--st)':'var(--am)'}">${(t.pcr||0).toFixed(2)}</td>
       <td>${gs5}</td>
-      <td>${(t.nxt_close||0).toFixed(0)||'—'}</td>
+      <td style="color:var(--t1)">${f0(t.entry)}</td>
+      <td style="color:var(--go);font-size:9px">${f0(t.target)}</td>
+      <td style="color:var(--st);font-size:9px">${f0(t.stop)}</td>
+      <td style="font-weight:600">${f0(t.exit)}</td>
       <td>${pts}</td>
       <td style="color:${oc};font-weight:600">${t.outcome||'—'}</td>
     </tr>`;
   }).join('');
-  document.getElementById('bt2-showing').textContent = `${trades.length} trades · ${m.from_date} → ${m.to_date}`;
+  const execN = (data.trades||[]).filter(t=>t.verdict==='EXECUTE').length;
+  const watchN = (data.trades||[]).filter(t=>t.verdict==='WAIT'&&t.pass_count===4).length;
+  document.getElementById('bt2-showing').textContent = `${allTrades.length} days shown · ${execN} EXECUTE · ${watchN} WATCH(4/5) · ${m.from_date} to ${m.to_date}`;
 }
 
 async function bt2LoadWeights() {
@@ -2699,6 +2789,227 @@ async function bt2Optimize() {
   } catch(e) {
     notify('Optimizer failed — check backend');
   }
+}
+
+// ═══════════════════════════════════════════════
+// TOPBAR DATE VIEW — full-screen overlay
+// ═══════════════════════════════════════════════
+const _todayStr = () => new Date().toISOString().split('T')[0];
+
+function tbDateChange(val) {
+  if(!val || val === _todayStr()) { tbGoLive(); return; }
+  document.getElementById('tb-live-btn').style.display = 'inline-block';
+  document.getElementById('live-pill').style.opacity = '0.4';
+  document.getElementById('day-overlay').style.display = 'block';
+  document.getElementById('dov-title').textContent = 'DAY VIEW — ' + val;
+  document.getElementById('dov-stats').innerHTML = '<span style="color:var(--t2);font-size:9px">Loading...</span>';
+  document.getElementById('dov-intra').innerHTML = '';
+  document.getElementById('dov-pos').innerHTML = '';
+  document.getElementById('dov-timeline').style.display = 'none';
+  document.getElementById('dov-nodata').style.display = 'none';
+  fetch(`${API}/api/backtest/dayview?date=${val}`)
+    .then(r=>r.json()).then(d=>{
+      if(d.error){ document.getElementById('dov-stats').innerHTML = `<span style="color:var(--st)">${d.error}</span>`; return; }
+      dovRender(d);
+    }).catch(()=>{ document.getElementById('dov-stats').innerHTML = '<span style="color:var(--st)">Failed to load data</span>'; });
+}
+
+function tbGoLive() {
+  document.getElementById('tb-date').value = '';
+  document.getElementById('tb-live-btn').style.display = 'none';
+  document.getElementById('live-pill').style.opacity = '1';
+  document.getElementById('day-overlay').style.display = 'none';
+}
+
+function dovRender(d) {
+  const gc  = s => s==='go'?'var(--go)':s==='st'?'var(--st)':s==='am'?'var(--am)':'var(--t2)';
+  const gl  = s => s==='go'?'GO':s==='st'?'NO':s==='am'?'~':'?';
+  const f   = (v,dp=0) => v!=null ? (+v).toFixed(dp) : '—';
+  const vixC = d.vix>=20?'var(--st)':d.vix>=16?'var(--am)':'var(--go)';
+  const pcrC = d.pcr>=1.2?'var(--go)':d.pcr<=0.8?'var(--st)':'var(--am)';
+  const fiiC = (d.fii_net||0)<0?'var(--st)':'var(--go)';
+
+  // Source badge
+  const hasSrc = d.live_signals && d.live_signals.length > 0;
+  document.getElementById('dov-src').textContent = hasSrc ? `LIVE DATA (${d.live_signals.length} signals)` : 'SIMULATION';
+  document.getElementById('dov-src').style.color = hasSrc ? 'var(--go)' : 'var(--am)';
+
+  // Stats row
+  document.getElementById('dov-stats').innerHTML = `
+    <div class="stc" style="min-width:80px"><div class="stck">DATE</div><div class="stcv cb">${d.date}</div></div>
+    <div class="stc" style="min-width:72px"><div class="stck">OPEN</div><div class="stcv">${f(d.open)}</div></div>
+    <div class="stc" style="min-width:72px"><div class="stck">HIGH</div><div class="stcv cg">${f(d.high)}</div></div>
+    <div class="stc" style="min-width:72px"><div class="stck">LOW</div><div class="stcv cr">${f(d.low)}</div></div>
+    <div class="stc" style="min-width:72px"><div class="stck">CLOSE</div><div class="stcv cb">${f(d.nifty)}</div></div>
+    <div class="stc" style="min-width:72px"><div class="stck">VIX</div><div class="stcv" style="color:${vixC}">${f(d.vix,2)} <span style="font-size:8px">(${d.vix_chg>=0?'+':''}${f(d.vix_chg,1)}%)</span></div></div>
+    <div class="stc" style="min-width:72px"><div class="stck">PCR</div><div class="stcv" style="color:${pcrC}">${f(d.pcr,3)}</div></div>
+    <div class="stc" style="min-width:90px"><div class="stck">FII NET (Cr)</div><div class="stcv" style="color:${fiiC}">${(d.fii_net||0)>=0?'+':''}${f(d.fii_net,0)}</div></div>
+    <div class="stc" style="min-width:60px"><div class="stck">ATR</div><div class="stcv ca">${f(d.atr,1)}</div></div>
+  `;
+
+  // Gate mode card renderer
+  const gnames = ['G1 REGIME','G2 SMART MONEY','G3 STRUCTURE','G4 TRIGGER','G5 RISK'];
+  function modeCard(m, label) {
+    const vc = m.verdict==='EXECUTE'?'var(--go)':m.verdict==='NO TRADE'?'var(--st)':'var(--am)';
+    const gates = ['g1','g2','g3','g4','g5'].map((g,i)=>{
+      const gs = m[g];
+      return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--b0);border-radius:3px;margin-bottom:3px">
+        <span style="width:120px;font-size:9px;color:var(--t2);letter-spacing:.5px;flex-shrink:0">${gnames[i]}</span>
+        <span style="font-size:11px;font-weight:800;color:${gc(gs.state)};width:28px;flex-shrink:0">${gl(gs.state)}</span>
+        <div style="flex:1;background:var(--b2);height:5px;border-radius:2px">
+          <div style="width:${gs.score}%;height:5px;border-radius:2px;background:${gc(gs.state)}"></div>
+        </div>
+        <span style="font-size:10px;font-weight:700;color:${gc(gs.state)};width:30px;text-align:right">${gs.score}</span>
+      </div>`;
+    }).join('');
+    const pnlC = (m.pnl||0)>0?'var(--go)':(m.pnl||0)<0?'var(--st)':'var(--t2)';
+    const outC = m.outcome==='WIN'?'var(--go)':m.outcome==='LOSS'?'var(--st)':'var(--t2)';
+    const trade = m.entry ? `
+      <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--b2)">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px">
+          <div class="stc"><div class="stck">ENTRY (Next Open)</div><div class="stcv cb" style="font-size:14px">${f(m.entry)}</div></div>
+          <div class="stc"><div class="stck">TARGET</div><div class="stcv cg" style="font-size:14px">${f(m.target)}</div></div>
+          <div class="stc"><div class="stck">STOP LOSS</div><div class="stcv cr" style="font-size:14px">${f(m.stop)}</div></div>
+          <div class="stc"><div class="stck">EXIT</div><div class="stcv" style="font-size:14px">${f(m.exit)}</div></div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <div class="stc" style="flex:1"><div class="stck">P&amp;L (pts)</div><div style="font-size:22px;font-weight:900;color:${pnlC}">${(m.pnl||0)>=0?'+':''}${f(m.pnl)}</div></div>
+          <div class="stc" style="flex:1"><div class="stck">RESULT</div><div style="font-size:18px;font-weight:900;color:${outC}">${m.outcome||'—'}</div></div>
+          <div style="font-size:8px;color:var(--t2);text-align:right">Next session:<br>${m.next_date||'—'}</div>
+        </div>
+      </div>` : `<div style="margin-top:8px;font-size:8px;color:var(--t2)">No next-day data — last record</div>`;
+
+    return `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <div class="acardt" style="color:${vc};font-size:11px;margin:0">${label}</div>
+        <span style="font-size:16px;font-weight:900;color:${vc}">${m.verdict}</span>
+        <span style="font-size:12px;color:var(--t2)">${m.pass_count}/5 gates</span>
+      </div>
+      ${gates}
+      ${trade}
+    `;
+  }
+
+  document.getElementById('dov-intra').innerHTML = modeCard(d.intraday,  'INTRADAY MODE');
+  document.getElementById('dov-pos').innerHTML   = modeCard(d.positional, 'POSITIONAL MODE');
+
+  // Live signal timeline
+  const sigs = d.live_signals || [];
+  if(sigs.length > 0) {
+    document.getElementById('dov-timeline').style.display = 'block';
+    document.getElementById('dov-timeline-count').textContent = `(${sigs.length} events)`;
+    const stMap = {go:'cg',am:'ca',st:'cr',wt:'cb'};
+    const stLbl = {go:'GO',am:'~',st:'NO',wt:'?'};
+    document.getElementById('dov-timeline-body').innerHTML = sigs.map(s=>{
+      const vc = s.verdict==='EXECUTE'?'var(--go)':s.verdict==='NO TRADE'?'var(--t3)':'var(--am)';
+      const gs5 = ['g1','g2','g3','g4','g5'].map(g=>
+        `<span class="${stMap[s[g]]||''}" style="font-size:9px;font-weight:700">${stLbl[s[g]]||'?'}</span>`
+      ).join(' ');
+      const oc = s.outcome==='WIN'?'var(--go)':s.outcome==='LOSS'?'var(--st)':'var(--t2)';
+      const pts = s.outcome_pts!=null ? `<span style="color:${oc};font-weight:600">${s.outcome_pts>0?'+':''}${(+s.outcome_pts).toFixed(1)}</span>` : '—';
+      const rowBg = s.verdict==='EXECUTE'?'background:rgba(0,200,100,0.07)':'';
+      return `<tr style="${rowBg}">
+        <td style="font-weight:600;color:var(--bl)">${s.time}</td>
+        <td style="color:${vc};font-weight:700">${s.verdict}</td>
+        <td style="color:${vc}">${s.pass_count}/5</td>
+        <td>${s.nifty!=null?(+s.nifty).toFixed(0):'—'}</td>
+        <td style="color:${(s.vix||0)>=20?'var(--st)':(s.vix||0)>=16?'var(--am)':'var(--go)'}">${s.vix!=null?(+s.vix).toFixed(1):'—'}</td>
+        <td style="color:${(s.pcr||0)>=1.2?'var(--go)':(s.pcr||0)<=0.8?'var(--st)':'var(--am)'}">${s.pcr!=null?(+s.pcr).toFixed(2):'—'}</td>
+        <td>${gs5}</td>
+        <td>${pts}</td>
+        <td style="color:${oc};font-weight:600">${s.outcome||'—'}</td>
+      </tr>`;
+    }).join('');
+  } else {
+    document.getElementById('dov-nodata').style.display = 'block';
+  }
+}
+
+// ═══════════════════════════════════════════════
+// DAY VIEW (backtest tab drill-down)
+// ═══════════════════════════════════════════════
+function dvLoadDate(date) {
+  document.getElementById('dv-date').value = date;
+  dvLoad();
+  document.getElementById('dv-panel').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+async function dvLoad() {
+  const date = document.getElementById('dv-date').value;
+  if(!date) { notify('Select a date first'); return; }
+  document.getElementById('dv-hint').textContent = 'Loading...';
+  try {
+    const r = await fetch(`${API}/api/backtest/dayview?date=${date}`);
+    const d = await r.json();
+    if(d.error) { document.getElementById('dv-hint').textContent = d.error; return; }
+    dvRender(d);
+    document.getElementById('dv-panel').style.display = 'block';
+    document.getElementById('dv-hint').textContent = `Loaded: ${date}`;
+  } catch(e) {
+    document.getElementById('dv-hint').textContent = 'Failed — check backend';
+  }
+}
+
+function dvRender(d) {
+  const gc  = s => s==='go'?'var(--go)':s==='st'?'var(--st)':s==='am'?'var(--am)':'var(--t2)';
+  const gl  = s => s==='go'?'GO':s==='st'?'NO':s==='am'?'~':'?';
+  const f   = (v,dp=0) => v!=null ? (+v).toFixed(dp) : '—';
+  const vixC = d.vix>=20?'var(--st)':d.vix>=16?'var(--am)':'var(--go)';
+  const pcrC = d.pcr>=1.2?'var(--go)':d.pcr<=0.8?'var(--st)':'var(--am)';
+  const fiiC = d.fii_net<0?'var(--st)':'var(--go)';
+
+  document.getElementById('dv-summary').innerHTML = `
+    <div class="stc" style="min-width:70px"><div class="stck">NIFTY CLOSE</div><div class="stcv cb">${f(d.nifty)}</div></div>
+    <div class="stc" style="min-width:60px"><div class="stck">OPEN</div><div class="stcv">${f(d.open)}</div></div>
+    <div class="stc" style="min-width:60px"><div class="stck">HIGH</div><div class="stcv cg">${f(d.high)}</div></div>
+    <div class="stc" style="min-width:60px"><div class="stck">LOW</div><div class="stcv cr">${f(d.low)}</div></div>
+    <div class="stc" style="min-width:60px"><div class="stck">VIX</div><div class="stcv" style="color:${vixC}">${f(d.vix,1)} (${d.vix_chg>=0?'+':''}${f(d.vix_chg,1)}%)</div></div>
+    <div class="stc" style="min-width:60px"><div class="stck">PCR</div><div class="stcv" style="color:${pcrC}">${f(d.pcr,3)}</div></div>
+    <div class="stc" style="min-width:80px"><div class="stck">FII NET</div><div class="stcv" style="color:${fiiC}">${d.fii_net>=0?'+':''}${f(d.fii_net,0)} Cr</div></div>
+    <div class="stc" style="min-width:60px"><div class="stck">ATR</div><div class="stcv ca">${f(d.atr,1)}</div></div>
+  `;
+
+  const gnames = ['G1 REGIME','G2 SMART MONEY','G3 STRUCTURE','G4 TRIGGER','G5 RISK'];
+  function modeHTML(m, label) {
+    const vc = m.verdict==='EXECUTE'?'var(--go)':m.verdict==='NO TRADE'?'var(--st)':'var(--am)';
+    const gates = ['g1','g2','g3','g4','g5'].map((g,i) => {
+      const gs = m[g];
+      return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;padding:3px 6px;background:var(--b0);border-radius:3px">
+        <span style="width:110px;font-size:9px;color:var(--t2);letter-spacing:0.5px">${gnames[i]}</span>
+        <span style="font-size:10px;font-weight:700;color:${gc(gs.state)};width:24px">${gl(gs.state)}</span>
+        <div style="flex:1;background:var(--b2);height:4px;border-radius:2px">
+          <div style="width:${gs.score}%;height:4px;border-radius:2px;background:${gc(gs.state)}"></div>
+        </div>
+        <span style="font-size:9px;color:var(--t2);width:28px;text-align:right">${gs.score}</span>
+      </div>`;
+    }).join('');
+
+    const pnlC = m.pnl>0?'var(--go)':m.pnl<0?'var(--st)':'var(--t2)';
+    const outcomeC = m.outcome==='WIN'?'var(--go)':m.outcome==='LOSS'?'var(--st)':'var(--t2)';
+    const tradeBlock = m.entry ? `
+      <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--b2)">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:4px">
+          <div class="stc"><div class="stck">ENTRY</div><div class="stcv cb">${f(m.entry)}</div></div>
+          <div class="stc"><div class="stck">TARGET</div><div class="stcv cg">${f(m.target)}</div></div>
+          <div class="stc"><div class="stck">STOP</div><div class="stcv cr">${f(m.stop)}</div></div>
+          <div class="stc"><div class="stck">EXIT</div><div class="stcv">${f(m.exit)}</div></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div class="stc" style="flex:1"><div class="stck">P&amp;L (pts)</div><div class="stcv" style="color:${pnlC};font-size:16px;font-weight:800">${m.pnl>=0?'+':''}${f(m.pnl)}</div></div>
+          <div class="stc" style="flex:1"><div class="stck">OUTCOME</div><div class="stcv" style="color:${outcomeC};font-size:14px;font-weight:800">${m.outcome||'—'}</div></div>
+          <div style="font-size:8px;color:var(--t2)">Next day: ${m.next_date||'—'}</div>
+        </div>
+      </div>` : `<div style="margin-top:6px;font-size:8px;color:var(--t2)">No next-day data available</div>`;
+
+    return `
+      <div class="acardt" style="color:${vc}">${label} — <b>${m.verdict}</b> &nbsp; ${m.pass_count}/5 gates</div>
+      <div style="margin-top:6px">${gates}</div>
+      ${tradeBlock}
+    `;
+  }
+
+  document.getElementById('dv-intra').innerHTML = modeHTML(d.intraday, 'INTRADAY');
+  document.getElementById('dv-pos').innerHTML   = modeHTML(d.positional, 'POSITIONAL');
 }
 
 // ── Token expiry check — runs once on load ──
