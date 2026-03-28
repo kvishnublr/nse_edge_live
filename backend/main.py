@@ -4,6 +4,7 @@ Start: python3 main.py
 """
 
 import asyncio
+import datetime
 import json
 import logging
 import time
@@ -502,6 +503,8 @@ async def backtest_dayview(date: str):
         vix_r   = conn.execute("SELECT vix, vix_chg FROM vix_daily WHERE date=?", (date,)).fetchone() or (15.0, 0.0)
         chain_r = conn.execute("SELECT pcr, total_call_oi, total_put_oi FROM chain_daily WHERE date=?", (date,)).fetchone() or (1.0, 500000, 500000)
         fii_net = (conn.execute("SELECT fii_net FROM fii_daily WHERE date=?", (date,)).fetchone() or (0.0,))[0]
+        if abs(fii_net) > 10000:
+            fii_net = round(fii_net / 100, 2)
 
         # Next day for entry/exit
         nxt = conn.execute(
@@ -603,6 +606,267 @@ async def backtest_dayview(date: str):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@app.get("/api/dayview/full")
+async def dayview_full(date: str):
+    """
+    Returns historical data for a date in the EXACT format that
+    WebSocket handle() expects — so the live UI can replay any past day.
+    """
+    import statistics as _stat
+    from datetime import date as _date_cls, timedelta as _td, datetime as _dt_cls
+    from config import KITE_TOKENS, FNO_SYMBOLS, LOT_SIZES, GATE as TH
+    from backtest_engine import _g1, _g2, _g3, _g4, _g5, _verdict
+    import backtest_data as bd
+
+    try:
+        sel_date = _dt_cls.strptime(date, "%Y-%m-%d").date()
+        context_from = sel_date - _td(days=35)
+
+        bd.init_db()
+        conn = bd.get_conn()
+        vix_r   = conn.execute("SELECT vix, vix_chg FROM vix_daily WHERE date=?", (date,)).fetchone() or (15.0, 0.0)
+        chain_r = conn.execute("SELECT pcr, total_call_oi, total_put_oi FROM chain_daily WHERE date=?", (date,)).fetchone() or (1.0, 500000, 500000)
+        fii_row = conn.execute("SELECT fii_net, dii_net FROM fii_daily WHERE date=?", (date,)).fetchone() or (0.0, 0.0)
+        nifty_row = conn.execute(
+            "SELECT open, high, low, close, volume FROM ohlcv WHERE date=?", (date,)
+        ).fetchone()
+        prev_nifty = conn.execute(
+            "SELECT close FROM ohlcv WHERE date < ? ORDER BY date DESC LIMIT 1", (date,)
+        ).fetchone()
+        conn.close()
+
+        if not nifty_row:
+            return JSONResponse({"error": f"No data for {date}"}, status_code=404)
+
+        fii_net = fii_row[0]; dii_net = fii_row[1]
+        if abs(fii_net) > 10000:
+            fii_net = round(fii_net / 100, 2)
+        if abs(dii_net) > 10000:
+            dii_net = round(dii_net / 100, 2)
+        vix = vix_r[0]; vix_chg = vix_r[1]
+        pcr = chain_r[0]; call_oi = chain_r[1]; put_oi = chain_r[2]
+
+        # Compute gates
+        g1i = _g1(vix, vix_chg, fii_net)
+        g2i = _g2(pcr, call_oi, put_oi)
+        # SELECT open, high, low, close, volume → indices 0,1,2,3,4
+        nifty_close = nifty_row[3]; nifty_high = nifty_row[1]; nifty_low = nifty_row[2]
+        g3i = _g3(nifty_close, nifty_high, nifty_low)
+        prev_close_val = prev_nifty[0] if prev_nifty else nifty_close
+        nifty_vol = nifty_row[4]
+        g4i = _g4(nifty_close, prev_close_val, nifty_vol, 0)
+        g5i = _g5(nifty_close, 90.0, vix, "intraday")
+        verdict, pass_cnt = _verdict([g1i, g2i, g3i, g4i, g5i])
+
+        chg_pts = round(nifty_close - prev_close_val, 2)
+        chg_pct = round(chg_pts / prev_close_val * 100, 2) if prev_close_val else 0
+
+        def gstate_label(s): return "PASS" if s=="go" else "FAIL" if s=="st" else "CAUTION" if s=="am" else "WAIT"
+        def score_cls(s): return "cg" if s=="go" else "cr" if s=="st" else "ca"
+
+        gates_data = {
+            "1": {"state": g1i["state"], "score": g1i["score"], "name": "REGIME",
+                  "rows": [{"k": "VIX", "v": f"{vix:.1f}", "c": "cr" if vix>=20 else "ca" if vix>=15 else "cg"},
+                            {"k": "VIX CHG", "v": f"{vix_chg:+.1f}%", "c": "cr" if vix_chg>5 else "cg"},
+                            {"k": "FII NET", "v": f"₹{fii_net:+.0f} Cr", "c": "cr" if fii_net<0 else "cg"}]},
+            "2": {"state": g2i["state"], "score": g2i["score"], "name": "SMART MONEY",
+                  "rows": [{"k": "PCR", "v": f"{pcr:.3f}", "c": "cg" if pcr>=1.2 else "cr" if pcr<=0.8 else "ca"},
+                            {"k": "CALL OI", "v": f"{call_oi:,}", "c": ""},
+                            {"k": "PUT OI", "v": f"{put_oi:,}", "c": "cg"}]},
+            "3": {"state": g3i["state"], "score": g3i["score"], "name": "STRUCTURE",
+                  "rows": [{"k": "VWAP proxy", "v": f"{round((nifty_high+nifty_low+nifty_close)/3,0):.0f}", "c": ""},
+                            {"k": "CLOSE vs VWAP", "v": f"{'+' if nifty_close>(nifty_high+nifty_low+nifty_close)/3 else ''}{round(nifty_close-(nifty_high+nifty_low+nifty_close)/3,0):.0f}", "c": score_cls(g3i["state"])},
+                            {"k": "RANGE POS", "v": f"{round((nifty_close-nifty_low)/(nifty_high-nifty_low)*100) if nifty_high>nifty_low else 50:.0f}%", "c": score_cls(g3i["state"])}]},
+            "4": {"state": g4i["state"], "score": g4i["score"], "name": "TRIGGER",
+                  "rows": [{"k": "CHG", "v": f"{chg_pct:+.2f}%", "c": "cg" if chg_pct>0 else "cr"},
+                            {"k": "VOL", "v": f"{nifty_vol:,}" if nifty_vol else "N/A (index)", "c": "ca"},
+                            {"k": "MODE", "v": "Price-only (index)", "c": "ca"}]},
+            "5": {"state": g5i["state"], "score": g5i["score"], "name": "RISK VALID",
+                  "rows": [{"k": "VIX regime", "v": "LOW" if vix<15 else "MEDIUM" if vix<20 else "HIGH", "c": "cg" if vix<15 else "ca" if vix<20 else "cr"},
+                            {"k": "R:R default", "v": "2.5:1", "c": "cg"},
+                            {"k": "ATR proxy", "v": "90 pts", "c": "ca"}]},
+        }
+        verdict_sub = {
+            "EXECUTE": "All gates aligned — trade setup confirmed",
+            "WAIT": f"{pass_cnt}/5 gates pass — monitor closely",
+            "NO TRADE": f"G1 REGIME fail — stand down" if g1i["state"]=="st" else "Insufficient gates — stand down"
+        }.get(verdict, "")
+
+        confidence = round(pass_cnt * 2.0, 1)
+
+        # Fetch stock prices for that date via Kite
+        from kiteconnect import KiteConnect
+        from config import KITE_API_KEY, KITE_ACCESS_TOKEN
+        kite = KiteConnect(api_key=KITE_API_KEY)
+        kite.set_access_token(KITE_ACCESS_TOKEN)
+
+        prices = {"NIFTY": {"price": nifty_close, "chg_pts": chg_pts, "chg_pct": chg_pct}}
+
+        stock_picks = []
+        stocks_msg  = []
+        for sym in ["BANKNIFTY", "ICICIBANK", "RELIANCE", "INDUSINDBK", "SBIN", "HDFCBANK", "AXISBANK", "BAJFINANCE", "LT", "TCS", "TATAMOTORS", "INFY", "MARUTI", "KOTAKBANK"]:
+            token = KITE_TOKENS.get(sym)
+            if not token: continue
+            try:
+                hist = kite.historical_data(token, context_from, sel_date, "day")
+                day_rows = [d for d in hist if (d["date"].strftime("%Y-%m-%d") if hasattr(d["date"],"strftime") else str(d["date"])[:10]) == date]
+                if not day_rows: continue
+                dr = day_rows[0]
+                prior = [d for d in hist if (d["date"].strftime("%Y-%m-%d") if hasattr(d["date"],"strftime") else str(d["date"])[:10]) < date]
+                pv = prior[-1]["close"] if prior else dr["close"]
+                dc = round(dr["close"], 2)
+                dp = round((dc - pv) / pv * 100, 2) if pv else 0
+                dv = dr.get("volume", 0)
+                _vols = [d.get("volume",0) for d in prior[-20:] if d.get("volume",0)>0]
+                avg_v = _stat.mean(_vols) if _vols else 1
+
+                # Per-stock gates
+                trs = [abs(prior[i]["close"]-prior[i-1]["close"]) for i in range(1,len(prior))]
+                atr_v = round(_stat.mean(trs[-14:]),2) if len(trs)>=14 else round(_stat.mean(trs),2) if trs else 90.0
+                g3s = _g3(dc, dr["high"], dr["low"])
+                g4s = _g4(dc, pv, dv, avg_v)
+                g5s = _g5(dc, atr_v, vix, "intraday")
+                _, pc_s = _verdict([g1i, g2i, g3s, g4s, g5s])
+                vol_r = round(dv/avg_v, 1) if avg_v>0 and dv>0 else 0
+                oi_chg_proxy = round(dp * 10)  # proxy: no historical OI per stock
+
+                if sym in ["BANKNIFTY", "ICICIBANK", "RELIANCE"]:
+                    prices[sym] = {"price": dc, "chg_pts": round(dc-pv,2), "chg_pct": dp}
+
+                # Stock scanner message (all stocks, for the OI table)
+                stocks_msg.append({
+                    "symbol":     sym,
+                    "price":      dc,
+                    "chg_pct":    dp,
+                    "chg_pts":    round(dc - pv, 2),
+                    "oi":         0,
+                    "oi_chg":     0,
+                    "oi_chg_pct": oi_chg_proxy,
+                    "volume":     dv,
+                    "lot_size":   LOT_SIZES.get(sym, 1),
+                    "fut_ltp":    dc,
+                    "vol_ratio":  vol_r,
+                    "atr_pct":    round(atr_v / dc * 100, 1) if dc > 0 else 0,
+                    "rs_pct":     round(dp - chg_pct, 1),   # relative strength vs NIFTY
+                })
+
+                # Build pick entry for right panel (only strong signals)
+                score = round(40 + pc_s*10 + (10 if dp>1 else 5 if dp>0.5 else 0) + (5 if vol_r>=1.5 else 0))
+                score = min(99, score)
+                if pc_s >= 3:
+                    # ── Entry / SL / Target from ATR and recent 5-day swings ──
+                    recent_lows  = [d["low"]  for d in prior[-5:]] if len(prior) >= 5 else [dr["low"]]
+                    recent_highs = [d["high"] for d in prior[-5:]] if len(prior) >= 5 else [dr["high"]]
+                    swing_low  = min(recent_lows)
+                    swing_high = max(recent_highs)
+
+                    if dp >= 1.5:
+                        setup = "Breakout"
+                        entry_p = dc * 1.003           # slight buffer above close
+                    elif dp > 0:
+                        setup = "Pullback"
+                        entry_p = dc - 0.25 * atr_v   # buy on small dip
+                    else:
+                        setup = "Recovery"
+                        entry_p = dc + 0.15 * atr_v   # wait for confirmation
+
+                    sl_p    = max(swing_low, entry_p - 1.6 * atr_v)
+                    risk_p  = max(entry_p - sl_p, atr_v * 0.5)
+                    tgt_p   = entry_p + 2.5 * risk_p
+                    # If there's nearby resistance, cap target there
+                    if 0 < (swing_high - entry_p) < 2.5 * risk_p:
+                        tgt_p = swing_high + 0.5 * atr_v
+                    rr_val  = round((tgt_p - entry_p) / risk_p, 1) if risk_p > 0 else 0.0
+
+                    def _pf(p):
+                        return str(int(round(p))) if p >= 100 else f"{p:.1f}"
+
+                    sector = ('Banking' if sym in ['HDFCBANK','ICICIBANK','AXISBANK','KOTAKBANK','INDUSINDBK','SBIN']
+                              else 'Index' if sym == 'BANKNIFTY'
+                              else 'IT' if sym in ['TCS','INFY']
+                              else 'Auto' if sym in ['MARUTI','TATAMOTORS']
+                              else 'Market')
+
+                    import pytz as _pytz
+                    _ist = datetime.datetime.now(_pytz.timezone('Asia/Kolkata'))
+                    stock_picks.append({
+                        "sym":      sym,
+                        "score":    score,
+                        "pc":       pc_s,
+                        "verdict":  "EXECUTE" if pc_s==5 else "WATCH" if pc_s==4 else "WAIT",
+                        "conf":     "CONFIRMED" if pc_s==5 else "50:50",
+                        "signal_time": _ist.strftime("%H:%M"),
+                        "close":    dc,
+                        "chg_pct":  dp,
+                        "vol_ratio": vol_r,
+                        "atr":      atr_v,
+                        "oi_chg_pct": oi_chg_proxy,
+                        "setup":    setup,
+                        "entry":    _pf(entry_p),
+                        "sl":       _pf(sl_p),
+                        "target":   _pf(tgt_p),
+                        "rr":       rr_val,
+                        "meta":     f"{setup} · {sector} · Vol {vol_r}x · PCR {pcr:.2f}",
+                        "reason":   f"R:R 1:{rr_val} · {pc_s}/5 gates · {'LONG BUILDUP' if dp>0 and pc_s>=4 else 'MOMENTUM' if dp>0 else 'WATCH'}",
+                        "cls":      "rpk-go" if pc_s>=4 else "rpk-am",
+                    })
+            except Exception: continue
+
+        stock_picks.sort(key=lambda x: -x["score"])
+
+        # ── Synthetic option chain (strike-level distribution) ────────────────
+        atm_strike = int(round(nifty_close / 50.0) * 50)
+        mp_val     = atm_strike  # chain_daily has no max_pain; use ATM as proxy
+        offsets    = list(range(-10, 11))  # ATM-500 to ATM+500
+
+        def _oi_w(dist, peak):
+            return max(0.05, 1.0 / (1.0 + abs(dist - peak) * 0.45))
+
+        c_weights = [_oi_w(i, 1) for i in offsets]   # calls peak ATM+50
+        p_weights = [_oi_w(i, -1) for i in offsets]  # puts peak ATM-50
+        c_sum = sum(c_weights); p_sum = sum(p_weights)
+
+        hist_strikes = []
+        for j, off in enumerate(offsets):
+            s_val = atm_strike + off * 50
+            hist_strikes.append({
+                "strike":      s_val,
+                "call_oi":     int(call_oi * c_weights[j] / c_sum),
+                "put_oi":      int(put_oi  * p_weights[j] / p_sum),
+                "call_oi_chg": 0,
+                "put_oi_chg":  0,
+                "is_atm":      s_val == atm_strike,
+            })
+
+        chain_msg = {
+            "pcr":           pcr,
+            "vix":           vix,
+            "max_pain":      mp_val,
+            "atm":           atm_strike,
+            "total_call_oi": call_oi,
+            "total_put_oi":  put_oi,
+            "ul_price":      nifty_close,
+            "strikes":       hist_strikes,
+        }
+
+        return JSONResponse({
+            "date": date,
+            "prices": prices,
+            "gates": {"gates": gates_data, "verdict": verdict, "verdict_sub": verdict_sub,
+                      "pass_count": pass_cnt, "confidence": confidence},
+            "macro":  {"vix": vix, "vix_chg": vix_chg, "fii_net": fii_net},
+            "fii":    {"fii_net": fii_net, "dii_net": dii_net},
+            "chain":  chain_msg,
+            "stocks": stocks_msg,
+            "spikes": [],
+            "stock_picks": stock_picks[:8],
+            "nifty_ohlc": {"o": nifty_row[0], "h": nifty_row[1], "l": nifty_row[2], "c": nifty_row[3]},
+        })
+    except Exception as e:
+        logger.error(f"Dayview full error: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.get("/api/dayview/stocks")
 async def dayview_stocks(date: str):
     """
@@ -627,6 +891,8 @@ async def dayview_stocks(date: str):
         vix_r   = conn.execute("SELECT vix, vix_chg FROM vix_daily WHERE date=?", (date,)).fetchone() or (15.0, 0.0)
         chain_r = conn.execute("SELECT pcr, total_call_oi, total_put_oi FROM chain_daily WHERE date=?", (date,)).fetchone() or (1.0, 500000, 500000)
         fii_net = (conn.execute("SELECT fii_net FROM fii_daily WHERE date=?", (date,)).fetchone() or (0.0,))[0]
+        if abs(fii_net) > 10000:
+            fii_net = round(fii_net / 100, 2)
         conn.close()
 
         g1_idx = _g1(vix_r[0], vix_r[1], fii_net)
