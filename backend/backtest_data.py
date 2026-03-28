@@ -257,75 +257,126 @@ def _parse_pcr(csv_text: str, ref_date=None):
         return None
 
 
-# ─── FII HISTORICAL DOWNLOAD ───────────────────────────────────────────────────
-def download_fii_history(days: int = 1095):
-    """Download NSE FII/DII daily net flow data for historical backtest."""
+# ─── NSE PARTICIPANT OI — FII + PCR (works for all dates) ────────────────────
+def download_participant_oi(days: int = 1095):
+    """
+    Download NSE participant-wise OI CSV for each trading day.
+    URL: archives.nseindia.com/content/nsccl/fao_participant_oi_DDMMYYYY.csv
+    Extracts:
+      - FII net index futures position → stored in fii_daily
+      - Total NIFTY index option Put/Call OI → PCR stored in chain_daily
+    Works for all dates including post-Jul 2024.
+    """
     to_dt   = datetime.now(IST).date()
     from_dt = to_dt - timedelta(days=days)
 
-    conn     = get_conn()
-    existing = set(r[0] for r in conn.execute("SELECT date FROM fii_daily").fetchall())
+    conn = get_conn()
+    existing_fii   = set(r[0] for r in conn.execute("SELECT date FROM fii_daily").fetchall())
+    existing_chain = set(r[0] for r in conn.execute("SELECT date FROM chain_daily").fetchall())
     conn.close()
 
     _nse_cookie()
 
-    downloaded = 0
-    failed     = 0
-    chunk_days = 90
-
+    dl_fii = dl_pcr = failed = 0
     cur = from_dt
+
     while cur <= to_dt:
-        chunk_end = min(cur + timedelta(days=chunk_days - 1), to_dt)
-        from_str  = cur.strftime("%d-%m-%Y")
-        to_str    = chunk_end.strftime("%d-%m-%Y")
+        if cur.weekday() < 5:
+            dt_str  = cur.strftime("%Y-%m-%d")
+            dt_file = cur.strftime("%d%m%Y")
+            need_fii   = dt_str not in existing_fii
+            need_chain = dt_str not in existing_chain
 
-        try:
-            resp = _NSE.get(
-                f"https://www.nseindia.com/api/historical/fiiDii"
-                f"?from={from_str}&to={to_str}",
-                timeout=15
-            )
-            if resp.status_code == 200:
-                raw  = resp.json()
-                data = raw if isinstance(raw, list) else raw.get("data", [])
-                conn = get_conn()
-                for rec in data:
-                    # Parse date — NSE returns "01-Apr-2023" or "01-04-2023"
-                    dt_raw = rec.get("date", "")
-                    dt_obj = None
-                    for fmt in ("%d-%b-%Y", "%d-%m-%Y", "%Y-%m-%d"):
-                        try:
-                            dt_obj = datetime.strptime(dt_raw, fmt).date()
-                            break
-                        except Exception:
-                            pass
-                    if not dt_obj:
-                        continue
-                    dt_str = dt_obj.strftime("%Y-%m-%d")
-                    if dt_str in existing:
-                        continue
-                    fii_net = round(float(rec.get("fiiNet", rec.get("fiinet", 0)) or 0), 2)
-                    dii_net = round(float(rec.get("diiNet", rec.get("diinet", 0)) or 0), 2)
-                    conn.execute(
-                        "INSERT OR REPLACE INTO fii_daily VALUES (?,?,?)",
-                        (dt_str, fii_net, dii_net)
-                    )
-                    existing.add(dt_str)
-                    downloaded += 1
-                conn.commit()
-                conn.close()
-            else:
-                logger.debug(f"FII history {from_str}→{to_str}: HTTP {resp.status_code}")
-                failed += 1
-        except Exception as e:
-            logger.debug(f"FII history chunk {from_str}→{to_str}: {e.__class__.__name__}")
-            failed += 1
+            if need_fii or need_chain:
+                url = f"https://archives.nseindia.com/content/nsccl/fao_participant_oi_{dt_file}.csv"
+                try:
+                    resp = _NSE.get(url, timeout=12)
+                    if resp.status_code == 200 and len(resp.content) > 200:
+                        result = _parse_participant_oi(resp.text)
+                        if result:
+                            conn = get_conn()
+                            if need_fii:
+                                conn.execute(
+                                    "INSERT OR REPLACE INTO fii_daily VALUES (?,?,?)",
+                                    (dt_str, result["fii_net"], result["dii_net"])
+                                )
+                                existing_fii.add(dt_str)
+                                dl_fii += 1
+                            if need_chain and result["pcr"] > 0:
+                                conn.execute(
+                                    "INSERT OR REPLACE INTO chain_daily VALUES (?,?,?,?,?,?)",
+                                    (dt_str, result["pcr"], result["call_oi"],
+                                     result["put_oi"], 0, 0.0)
+                                )
+                                existing_chain.add(dt_str)
+                                dl_pcr += 1
+                            conn.commit()
+                            conn.close()
+                    else:
+                        failed += 1
+                except Exception as e:
+                    logger.debug(f"Participant OI {dt_str}: {e.__class__.__name__}")
+                    failed += 1
+                time.sleep(0.3)
 
-        time.sleep(0.5)
-        cur = chunk_end + timedelta(days=1)
+        cur += timedelta(days=1)
 
-    logger.info(f"FII history: {downloaded} days downloaded, {failed} chunks failed")
-    return {"downloaded": downloaded, "failed": failed}
+    logger.info(
+        f"Participant OI: FII={dl_fii} PCR={dl_pcr} downloaded, {failed} failed/missing"
+    )
+    return {"fii_downloaded": dl_fii, "pcr_downloaded": dl_pcr, "failed": failed}
+
+
+def _parse_participant_oi(csv_text: str) -> dict:
+    """Parse participant OI CSV → extract FII net futures + total index option OI."""
+    try:
+        lines  = [l.strip() for l in csv_text.splitlines() if l.strip()]
+        header = None
+        data   = {}
+        for line in lines:
+            cols = [c.strip().strip('"') for c in line.split(",")]
+            if cols[0] == "Client Type":
+                header = cols
+                continue
+            if header and len(cols) >= 9:
+                client = cols[0].upper()
+                try:
+                    row = {header[i]: int(cols[i].replace("\t","").replace(" ","") or 0)
+                           for i in range(1, min(len(header), len(cols)))}
+                    data[client] = row
+                except Exception:
+                    pass
+
+        if not data:
+            return None
+
+        # FII net index futures = long - short
+        fii = data.get("FII", {})
+        dii = data.get("DII", {})
+        fii_net = fii.get("Future Index Long", 0) - fii.get("Future Index Short", 0)
+        dii_net = dii.get("Future Index Long", 0) - dii.get("Future Index Short", 0)
+
+        # PCR from total index options (all participants)
+        total = data.get("TOTAL", {})
+        call_oi = total.get("Option Index Call Long", 0)
+        put_oi  = total.get("Option Index Put Long",  0)
+        pcr     = round(put_oi / call_oi, 3) if call_oi > 0 else 0.0
+
+        return {
+            "fii_net":  float(fii_net),
+            "dii_net":  float(dii_net),
+            "pcr":      pcr,
+            "call_oi":  call_oi,
+            "put_oi":   put_oi,
+        }
+    except Exception as e:
+        logger.debug(f"Participant OI parse error: {e}")
+        return None
+
+
+def download_fii_history(days: int = 1095):
+    """Alias — use participant OI which gives both FII and PCR."""
+    return download_participant_oi(days)
 
 
 # ─── DATA SUMMARY ─────────────────────────────────────────────────────────────
