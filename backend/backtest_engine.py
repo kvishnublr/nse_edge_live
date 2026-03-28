@@ -74,18 +74,31 @@ def _g3(close: float, high: float, low: float) -> dict:
 
 
 def _g4(close: float, prev_close: float, volume: int, avg_vol: float) -> dict:
-    """Momentum from daily % change + volume vs 20-day average."""
+    """Momentum from daily % change + volume vs 20-day average.
+    NIFTY index has no volume in Kite — falls back to price momentum only."""
     chg_pct  = (close - prev_close) / prev_close * 100 if prev_close else 0
-    vol_mult = volume / avg_vol if avg_vol > 0 else 1.0
+    no_vol   = avg_vol == 0 or volume == 0
 
-    score = 50
-    if vol_mult >= TH["vol_surge_min"]: score += 20
-    elif vol_mult >= 1.0:               score += 5
-    if abs(chg_pct) >= 0.5:            score += 10
-    if vol_mult >= 2.0:                 score += 10   # proxy for OI build
-    score = max(0, min(100, score))
+    if no_vol:
+        # Price-only mode: use daily % move as trigger
+        abs_chg = abs(chg_pct)
+        score = 50
+        if abs_chg >= 1.0:   score += 30   # strong move
+        elif abs_chg >= 0.5: score += 15   # moderate move
+        elif abs_chg >= 0.3: score += 5    # weak move
+        else:                 score -= 10   # flat — no trigger
+        score = max(0, min(100, score))
+        st = "go" if score >= 70 else "wt" if score >= 45 else "am"
+    else:
+        vol_mult = volume / avg_vol
+        score = 50
+        if vol_mult >= TH["vol_surge_min"]: score += 20
+        elif vol_mult >= 1.0:               score += 5
+        if abs(chg_pct) >= 0.5:            score += 10
+        if vol_mult >= 2.0:                 score += 10
+        score = max(0, min(100, score))
+        st = "go" if score >= 70 else "wt" if score >= 45 else "am"
 
-    st = "go" if score >= 70 else "wt" if score >= 45 else "am"
     return {"state": st, "score": score}
 
 

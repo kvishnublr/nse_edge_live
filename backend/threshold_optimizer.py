@@ -75,13 +75,21 @@ def _g3(close, high, low):
 
 
 def _g4(close, prev_close, volume, avg_vol, th):
-    vol_mult = volume / avg_vol if avg_vol > 0 else 1.0
-    score = 50
-    if vol_mult >= th["vol_surge_min"]: score += 20
-    elif vol_mult >= 1.0:               score += 5
     chg_pct = abs((close - prev_close) / prev_close * 100) if prev_close else 0
-    if chg_pct >= 0.5:   score += 10
-    if vol_mult >= 2.0:  score += 10
+    no_vol  = avg_vol == 0 or volume == 0
+    if no_vol:
+        score = 50
+        if chg_pct >= 1.0:   score += 30
+        elif chg_pct >= 0.5: score += 15
+        elif chg_pct >= 0.3: score += 5
+        else:                 score -= 10
+    else:
+        vol_mult = volume / avg_vol
+        score = 50
+        if vol_mult >= th["vol_surge_min"]: score += 20
+        elif vol_mult >= 1.0:               score += 5
+        if chg_pct >= 0.5:   score += 10
+        if vol_mult >= 2.0:  score += 10
     score = max(0, min(100, score))
     return "go" if score >= 70 else "wt" if score >= 45 else "am"
 
