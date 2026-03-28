@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: nse-edge-backend
+    runtime: python
+    region: singapore
+    plan: free
+    branch: Release_28Mar
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && python main.py
+    healthCheckPath: /api/health
+    envVars:
+      - key: KITE_API_KEY
+        sync: false
+      - key: KITE_API_SECRET
+        sync: false
+      - key: KITE_ACCESS_TOKEN
+        sync: false
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 10000
+      - key: PYTHON_VERSION
+        value: 3.11.0
