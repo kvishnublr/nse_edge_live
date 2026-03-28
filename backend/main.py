@@ -603,6 +603,174 @@ async def backtest_dayview(date: str):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@app.get("/api/dayview/stocks")
+async def dayview_stocks(date: str):
+    """
+    Per-stock gate analysis for a specific date.
+    G1/G2 shared from index. G3/G4/G5 computed per stock using Kite historical data.
+    Also attempts to fetch 5-min intraday candles for recent dates (within 60 days).
+    """
+    import statistics as _stat
+    from datetime import date as _date_cls, timedelta as _td, datetime as _dt_cls
+    from config import KITE_TOKENS, FNO_SYMBOLS, LOT_SIZES, GATE as TH
+    from backtest_engine import _g1, _g2, _g3, _g4, _g5, _verdict
+    import backtest_data as bd
+
+    try:
+        sel_date = _dt_cls.strptime(date, "%Y-%m-%d").date()
+        context_from = sel_date - _td(days=35)
+        days_ago = (_date_cls.today() - sel_date).days
+
+        # Get index-level context (G1/G2) from DB
+        bd.init_db()
+        conn = bd.get_conn()
+        vix_r   = conn.execute("SELECT vix, vix_chg FROM vix_daily WHERE date=?", (date,)).fetchone() or (15.0, 0.0)
+        chain_r = conn.execute("SELECT pcr, total_call_oi, total_put_oi FROM chain_daily WHERE date=?", (date,)).fetchone() or (1.0, 500000, 500000)
+        fii_net = (conn.execute("SELECT fii_net FROM fii_daily WHERE date=?", (date,)).fetchone() or (0.0,))[0]
+        conn.close()
+
+        g1_idx = _g1(vix_r[0], vix_r[1], fii_net)
+        g2_idx = _g2(chain_r[0], chain_r[1], chain_r[2])
+
+        # Get kite instance
+        from kiteconnect import KiteConnect
+        from config import KITE_API_KEY, KITE_ACCESS_TOKEN
+        kite = KiteConnect(api_key=KITE_API_KEY)
+        kite.set_access_token(KITE_ACCESS_TOKEN)
+
+        stocks = []
+        skip_syms = {"NIFTY", "BANKNIFTY", "INDIAVIX"}
+
+        for sym in FNO_SYMBOLS:
+            if sym in skip_syms:
+                continue
+            token = KITE_TOKENS.get(sym)
+            if not token:
+                continue
+            try:
+                # Daily candles for context (ATR + avg volume)
+                hist = kite.historical_data(token, context_from, sel_date, "day")
+                if not hist or hist[-1]["date"].strftime("%Y-%m-%d") if hasattr(hist[-1]["date"], "strftime") else str(hist[-1]["date"])[:10] != date:
+                    # Last candle may not be this exact date — find closest
+                    day_data = [d for d in hist if (d["date"].strftime("%Y-%m-%d") if hasattr(d["date"],"strftime") else str(d["date"])[:10]) == date]
+                    if not day_data:
+                        continue
+                    day_d = day_data[0]
+                else:
+                    day_d = hist[-1]
+
+                prior = [d for d in hist if (d["date"].strftime("%Y-%m-%d") if hasattr(d["date"],"strftime") else str(d["date"])[:10]) < date]
+                if len(prior) < 5:
+                    continue
+
+                prices  = [d["close"] for d in prior]
+                trs     = [abs(prices[i]-prices[i-1]) for i in range(1, len(prices))]
+                atr_v   = round(_stat.mean(trs[-14:]), 2) if len(trs) >= 14 else round(_stat.mean(trs), 2)
+                vols    = [d.get("volume",0) for d in prior if d.get("volume",0)>0]
+                avg_vol = _stat.mean(vols) if vols else 1
+                prev_close = prior[-1]["close"]
+
+                day_close  = day_d["close"]
+                day_high   = day_d["high"]
+                day_low    = day_d["low"]
+                day_vol    = day_d.get("volume", 0)
+
+                g3 = _g3(day_close, day_high, day_low)
+                g4 = _g4(day_close, prev_close, day_vol, avg_vol)
+                g5 = _g5(day_close, atr_v, vix_r[0], "intraday")
+                g5p= _g5(day_close, atr_v, vix_r[0], "positional")
+                verdict_i, pc_i = _verdict([g1_idx, g2_idx, g3, g4, g5])
+                verdict_p, pc_p = _verdict([g1_idx, g2_idx, g3, g4, g5p])
+
+                # Entry/exit simulation using next day open if available
+                try:
+                    nxt_hist = kite.historical_data(token, sel_date + _td(days=1), sel_date + _td(days=5), "day")
+                    nxt_d = nxt_hist[0] if nxt_hist else None
+                except Exception:
+                    nxt_d = None
+
+                entry = round(nxt_d["open"], 2) if nxt_d else None
+                trade_i = trade_p = None
+                if entry:
+                    for mode, rr in [("intraday", TH["rr_min_intraday"]), ("positional", TH["rr_min_positional"])]:
+                        stop_dist   = round(atr_v * TH["atr_multiplier"], 2)
+                        target_dist = round(stop_dist * rr, 2)
+                        target = round(entry + target_dist, 2)
+                        stop   = round(entry - stop_dist, 2)
+                        nxt_high = round(nxt_d["high"], 2)
+                        nxt_low  = round(nxt_d["low"],  2)
+                        nxt_close= round(nxt_d["close"], 2)
+                        if nxt_high >= target:
+                            exit_p, outcome = target, "WIN"
+                        elif nxt_low <= stop:
+                            exit_p, outcome = stop, "LOSS"
+                        else:
+                            exit_p  = nxt_close
+                            diff    = nxt_close - entry
+                            thr     = max(10, round(atr_v * 0.3))
+                            outcome = "WIN" if diff >= thr else "LOSS" if diff <= -thr else "NEUTRAL"
+                        pnl = round(exit_p - entry, 2)
+                        t = {"entry": entry, "target": target, "stop": stop,
+                             "exit": exit_p, "pnl": pnl, "outcome": outcome,
+                             "next_date": nxt_d["date"].strftime("%Y-%m-%d") if hasattr(nxt_d["date"],"strftime") else str(nxt_d["date"])[:10]}
+                        if mode == "intraday":  trade_i = t
+                        else:                   trade_p = t
+
+                # 5-min candles if within 60 days
+                candles_5m = []
+                if days_ago <= 59:
+                    try:
+                        c5 = kite.historical_data(token, sel_date, sel_date, "5minute")
+                        candles_5m = [{"t": (d["date"].strftime("%H:%M") if hasattr(d["date"],"strftime") else str(d["date"])[11:16]),
+                                       "o": round(d["open"],2), "h": round(d["high"],2),
+                                       "l": round(d["low"],2),  "c": round(d["close"],2),
+                                       "v": d.get("volume",0)} for d in c5]
+                    except Exception:
+                        pass
+
+                chg_pct = round((day_close - prev_close) / prev_close * 100, 2) if prev_close else 0
+                vol_ratio = round(day_vol / avg_vol, 2) if avg_vol else 0
+
+                stocks.append({
+                    "sym": sym,
+                    "close": round(day_close, 2),
+                    "chg_pct": chg_pct,
+                    "vol_ratio": vol_ratio,
+                    "atr": atr_v,
+                    "lot": LOT_SIZES.get(sym, 1),
+                    "g1": {"state": g1_idx["state"], "score": g1_idx["score"]},
+                    "g2": {"state": g2_idx["state"], "score": g2_idx["score"]},
+                    "g3": {"state": g3["state"],     "score": g3["score"]},
+                    "g4": {"state": g4["state"],     "score": g4["score"]},
+                    "g5": {"state": g5["state"],     "score": g5["score"]},
+                    "verdict_i": verdict_i, "pc_i": pc_i,
+                    "verdict_p": verdict_p, "pc_p": pc_p,
+                    "trade_i": trade_i,
+                    "trade_p": trade_p,
+                    "candles_5m": candles_5m,
+                })
+            except Exception as ex:
+                logger.debug(f"Dayview stock {sym}: {ex}")
+                continue
+
+        # Sort: EXECUTE first, then by pass_count desc
+        order = {"EXECUTE": 0, "WAIT": 1, "NO TRADE": 2}
+        stocks.sort(key=lambda s: (order.get(s["verdict_i"], 3), -s["pc_i"]))
+
+        return JSONResponse({
+            "date": date,
+            "vix": round(vix_r[0], 2), "pcr": round(chain_r[0], 3),
+            "fii_net": round(fii_net, 2),
+            "g1": {"state": g1_idx["state"], "score": g1_idx["score"]},
+            "g2": {"state": g2_idx["state"], "score": g2_idx["score"]},
+            "stocks": stocks,
+            "has_5m": days_ago <= 59,
+        })
+    except Exception as e:
+        logger.error(f"Dayview stocks error: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.post("/api/backtest/download-fii")
 async def backtest_download_fii():
     """Download 3-year FII/DII daily net flow history from NSE."""

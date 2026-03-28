@@ -400,38 +400,29 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   </div>
 </div>
 
-<!-- DAY VIEW OVERLAY — covers entire content when a past date is selected -->
-<div id="day-overlay" style="display:none;position:fixed;top:44px;left:0;right:0;bottom:0;background:var(--s1);z-index:200;overflow-y:auto;padding:0">
-  <div style="background:var(--s3);border-bottom:1px solid var(--b2);padding:8px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10">
-    <span style="font-size:11px;font-weight:800;color:var(--bl);letter-spacing:1px" id="dov-title">DAY VIEW — 2024-01-12</span>
-    <span id="dov-src" style="font-size:8px;color:var(--t2);padding:2px 7px;border:1px solid var(--b1);border-radius:10px"></span>
-    <span style="margin-left:auto;display:flex;gap:6px;align-items:center">
+<!-- DAY VIEW OVERLAY — stock-by-stock analysis for selected date -->
+<div id="day-overlay" style="display:none;position:fixed;top:44px;left:0;right:0;bottom:0;background:var(--s1);z-index:200;overflow-y:auto">
+  <!-- Sticky header -->
+  <div style="background:var(--s3);border-bottom:1px solid var(--b2);padding:8px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;top:0;z-index:10">
+    <span style="font-size:12px;font-weight:900;color:var(--bl);letter-spacing:1px" id="dov-title">DAY VIEW</span>
+    <div style="display:flex;gap:6px;flex-wrap:wrap" id="dov-header-stats"></div>
+    <span style="margin-left:auto">
       <button onclick="tbGoLive()" style="padding:3px 14px;font-family:var(--fn);font-size:9px;font-weight:700;border:1px solid var(--go);color:var(--go);background:transparent;border-radius:3px;cursor:pointer">&#9654; BACK TO LIVE</button>
     </span>
   </div>
-  <div style="padding:12px;display:flex;flex-direction:column;gap:10px">
-    <!-- Stats row -->
-    <div style="display:flex;gap:6px;flex-wrap:wrap" id="dov-stats"></div>
-    <!-- Intraday vs Positional -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="acard" id="dov-intra"></div>
-      <div class="acard" id="dov-pos"></div>
-    </div>
-    <!-- Signal timeline -->
-    <div class="acard" id="dov-timeline" style="display:none">
-      <div class="acardt">LIVE SIGNAL LOG — THAT DAY <span id="dov-timeline-count" style="color:var(--t2);font-weight:400"></span></div>
-      <div style="overflow-x:auto;margin-top:6px">
-        <table class="atbl"><thead><tr>
-          <th>TIME</th><th>VERDICT</th><th>GATES</th><th>NIFTY</th><th>VIX</th><th>PCR</th>
-          <th>G1</th><th>G2</th><th>G3</th><th>G4</th><th>G5</th><th>P&amp;L</th><th>RESULT</th>
-        </tr></thead><tbody id="dov-timeline-body"></tbody></table>
-      </div>
-    </div>
-    <!-- No live data note -->
-    <div class="acard" id="dov-nodata" style="display:none">
-      <div style="color:var(--t2);font-size:9px;padding:8px 0">No live minute-level signals recorded for this date — showing daily simulation only. System was not running live on this day.</div>
-    </div>
+  <!-- Loading state -->
+  <div id="dov-loading" style="padding:40px;text-align:center;color:var(--t2);font-size:11px;letter-spacing:1px">
+    LOADING STOCK DATA... <span style="color:var(--bl)" id="dov-progress"></span>
   </div>
+  <!-- Stock grid -->
+  <div id="dov-grid" style="display:none;padding:12px;display:none;flex-direction:column;gap:8px">
+    <!-- Summary bar -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center" id="dov-summary-bar"></div>
+    <!-- Cards -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:8px" id="dov-cards"></div>
+  </div>
+  <!-- Error -->
+  <div id="dov-error" style="display:none;padding:20px;color:var(--st);font-size:10px"></div>
 </div>
 
 <!-- TOKEN EXPIRY WARNING BANNER -->
@@ -2792,7 +2783,7 @@ async function bt2Optimize() {
 }
 
 // ═══════════════════════════════════════════════
-// TOPBAR DATE VIEW — full-screen overlay
+// TOPBAR DATE VIEW — stock-by-stock full overlay
 // ═══════════════════════════════════════════════
 const _todayStr = () => new Date().toISOString().split('T')[0];
 
@@ -2802,16 +2793,21 @@ function tbDateChange(val) {
   document.getElementById('live-pill').style.opacity = '0.4';
   document.getElementById('day-overlay').style.display = 'block';
   document.getElementById('dov-title').textContent = 'DAY VIEW — ' + val;
-  document.getElementById('dov-stats').innerHTML = '<span style="color:var(--t2);font-size:9px">Loading...</span>';
-  document.getElementById('dov-intra').innerHTML = '';
-  document.getElementById('dov-pos').innerHTML = '';
-  document.getElementById('dov-timeline').style.display = 'none';
-  document.getElementById('dov-nodata').style.display = 'none';
-  fetch(`${API}/api/backtest/dayview?date=${val}`)
+  document.getElementById('dov-loading').style.display = 'block';
+  document.getElementById('dov-grid').style.display = 'none';
+  document.getElementById('dov-error').style.display = 'none';
+  document.getElementById('dov-progress').textContent = 'fetching stock data from Kite...';
+
+  fetch(`${API}/api/dayview/stocks?date=${val}`)
     .then(r=>r.json()).then(d=>{
-      if(d.error){ document.getElementById('dov-stats').innerHTML = `<span style="color:var(--st)">${d.error}</span>`; return; }
-      dovRender(d);
-    }).catch(()=>{ document.getElementById('dov-stats').innerHTML = '<span style="color:var(--st)">Failed to load data</span>'; });
+      document.getElementById('dov-loading').style.display = 'none';
+      if(d.error){ document.getElementById('dov-error').style.display='block'; document.getElementById('dov-error').textContent=d.error; return; }
+      dovRenderStocks(d);
+    }).catch(e=>{
+      document.getElementById('dov-loading').style.display = 'none';
+      document.getElementById('dov-error').style.display = 'block';
+      document.getElementById('dov-error').textContent = 'Failed: ' + e.message;
+    });
 }
 
 function tbGoLive() {
@@ -2821,108 +2817,110 @@ function tbGoLive() {
   document.getElementById('day-overlay').style.display = 'none';
 }
 
-function dovRender(d) {
-  const gc  = s => s==='go'?'var(--go)':s==='st'?'var(--st)':s==='am'?'var(--am)':'var(--t2)';
-  const gl  = s => s==='go'?'GO':s==='st'?'NO':s==='am'?'~':'?';
-  const f   = (v,dp=0) => v!=null ? (+v).toFixed(dp) : '—';
+function dovRenderStocks(d) {
+  const gc = s => s==='go'?'var(--go)':s==='st'?'var(--st)':s==='am'?'var(--am)':'var(--t2)';
+  const gl = s => s==='go'?'GO':s==='st'?'NO':s==='am'?'~':'?';
+  const f  = (v,dp=0) => v!=null ? (+v).toFixed(dp) : '—';
   const vixC = d.vix>=20?'var(--st)':d.vix>=16?'var(--am)':'var(--go)';
   const pcrC = d.pcr>=1.2?'var(--go)':d.pcr<=0.8?'var(--st)':'var(--am)';
   const fiiC = (d.fii_net||0)<0?'var(--st)':'var(--go)';
 
-  // Source badge
-  const hasSrc = d.live_signals && d.live_signals.length > 0;
-  document.getElementById('dov-src').textContent = hasSrc ? `LIVE DATA (${d.live_signals.length} signals)` : 'SIMULATION';
-  document.getElementById('dov-src').style.color = hasSrc ? 'var(--go)' : 'var(--am)';
-
-  // Stats row
-  document.getElementById('dov-stats').innerHTML = `
-    <div class="stc" style="min-width:80px"><div class="stck">DATE</div><div class="stcv cb">${d.date}</div></div>
-    <div class="stc" style="min-width:72px"><div class="stck">OPEN</div><div class="stcv">${f(d.open)}</div></div>
-    <div class="stc" style="min-width:72px"><div class="stck">HIGH</div><div class="stcv cg">${f(d.high)}</div></div>
-    <div class="stc" style="min-width:72px"><div class="stck">LOW</div><div class="stcv cr">${f(d.low)}</div></div>
-    <div class="stc" style="min-width:72px"><div class="stck">CLOSE</div><div class="stcv cb">${f(d.nifty)}</div></div>
-    <div class="stc" style="min-width:72px"><div class="stck">VIX</div><div class="stcv" style="color:${vixC}">${f(d.vix,2)} <span style="font-size:8px">(${d.vix_chg>=0?'+':''}${f(d.vix_chg,1)}%)</span></div></div>
-    <div class="stc" style="min-width:72px"><div class="stck">PCR</div><div class="stcv" style="color:${pcrC}">${f(d.pcr,3)}</div></div>
-    <div class="stc" style="min-width:90px"><div class="stck">FII NET (Cr)</div><div class="stcv" style="color:${fiiC}">${(d.fii_net||0)>=0?'+':''}${f(d.fii_net,0)}</div></div>
-    <div class="stc" style="min-width:60px"><div class="stck">ATR</div><div class="stcv ca">${f(d.atr,1)}</div></div>
+  // Header context
+  document.getElementById('dov-header-stats').innerHTML = `
+    <span style="font-size:9px;padding:2px 8px;border:1px solid ${vixC};border-radius:10px;color:${vixC}">VIX ${f(d.vix,1)}</span>
+    <span style="font-size:9px;padding:2px 8px;border:1px solid ${pcrC};border-radius:10px;color:${pcrC}">PCR ${f(d.pcr,3)}</span>
+    <span style="font-size:9px;padding:2px 8px;border:1px solid ${fiiC};border-radius:10px;color:${fiiC}">FII ${(d.fii_net||0)>=0?'+':''}${f(d.fii_net,0)} Cr</span>
+    <span style="font-size:9px;padding:2px 8px;border:1px solid var(--b1);border-radius:10px;color:var(--t2)">G1 REGIME <b style="color:${gc(d.g1.state)}">${gl(d.g1.state)}</b></span>
+    <span style="font-size:9px;padding:2px 8px;border:1px solid var(--b1);border-radius:10px;color:var(--t2)">G2 SMART MONEY <b style="color:${gc(d.g2.state)}">${gl(d.g2.state)}</b></span>
   `;
 
-  // Gate mode card renderer
-  const gnames = ['G1 REGIME','G2 SMART MONEY','G3 STRUCTURE','G4 TRIGGER','G5 RISK'];
-  function modeCard(m, label) {
-    const vc = m.verdict==='EXECUTE'?'var(--go)':m.verdict==='NO TRADE'?'var(--st)':'var(--am)';
+  const stocks = d.stocks || [];
+  const exec  = stocks.filter(s=>s.verdict_i==='EXECUTE').length;
+  const watch = stocks.filter(s=>s.verdict_i==='WAIT'&&s.pc_i>=4).length;
+
+  document.getElementById('dov-summary-bar').innerHTML = `
+    <span style="font-size:10px;font-weight:700;color:var(--t0)">${stocks.length} stocks analysed</span>
+    <span style="font-size:10px;font-weight:800;color:var(--go)">${exec} EXECUTE</span>
+    <span style="font-size:10px;font-weight:800;color:var(--am)">${watch} WATCH (4/5)</span>
+    ${d.has_5m?'<span style="font-size:8px;color:var(--bl);padding:2px 8px;border:1px solid var(--bl);border-radius:10px">5-MIN CANDLES AVAILABLE</span>':'<span style="font-size:8px;color:var(--t2)">Daily data only (>60 days ago)</span>'}
+  `;
+
+  const gnames = ['G1','G2','G3','G4','G5'];
+  document.getElementById('dov-cards').innerHTML = stocks.map(s => {
+    const vc  = s.verdict_i==='EXECUTE'?'var(--go)':s.pc_i>=4?'var(--am)':s.verdict_i==='NO TRADE'?'var(--t3)':'var(--t2)';
+    const bg  = s.verdict_i==='EXECUTE'?'rgba(0,200,100,0.06)':s.pc_i>=4?'rgba(255,180,0,0.04)':'';
+    const chgC= s.chg_pct>0?'var(--go)':s.chg_pct<0?'var(--st)':'var(--t2)';
+    const volC= s.vol_ratio>=2?'var(--go)':s.vol_ratio>=1.3?'var(--am)':'var(--t2)';
     const gates = ['g1','g2','g3','g4','g5'].map((g,i)=>{
-      const gs = m[g];
-      return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--b0);border-radius:3px;margin-bottom:3px">
-        <span style="width:120px;font-size:9px;color:var(--t2);letter-spacing:.5px;flex-shrink:0">${gnames[i]}</span>
-        <span style="font-size:11px;font-weight:800;color:${gc(gs.state)};width:28px;flex-shrink:0">${gl(gs.state)}</span>
-        <div style="flex:1;background:var(--b2);height:5px;border-radius:2px">
-          <div style="width:${gs.score}%;height:5px;border-radius:2px;background:${gc(gs.state)}"></div>
+      const gs = s[g];
+      return `<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">
+        <span style="width:22px;font-size:8px;color:var(--t2)">${gnames[i]}</span>
+        <span style="font-size:9px;font-weight:800;color:${gc(gs.state)};width:20px">${gl(gs.state)}</span>
+        <div style="flex:1;background:var(--b2);height:3px;border-radius:1px">
+          <div style="width:${gs.score}%;height:3px;background:${gc(gs.state)};border-radius:1px"></div>
         </div>
-        <span style="font-size:10px;font-weight:700;color:${gc(gs.state)};width:30px;text-align:right">${gs.score}</span>
+        <span style="font-size:8px;color:${gc(gs.state)};width:24px;text-align:right">${gs.score}</span>
       </div>`;
     }).join('');
-    const pnlC = (m.pnl||0)>0?'var(--go)':(m.pnl||0)<0?'var(--st)':'var(--t2)';
-    const outC = m.outcome==='WIN'?'var(--go)':m.outcome==='LOSS'?'var(--st)':'var(--t2)';
-    const trade = m.entry ? `
-      <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--b2)">
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px">
-          <div class="stc"><div class="stck">ENTRY (Next Open)</div><div class="stcv cb" style="font-size:14px">${f(m.entry)}</div></div>
-          <div class="stc"><div class="stck">TARGET</div><div class="stcv cg" style="font-size:14px">${f(m.target)}</div></div>
-          <div class="stc"><div class="stck">STOP LOSS</div><div class="stcv cr" style="font-size:14px">${f(m.stop)}</div></div>
-          <div class="stc"><div class="stck">EXIT</div><div class="stcv" style="font-size:14px">${f(m.exit)}</div></div>
-        </div>
-        <div style="display:flex;gap:10px;align-items:center">
-          <div class="stc" style="flex:1"><div class="stck">P&amp;L (pts)</div><div style="font-size:22px;font-weight:900;color:${pnlC}">${(m.pnl||0)>=0?'+':''}${f(m.pnl)}</div></div>
-          <div class="stc" style="flex:1"><div class="stck">RESULT</div><div style="font-size:18px;font-weight:900;color:${outC}">${m.outcome||'—'}</div></div>
-          <div style="font-size:8px;color:var(--t2);text-align:right">Next session:<br>${m.next_date||'—'}</div>
-        </div>
-      </div>` : `<div style="margin-top:8px;font-size:8px;color:var(--t2)">No next-day data — last record</div>`;
 
-    return `
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <div class="acardt" style="color:${vc};font-size:11px;margin:0">${label}</div>
-        <span style="font-size:16px;font-weight:900;color:${vc}">${m.verdict}</span>
-        <span style="font-size:12px;color:var(--t2)">${m.pass_count}/5 gates</span>
+    // Trade block
+    const ti = s.trade_i;
+    const pnlC = ti&&ti.pnl>0?'var(--go)':ti&&ti.pnl<0?'var(--st)':'var(--t2)';
+    const outC = ti&&ti.outcome==='WIN'?'var(--go)':ti&&ti.outcome==='LOSS'?'var(--st)':'var(--t2)';
+    const tradeHtml = ti ? `
+      <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--b2)">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:3px;margin-bottom:5px;text-align:center">
+          <div style="background:var(--b0);padding:3px;border-radius:2px"><div style="font-size:7px;color:var(--t2)">ENTRY</div><div style="font-size:10px;font-weight:700;color:var(--bl)">${f(ti.entry)}</div></div>
+          <div style="background:var(--b0);padding:3px;border-radius:2px"><div style="font-size:7px;color:var(--t2)">TARGET</div><div style="font-size:10px;font-weight:700;color:var(--go)">${f(ti.target)}</div></div>
+          <div style="background:var(--b0);padding:3px;border-radius:2px"><div style="font-size:7px;color:var(--t2)">STOP</div><div style="font-size:10px;font-weight:700;color:var(--st)">${f(ti.stop)}</div></div>
+          <div style="background:var(--b0);padding:3px;border-radius:2px"><div style="font-size:7px;color:var(--t2)">EXIT</div><div style="font-size:10px;font-weight:700">${f(ti.exit)}</div></div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <div style="flex:1;background:var(--b0);padding:4px;border-radius:2px;text-align:center">
+            <div style="font-size:7px;color:var(--t2)">P&L (pts)</div>
+            <div style="font-size:16px;font-weight:900;color:${pnlC}">${ti.pnl>=0?'+':''}${f(ti.pnl)}</div>
+          </div>
+          <div style="flex:1;background:var(--b0);padding:4px;border-radius:2px;text-align:center">
+            <div style="font-size:7px;color:var(--t2)">RESULT</div>
+            <div style="font-size:13px;font-weight:900;color:${outC}">${ti.outcome||'—'}</div>
+          </div>
+          <div style="font-size:7px;color:var(--t2);text-align:right">Lot: ${s.lot}<br>ATR: ${f(s.atr)}</div>
+        </div>
+      </div>` : `<div style="margin-top:6px;font-size:8px;color:var(--t2)">No next-day data</div>`;
+
+    // 5-min candle mini chart
+    const candles = s.candles_5m || [];
+    let chartHtml = '';
+    if(candles.length > 0) {
+      const closes = candles.map(c=>c.c);
+      const mn = Math.min(...closes), mx = Math.max(...closes), rng = mx-mn||1;
+      const bars = candles.map(c=>{
+        const h = Math.round((c.c-mn)/rng*36)+4;
+        const col = c.c>=c.o?'var(--go)':'var(--st)';
+        return `<div style="flex:1;height:${h}px;background:${col};border-radius:1px 1px 0 0;min-width:2px;max-width:6px"></div>`;
+      }).join('');
+      chartHtml = `<div style="margin-top:6px;padding-top:5px;border-top:1px solid var(--b2)">
+        <div style="font-size:7px;color:var(--t2);margin-bottom:3px">5-MIN PRICE ACTION (${candles.length} candles · ${candles[0]?.t||''} – ${candles[candles.length-1]?.t||''})</div>
+        <div style="display:flex;align-items:flex-end;gap:1px;height:44px;background:var(--b0);padding:2px;border-radius:2px">${bars}</div>
+      </div>`;
+    }
+
+    return `<div style="background:var(--s3);border:1px solid ${s.verdict_i==='EXECUTE'?'rgba(0,200,100,0.3)':s.pc_i>=4?'rgba(255,180,0,0.2)':'var(--b1)'};border-radius:4px;padding:10px;${bg?'background:'+bg+';':''}">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+        <span style="font-size:14px;font-weight:900;color:var(--t0);letter-spacing:.5px">${s.sym}</span>
+        <span style="font-size:10px;font-weight:700;color:var(--t1)">${f(s.close)}</span>
+        <span style="font-size:9px;font-weight:700;color:${chgC}">${s.chg_pct>=0?'+':''}${f(s.chg_pct,2)}%</span>
+        <span style="font-size:8px;color:${volC}">Vol ${f(s.vol_ratio,1)}x</span>
+        <span style="margin-left:auto;font-size:10px;font-weight:800;color:${vc}">${s.verdict_i==='EXECUTE'?'EXECUTE':s.pc_i>=4?'WATCH (4/5)':s.pc_i>=3?'WAIT (3/5)':'NO TRADE'}</span>
+        <span style="font-size:9px;color:${vc};border:1px solid ${vc};padding:1px 5px;border-radius:8px">${s.pc_i}/5</span>
       </div>
       ${gates}
-      ${trade}
-    `;
-  }
+      ${tradeHtml}
+      ${chartHtml}
+    </div>`;
+  }).join('');
 
-  document.getElementById('dov-intra').innerHTML = modeCard(d.intraday,  'INTRADAY MODE');
-  document.getElementById('dov-pos').innerHTML   = modeCard(d.positional, 'POSITIONAL MODE');
-
-  // Live signal timeline
-  const sigs = d.live_signals || [];
-  if(sigs.length > 0) {
-    document.getElementById('dov-timeline').style.display = 'block';
-    document.getElementById('dov-timeline-count').textContent = `(${sigs.length} events)`;
-    const stMap = {go:'cg',am:'ca',st:'cr',wt:'cb'};
-    const stLbl = {go:'GO',am:'~',st:'NO',wt:'?'};
-    document.getElementById('dov-timeline-body').innerHTML = sigs.map(s=>{
-      const vc = s.verdict==='EXECUTE'?'var(--go)':s.verdict==='NO TRADE'?'var(--t3)':'var(--am)';
-      const gs5 = ['g1','g2','g3','g4','g5'].map(g=>
-        `<span class="${stMap[s[g]]||''}" style="font-size:9px;font-weight:700">${stLbl[s[g]]||'?'}</span>`
-      ).join(' ');
-      const oc = s.outcome==='WIN'?'var(--go)':s.outcome==='LOSS'?'var(--st)':'var(--t2)';
-      const pts = s.outcome_pts!=null ? `<span style="color:${oc};font-weight:600">${s.outcome_pts>0?'+':''}${(+s.outcome_pts).toFixed(1)}</span>` : '—';
-      const rowBg = s.verdict==='EXECUTE'?'background:rgba(0,200,100,0.07)':'';
-      return `<tr style="${rowBg}">
-        <td style="font-weight:600;color:var(--bl)">${s.time}</td>
-        <td style="color:${vc};font-weight:700">${s.verdict}</td>
-        <td style="color:${vc}">${s.pass_count}/5</td>
-        <td>${s.nifty!=null?(+s.nifty).toFixed(0):'—'}</td>
-        <td style="color:${(s.vix||0)>=20?'var(--st)':(s.vix||0)>=16?'var(--am)':'var(--go)'}">${s.vix!=null?(+s.vix).toFixed(1):'—'}</td>
-        <td style="color:${(s.pcr||0)>=1.2?'var(--go)':(s.pcr||0)<=0.8?'var(--st)':'var(--am)'}">${s.pcr!=null?(+s.pcr).toFixed(2):'—'}</td>
-        <td>${gs5}</td>
-        <td>${pts}</td>
-        <td style="color:${oc};font-weight:600">${s.outcome||'—'}</td>
-      </tr>`;
-    }).join('');
-  } else {
-    document.getElementById('dov-nodata').style.display = 'block';
-  }
+  document.getElementById('dov-grid').style.display = 'flex';
 }
 
 // ═══════════════════════════════════════════════
