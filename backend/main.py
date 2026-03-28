@@ -793,7 +793,7 @@ async def dayview_full(date: str):
                         "score":    score,
                         "pc":       pc_s,
                         "verdict":  "EXECUTE" if pc_s==5 else "WATCH" if pc_s==4 else "WAIT",
-                        "conf":     "CONFIRMED" if pc_s==5 else "50:50",
+                        "conf":     "CONFIRMED" if pc_s==5 else "HIGH CONF" if pc_s==4 else "50:50",
                         "signal_time": _ist.strftime("%H:%M"),
                         "close":    dc,
                         "chg_pct":  dp,

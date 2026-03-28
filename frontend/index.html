@@ -1463,7 +1463,7 @@ const MODES={
     picks:[
       {sym:'INDUSINDBK',cls:'rpk-go',score:'88 ★',meta:'Banking · OI +19.8% · PCR 1.63 · Vol 2.6×',reason:'R:R 1:2.6 · 5/5 gates · LONG BUILDUP',rc:'cg',tab:'stocks',entry:'1,315',sl:'1,289',target:'1,383',rr:'2.6',conf:'CONFIRMED',time:'10:12'},
       {sym:'ICICIBANK',cls:'rpk-go',score:'88 ★',meta:'Banking · OI +18.2% · PCR 1.62 · Vol 2.8×',reason:'R:R 1:2.4 · 5/5 gates · FII buying confirmed',rc:'cg',tab:'stocks',entry:'1,221',sl:'1,196',target:'1,281',rr:'2.4',conf:'CONFIRMED',time:'10:18'},
-      {sym:'SBIN',cls:'rpk-go',score:'83 ★',meta:'PSU Bank · OI +16.4% · PCR 1.50 · Vol 2.4×',reason:'R:R 1:2.3 · 4/5 gates · sector tailwind',rc:'ca',tab:'stocks',entry:'822',sl:'800',target:'873',rr:'2.3',conf:'50:50',time:'10:34'},
+      {sym:'SBIN',cls:'rpk-go',score:'83 ★',meta:'PSU Bank · OI +16.4% · PCR 1.50 · Vol 2.4×',reason:'R:R 1:2.3 · 4/5 gates · sector tailwind',rc:'ca',tab:'stocks',entry:'822',sl:'800',target:'873',rr:'2.3',conf:'HIGH CONF',time:'10:34'},
     ],
     avoid:'RELIANCE · TATASTEEL · INFY — short OI buildup',
     kz:[
@@ -1517,7 +1517,7 @@ const MODES={
     picks:[
       {sym:'ICICIBANK',cls:'rpk-go',score:'91',meta:'Pullback · Banking · Hold 4–6d · Results catalyst',reason:'R:R 1:2.8 · 5/5 gates · strong institutional flow',rc:'cg',tab:'swing',entry:'1,220',sl:'1,185',target:'1,338',rr:'2.8',conf:'CONFIRMED',time:'09:45'},
       {sym:'SBIN',cls:'rpk-go',score:'87',meta:'Breakout · PSU Bank · Hold 5–8d · Budget allocation',reason:'R:R 1:2.5 · 4/5 gates · delivery % rising',rc:'cg',tab:'swing',entry:'820',sl:'798',target:'875',rr:'2.5',conf:'CONFIRMED',time:'10:05'},
-      {sym:'LT',cls:'rpk-am',score:'83',meta:'Momentum · Infra · Hold 6–10d · Capex cycle',reason:'R:R 1:2.1 · 4/5 gates · watch G5 R:R',rc:'ca',tab:'swing',entry:'3,620',sl:'3,548',target:'3,772',rr:'2.1',conf:'50:50',time:'10:22'},
+      {sym:'LT',cls:'rpk-am',score:'83',meta:'Momentum · Infra · Hold 6–10d · Capex cycle',reason:'R:R 1:2.1 · 4/5 gates · watch G5 R:R',rc:'ca',tab:'swing',entry:'3,620',sl:'3,548',target:'3,772',rr:'2.1',conf:'HIGH CONF',time:'10:22'},
     ],
     avoid:'RELIANCE · TATASTEEL · FMCG — weak relative strength',
     kz:[
@@ -1541,10 +1541,11 @@ function renderHistPicksHtml(picks, mode) {
   rpp.innerHTML = list.map(p => {
     const vc  = p.verdict==='EXECUTE' ? 'var(--go)' : p.verdict==='WATCH' ? 'var(--am)' : 'var(--t2)';
     const bdc = p.verdict==='EXECUTE' ? 'bg' : p.verdict==='WATCH' ? 'ba' : 'bm';
-    const isConf = p.conf==='CONFIRMED';
-    const confStyle = isConf
+    const confStyle = p.conf==='CONFIRMED'
       ? 'color:var(--go);border:1px solid rgba(0,232,122,.35);background:rgba(0,232,122,.10)'
-      : 'color:var(--am);border:1px solid rgba(255,183,0,.35);background:rgba(255,183,0,.10)';
+      : p.conf==='HIGH CONF'
+        ? 'color:var(--bl);border:1px solid rgba(56,190,255,.35);background:rgba(56,190,255,.10)'
+        : 'color:var(--am);border:1px solid rgba(255,183,0,.35);background:rgba(255,183,0,.10)';
     const levelsHtml = (p.entry && p.sl && p.target)
       ? `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px;margin:5px 0 3px">
           <div style="background:rgba(255,255,255,.04);border-radius:2px;padding:3px 4px;text-align:center">
@@ -1647,10 +1648,11 @@ function setMode(m){
     const avoid=d.avoid;
     document.getElementById('rp-picks').innerHTML=
       picks.map(p=>{
-        const isConf=p.conf==='CONFIRMED';
-        const confStyle=isConf
+        const confStyle=p.conf==='CONFIRMED'
           ?'color:var(--go);border:1px solid rgba(0,232,122,.35);background:rgba(0,232,122,.10)'
-          :'color:var(--am);border:1px solid rgba(255,183,0,.35);background:rgba(255,183,0,.10)';
+          :p.conf==='HIGH CONF'
+            ?'color:var(--bl);border:1px solid rgba(56,190,255,.35);background:rgba(56,190,255,.10)'
+            :'color:var(--am);border:1px solid rgba(255,183,0,.35);background:rgba(255,183,0,.10)';
         const levelsHtml=p.entry
           ?'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px;margin:5px 0 3px">'+
             '<div style="background:rgba(255,255,255,.04);border-radius:2px;padding:3px 4px;text-align:center">'+
