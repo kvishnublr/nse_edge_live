@@ -14,9 +14,67 @@
   --st:#ff3355;--st-d:rgba(255,51,85,.11);--st-b:rgba(255,51,85,.26);
   --am:#ffaa00;--am-d:rgba(255,170,0,.11);--am-b:rgba(255,170,0,.26);
   --bl:#38beff;--bl-d:rgba(56,190,255,.10);--bl-b:rgba(56,190,255,.24);
-  --t0:#d8e8f8;--t1:#7a9ab8;--t2:#3d5c78;
+  --t0:#d8e8f8;--t1:#7a9ab8;--t2:#3d5c78;--t3:#253856;
   --fn:'IBM Plex Mono',monospace;--fh:'Syne',sans-serif;
 }
+/* ── LIGHT MODE ─────────────────────────────────────────────── */
+:root.light{
+  --bg:#f2f5fb;--s1:#eaeef7;--s2:#e1e7f2;--s3:#d7dded;--s4:#ccd4e8;
+  --b1:#bfcce0;--b2:#aebdd4;
+  --go:#006e3a;--go-d:rgba(0,110,58,.09);--go-b:rgba(0,110,58,.28);
+  --st:#c40f2e;--st-d:rgba(196,15,46,.08);--st-b:rgba(196,15,46,.28);
+  --am:#a85200;--am-d:rgba(168,82,0,.08);--am-b:rgba(168,82,0,.28);
+  --bl:#0061a8;--bl-d:rgba(0,97,168,.08);--bl-b:rgba(0,97,168,.28);
+  --t0:#0b1c30;--t1:#2b4d6e;--t2:#527899;--t3:#8aabca;
+}
+/* smooth transition between modes */
+html,body,#tb,.pn,#center,.tp,.gate,.rpk,.je,.stc,.msc,.acard,.mi,
+.lvl,.zcard,.oip,.sr-card,.atbl td,.xtbl td{
+  transition:background .22s,border-color .22s,color .18s;
+}
+/* ── LIGHT: hardcoded rgba overrides ────────────────────────── */
+.light .kzd{background:rgba(168,82,0,.10)!important}
+.light .kzt{background:rgba(0,110,58,.10)!important}
+.light .kze{background:rgba(196,15,46,.10)!important}
+.light .kzr{background:rgba(100,130,170,.12)!important;color:var(--t2)}
+.light .stbl tr.top td{background:rgba(0,110,58,.06)!important}
+.light .atbl tr.sbuy td{background:rgba(0,110,58,.05)!important}
+.light .atbl tr.ssell td{background:rgba(196,15,46,.05)!important}
+.light .atbl tr.soi td{background:rgba(168,82,0,.05)!important}
+.light .oct tr.atm td{background:rgba(168,82,0,.07)!important}
+.light .oct td{border-bottom-color:rgba(0,0,0,.07)}
+.light .xtbl td{border-bottom-color:rgba(0,0,0,.07)}
+.light .atbl td{border-bottom-color:rgba(0,0,0,.07)}
+.light .gm{border-bottom-color:rgba(0,0,0,.07)}
+.light .gr{border-bottom-color:rgba(0,0,0,.07)}
+.light .ttcr{border-bottom-color:rgba(0,0,0,.07)}
+.light .ci{border-bottom-color:var(--b1)}
+.light .jnote{border-top-color:var(--b1)}
+.light #hist-banner{background:rgba(0,97,168,.07);border-bottom-color:rgba(0,97,168,.25)}
+.light #hist-banner .hb-dot,.light #hist-banner .hb-lbl{color:var(--bl)}
+.light #hist-banner .hb-date{color:var(--t0)}
+.light #hist-banner .hb-note{color:var(--t2)}
+.light .sr-sig-dot.on{background:rgba(0,110,58,.12);border-color:rgba(0,110,58,.28)}
+.light .sr-sig-dot.off{background:rgba(0,0,0,.05);border-color:var(--b1);color:var(--t2)}
+.light #notif{background:var(--s1);border-color:var(--go-b);color:var(--go)}
+.light .oip{background:var(--s1);border-color:var(--b1)}
+.light ::-webkit-scrollbar-thumb{background:var(--b2)}
+.light input[type=date]{color-scheme:light}
+.light .jfi,.light .jfs,.light .jfta{color:var(--t0)}
+.light .jfs option{background:var(--s2);color:var(--t0)}
+.light .vgo{border-color:var(--go-b)!important;background:var(--go-d)!important}
+.light .vst{border-color:var(--st-b)!important;background:var(--st-d)!important}
+.light .vam{border-color:var(--am-b)!important;background:var(--am-d)!important}
+.light .tktrack .tki{color:var(--t1)}
+.light .tki em{color:var(--go)}
+.light .tki.w em{color:var(--st)}
+.light .ldot{animation:pulse-l 1.5s ease-in-out infinite}
+@keyframes pulse-l{0%,100%{box-shadow:0 0 0 0 rgba(0,110,58,.5)}60%{box-shadow:0 0 0 5px rgba(0,110,58,0)}}
+/* toggle button */
+.theme-tog{width:30px;height:17px;border-radius:9px;border:1px solid var(--b1);background:var(--s3);cursor:pointer;position:relative;flex-shrink:0;transition:all .2s}
+.theme-tog::after{content:'';position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;background:var(--t1);transition:all .2s}
+.light .theme-tog{background:var(--bl-d);border-color:var(--bl-b)}
+.light .theme-tog::after{left:15px;background:var(--bl)}
 html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:var(--fn);font-size:11px;color:var(--t0);display:flex;flex-direction:column}
 ::-webkit-scrollbar{width:3px;height:3px}
 ::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px}
@@ -434,6 +492,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       <button class="mb on" id="bi" onclick="setMode('intraday')">INTRADAY</button>
       <button class="mb" id="bp" onclick="setMode('positional')">POSITIONAL</button>
     </div>
+    <button class="theme-tog" id="theme-tog" onclick="toggleTheme()" title="Toggle light/dark mode"></button>
   </div>
 </div>
 
@@ -2292,10 +2351,8 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
 // LIVE DATA — WEBSOCKET CLIENT
 // ═══════════════════════════════════════════════
 (function startLiveData(){
-  const _backendBase = (window.location.hostname === 'kvishnublr.github.io' || window.location.hostname.endsWith('.railway.app'))
-    ? (window.NSE_EDGE_BACKEND || 'https://nse-edge-backend.up.railway.app')
-    : 'http://localhost:8000';
-  const WS_URL = _backendBase.replace(/^http/, 'ws') + '/ws';
+  const _backendBase = 'http://localhost:8000';
+  const WS_URL = 'ws://localhost:8000/ws';
 
   let ws = null;
   let reconnectDelay = 2000;
@@ -2549,7 +2606,7 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
             const tEl = mi.querySelector('.mit');
             if(vEl) vEl.textContent = d.vix.toFixed(1);
             if(vEl) vEl.className = 'miv ' + (d.vix < 13 ? 'cg' : d.vix < 17 ? 'ca' : 'cr');
-            if(cEl) cEl.textContent = (d.vix_chg >= 0 ? '+' : '') + d.vix_chg.toFixed(1) + '%';
+            if(cEl && d.vix_chg != null) cEl.textContent = (d.vix_chg >= 0 ? '+' : '') + d.vix_chg.toFixed(1) + '%';
             if(tEl) tEl.textContent = d.vix < 13 ? 'LOW → sell favored' : d.vix < 17 ? 'Moderate' : 'ELEVATED';
           }
           if(key === 'FII CASH' && d.fii_net !== undefined){
@@ -2714,9 +2771,7 @@ function updateConfidence(score) {
 // ═══════════════════════════════════════════════
 // BACKTEST PANEL
 // ═══════════════════════════════════════════════
-const API = (window.location.hostname === 'kvishnublr.github.io' || window.location.hostname.endsWith('.railway.app'))
-  ? (window.NSE_EDGE_BACKEND || 'https://nse-edge-backend.up.railway.app')
-  : 'http://localhost:8000';
+const API = 'http://localhost:8000';
 
 (function bt2Init(){
   const to   = new Date();
@@ -3334,6 +3389,20 @@ async function tbDateChange(val) {
 
     notify('Historical data loaded: ' + val);
   } catch(e) {
+    console.error('tbDateChange error:', e);
+    // Reset hist mode so UI doesn't freeze
+    window._histMode = false;
+    document.getElementById('tb-live-btn').style.display = 'none';
+    document.getElementById('live-pill').style.opacity = '1';
+    const banner2 = document.getElementById('hist-banner');
+    if(banner2) {
+      document.getElementById('hist-banner-date').textContent = 'ERROR — ' + e.message;
+      banner2.style.background = 'rgba(255,51,85,.18)';
+      setTimeout(() => {
+        banner2.style.display = 'none';
+        banner2.style.background = '';
+      }, 5000);
+    }
     notify('Day view failed: ' + e.message);
   }
 }
@@ -3579,6 +3648,12 @@ function srRender() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+
+function toggleTheme() {
+  const isLight = document.documentElement.classList.toggle('light');
+  localStorage.setItem('nse-theme', isLight ? 'light' : 'dark');
+}
+if(localStorage.getItem('nse-theme') === 'light') document.documentElement.classList.add('light');
 
 function tbGoLive() {
   window._histMode = false;
