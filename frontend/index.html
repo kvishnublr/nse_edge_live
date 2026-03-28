@@ -1617,8 +1617,16 @@ function setMode(m){
     const hdDate = window._histDate || '';
     if(rpHd2) rpHd2.textContent = (m==='intraday'?'HIST INTRADAY':'HIST POSITIONAL') + (hdDate?' — '+hdDate:'');
     if(rpBdg2) { rpBdg2.textContent='HIST'; rpBdg2.className='bd bm'; }
-    if(window._histData && window._histData.stock_picks) {
-      renderHistPicksHtml(window._histData.stock_picks, m);
+    const rpp2 = document.getElementById('rp-picks');
+    const picks2 = window._histData && window._histData.stock_picks;
+    if(picks2 && picks2.length) {
+      renderHistPicksHtml(picks2, m);
+    } else if(rpp2) {
+      const pc = window._histData && window._histData.gates ? window._histData.gates.pass_count : 0;
+      rpp2.innerHTML = `<div style="padding:14px 10px;text-align:center;color:var(--t2);font-size:9px;line-height:1.6">
+        No qualifying picks for ${window._histDate||'this date'}<br>
+        <span style="color:var(--am)">${pc}/5 gates pass — signal too weak for entries</span>
+      </div>`;
     }
   } else {
     document.getElementById('rp-hd').textContent=m==='intraday'?'INTRADAY PICKS':'POSITIONAL PICKS';
