@@ -341,6 +341,35 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .btcor{font-size:8px;font-weight:700;padding:1px 6px;border-radius:2px}
 .bty{background:var(--go-d);color:var(--go);border:1px solid var(--go-b)}.btn2{background:var(--st-d);color:var(--st);border:1px solid var(--st-b)}
 
+/* SPIKE SCANNER TAB */
+.sr-statsbar{display:flex;gap:6px;flex-wrap:wrap;padding:7px 10px;background:var(--s2);border-bottom:1px solid var(--b1);flex-shrink:0}
+.sr-stat{display:flex;flex-direction:column;align-items:center;min-width:60px}
+.sr-stat-val{font-size:14px;font-weight:700}
+.sr-stat-lbl{font-size:7.5px;color:var(--t2);letter-spacing:.5px;margin-top:1px}
+.sr-card{background:var(--s2);border:1px solid var(--b1);border-radius:3px;padding:8px 10px;margin-bottom:6px;transition:border-color .15s}
+.sr-card.sr-buy{border-left:3px solid var(--go)}
+.sr-card.sr-sell{border-left:3px solid var(--st)}
+.sr-card.sr-oi{border-left:3px solid var(--am)}
+.sr-card.sr-resolved{opacity:.55}
+.sr-score{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;font-size:11px;font-weight:800;flex-shrink:0}
+.sr-score.s-hi{background:var(--go);color:#000}
+.sr-score.s-md{background:var(--am-d);color:var(--am);border:1px solid var(--am-b)}
+.sr-score.s-lo{background:var(--s3);color:var(--t2);border:1px solid var(--b1)}
+.sr-sig-dot{display:inline-flex;align-items:center;gap:3px;font-size:7.5px;padding:1px 5px;border-radius:2px;font-weight:600}
+.sr-sig-dot.on{background:rgba(0,232,122,.12);color:var(--go);border:1px solid rgba(0,232,122,.25)}
+.sr-sig-dot.off{background:var(--s3);color:var(--t3);border:1px solid var(--b1)}
+.sr-lvl{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:3px;margin:5px 0 4px}
+.sr-lvl-box{border-radius:2px;padding:3px 5px;text-align:center}
+.sr-lvl-k{font-size:7px;color:var(--t2);letter-spacing:.4px}
+.sr-lvl-v{font-size:10px;font-weight:700}
+.sr-status{display:inline-flex;align-items:center;font-size:8px;font-weight:700;padding:2px 7px;border-radius:2px;letter-spacing:.5px}
+.sr-st-live{background:rgba(0,140,255,.12);color:var(--bl);border:1px solid rgba(0,140,255,.3)}
+.sr-st-t1{background:rgba(0,232,122,.1);color:var(--go);border:1px solid rgba(0,232,122,.3)}
+.sr-st-t2{background:rgba(0,232,122,.2);color:var(--go);border:1px solid var(--go)}
+.sr-st-sl{background:rgba(255,51,85,.1);color:var(--st);border:1px solid rgba(255,51,85,.3)}
+.sr-st-exp{background:var(--s3);color:var(--t2);border:1px solid var(--b1)}
+.sr-legend{display:flex;gap:5px;flex-wrap:wrap;padding:5px 10px;border-bottom:1px solid var(--b1);flex-shrink:0}
+
 /* BACKTEST CONTROLS */
 .btctrl{background:var(--s2);border-bottom:1px solid var(--b1);padding:8px 10px;flex-shrink:0}
 .btrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -549,6 +578,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <div class="tab" onclick="sw('chain',this)">OPTION CHAIN</div>
     <div class="tab" onclick="sw('stocks',this)">STOCK OI</div>
     <div class="tab" onclick="sw('swing',this)">SWING RADAR</div>
+    <div class="tab" onclick="sw('spikescanner',this)" style="color:var(--go)" id="sr-tab">SPIKE RADAR ⚡</div>
     <div class="tab" onclick="sw('journal',this)">JOURNAL</div>
     <div class="tab" onclick="sw('stats',this)">STATS</div>
     <div class="tab analytics-tab" onclick="sw('analytics',this)">EDGE ANALYTICS</div>
@@ -701,6 +731,57 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     </table>
     </div>
   </div>
+
+  <!-- TAB: SPIKE RADAR -->
+  <div class="tp" id="tp-spikescanner" style="padding:0;gap:0;overflow-y:hidden">
+
+    <!-- Stats bar -->
+    <div class="sr-statsbar">
+      <div class="sr-stat"><span class="sr-stat-val" id="sr-cnt-total" style="color:var(--t0)">0</span><span class="sr-stat-lbl">DETECTED</span></div>
+      <div style="width:1px;background:var(--b1);margin:2px 4px"></div>
+      <div class="sr-stat"><span class="sr-stat-val" id="sr-cnt-live" style="color:var(--bl)">0</span><span class="sr-stat-lbl">LIVE</span></div>
+      <div class="sr-stat"><span class="sr-stat-val" id="sr-cnt-t1" style="color:var(--go)">0</span><span class="sr-stat-lbl">HIT T1</span></div>
+      <div class="sr-stat"><span class="sr-stat-val" id="sr-cnt-t2" style="color:var(--go)">0</span><span class="sr-stat-lbl">HIT T2</span></div>
+      <div class="sr-stat"><span class="sr-stat-val" id="sr-cnt-sl" style="color:var(--st)">0</span><span class="sr-stat-lbl">STOPPED</span></div>
+      <div class="sr-stat"><span class="sr-stat-val" id="sr-cnt-exp" style="color:var(--t2)">0</span><span class="sr-stat-lbl">EXPIRED</span></div>
+      <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;justify-content:center">
+        <span style="font-size:7.5px;color:var(--t2)">T1 = +0.3% · T2 = +0.6% · SL = −0.25%</span>
+        <span style="font-size:7.5px;color:var(--t2);margin-top:1px">Expires 30 min after signal · Intraday only</span>
+      </div>
+    </div>
+
+    <!-- Filters + legend -->
+    <div style="display:flex;gap:0;align-items:center;padding:5px 8px;border-bottom:1px solid var(--b1);flex-shrink:0;flex-wrap:wrap;gap:6px">
+      <div class="sfbar" style="margin-bottom:0">
+        <button class="sf on" onclick="srFilter('all',this)">ALL</button>
+        <button class="sf" onclick="srFilter('buy',this)">▲ BUY SPIKE</button>
+        <button class="sf" onclick="srFilter('sell',this)">▼ SELL SPIKE</button>
+        <button class="sf" onclick="srFilter('live',this)">● LIVE</button>
+        <button class="sf" onclick="srFilter('hit',this)">✓ HIT TARGET</button>
+        <button class="sf" onclick="srFilter('resolved',this)">RESOLVED</button>
+      </div>
+      <div class="sr-legend" style="padding:0;border:none">
+        <span class="sr-sig-dot on">PRICE</span>
+        <span class="sr-sig-dot on">VOL</span>
+        <span class="sr-sig-dot on">OI</span>
+        <span class="sr-sig-dot on">STRENGTH</span>
+        <span class="sr-sig-dot on">VWAP</span>
+        <span class="sr-sig-dot on">BUY FLOW</span>
+        <span style="font-size:7.5px;color:var(--t2);margin-left:4px;align-self:center">← signals fired</span>
+      </div>
+    </div>
+
+    <!-- Cards list -->
+    <div style="overflow-y:auto;flex:1;min-height:0;padding:8px 8px 0" id="sr-list">
+      <div style="text-align:center;padding:40px 16px;color:var(--t2);font-size:9px;line-height:1.8" id="sr-empty">
+        <div style="font-size:22px;margin-bottom:8px;opacity:.3">⚡</div>
+        Waiting for spike signals...<br>
+        <span style="color:var(--t3)">Signals fire when Price ≥1.5% + Vol ≥2.5× avg · or OI spike ≥12%</span>
+      </div>
+    </div>
+
+  </div>
+  <!-- /tp-spikescanner -->
 
   <!-- TAB: JOURNAL -->
   <div class="tp" id="tp-journal">
@@ -2330,6 +2411,8 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
             chgEl.style.color = up ? 'var(--go)' : 'var(--st)';
           }
         }
+        // Feed prices into Spike Radar for target tracking
+        if(typeof srUpdatePrices === 'function') srUpdatePrices(d);
         break;
       }
 
@@ -2356,6 +2439,14 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
           }
         }
         applyGates();
+        // Capture VWAP direction for Spike Radar scoring
+        try {
+          const g1 = d.gates && (d.gates[1] || d.gates['1']);
+          if(g1 && g1.rows) {
+            const vr = g1.rows.find(r => r.k && r.k.toLowerCase().includes('vwap'));
+            if(vr) window._lastVwapAbove = vr.v && vr.v.includes('ABOVE');
+          }
+        } catch(e){}
         // Override verdict with server data
         const vd = document.getElementById('vd');
         const vw = document.getElementById('vword');
@@ -2544,6 +2635,8 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
           hiEl.textContent = hi + ' high strength';
           hiEl.style.color = hi > 0 ? 'var(--go)' : 'var(--t2)';
         }
+        // Feed into Spike Radar tracker
+        if(typeof srIngestSpikes === 'function') srIngestSpikes(d);
         break;
       }
 
@@ -3244,6 +3337,248 @@ async function tbDateChange(val) {
     notify('Day view failed: ' + e.message);
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// SPIKE RADAR — entry/exit tracker (frontend-only, no backend change)
+// ═══════════════════════════════════════════════════════════════════
+window._spikeLog   = [];   // all spikes seen today
+window._srFilter   = 'all';
+window._srPrevKeys = new Set(); // deduplicate re-broadcasts
+
+function _srScore(sp) {
+  let s = 0;
+  // Signal 1 — strength (absorption proxy): +3 hi, +1 md
+  if(sp.strength === 'hi') s += 3;
+  else if(sp.strength === 'md') s += 1;
+  // Signal 2 — volume acceleration: +2 if >=8x, +1 if >=5x
+  const vm = sp.vol_mult || 0;
+  if(vm >= 8) s += 2; else if(vm >= 5) s += 1;
+  // Signal 3 — price spike: +2 if >=2%, +1 if >=1.5%
+  const cp = Math.abs(sp.chg_pct || 0);
+  if(cp >= 2) s += 2; else if(cp >= 1.5) s += 1;
+  // Signal 4 — OI buildup: +2 if >=20%, +1 if >=12%
+  const oi = Math.abs(sp.oi_pct || 0);
+  if(oi >= 20) s += 2; else if(oi >= 12) s += 1;
+  // Signal 5 — VWAP alignment (from signals state if available)
+  if(typeof window._lastVwapAbove !== 'undefined') {
+    if(sp.type === 'buy' && window._lastVwapAbove) s += 1;
+    if(sp.type === 'sell' && !window._lastVwapAbove) s += 1;
+  }
+  // Signal 6 — buy flow (type buy = aggressive buyers confirmed)
+  if(sp.type === 'buy' || sp.type === 'sell') s += 1;
+  return Math.min(s, 10);
+}
+
+function _srSigFlags(sp) {
+  const vm = sp.vol_mult || 0;
+  const cp = Math.abs(sp.chg_pct || 0);
+  const oi = Math.abs(sp.oi_pct || 0);
+  return {
+    price:    cp >= 1.5,
+    vol:      vm >= 2.5,
+    oi:       oi >= 12,
+    strength: sp.strength === 'hi' || sp.strength === 'md',
+    vwap:     typeof window._lastVwapAbove !== 'undefined'
+                ? (sp.type==='buy' ? window._lastVwapAbove : !window._lastVwapAbove)
+                : false,
+    flow:     sp.type === 'buy' || sp.type === 'sell',
+  };
+}
+
+function _srEntry(sp) {
+  const p = sp.price || 0;
+  if(!p) return null;
+  const isBuy = sp.type !== 'sell';
+  const entry = isBuy ? +(p * 1.0005).toFixed(2) : +(p * 0.9995).toFixed(2);
+  const sl    = isBuy ? +(entry * 0.9975).toFixed(2) : +(entry * 1.0025).toFixed(2);
+  const t1    = isBuy ? +(entry * 1.003).toFixed(2)  : +(entry * 0.997).toFixed(2);
+  const t2    = isBuy ? +(entry * 1.006).toFixed(2)  : +(entry * 0.994).toFixed(2);
+  return {entry, sl, t1, t2, isBuy};
+}
+
+function srIngestSpikes(arr) {
+  if(!arr || !arr.length) return;
+  let changed = false;
+  arr.forEach(sp => {
+    const key = sp.symbol + '|' + sp.time + '|' + sp.type;
+    if(window._srPrevKeys.has(key)) return;
+    window._srPrevKeys.add(key);
+    const score  = _srScore(sp);
+    if(score < 3) return; // skip very weak signals
+    const levels = _srEntry(sp);
+    if(!levels) return;
+    window._spikeLog.unshift({
+      id:       key,
+      symbol:   sp.symbol,
+      time:     sp.time,
+      type:     sp.type,
+      chg_pct:  sp.chg_pct,
+      vol_mult: sp.vol_mult,
+      oi_pct:   sp.oi_pct,
+      trigger:  sp.trigger,
+      signal:   sp.signal,
+      strength: sp.strength,
+      score:    score,
+      sigs:     _srSigFlags(sp),
+      ...levels,
+      status:   'LIVE',        // LIVE → HIT_T1 → HIT_T2 / HIT_SL / EXPIRED
+      detectedAt: Date.now(),
+    });
+    changed = true;
+    // Flash tab badge
+    const tab = document.getElementById('sr-tab');
+    if(tab) { tab.style.background='rgba(0,232,122,.15)'; setTimeout(()=>{tab.style.background=''},2000); }
+  });
+  // Keep max 50 entries
+  if(window._spikeLog.length > 50) window._spikeLog.length = 50;
+  if(changed) srRender();
+}
+
+function srUpdatePrices(prices) {
+  if(!prices || !window._spikeLog.length) return;
+  const now = Date.now();
+  let changed = false;
+  window._spikeLog.forEach(sp => {
+    if(sp.status === 'HIT_T2' || sp.status === 'HIT_SL' || sp.status === 'EXPIRED') return;
+    // Expire after 30 min
+    if(now - sp.detectedAt > 30 * 60 * 1000) { sp.status = 'EXPIRED'; changed = true; return; }
+    const priceObj = prices[sp.symbol];
+    if(!priceObj) return;
+    const cur = priceObj.price;
+    if(sp.isBuy) {
+      if(cur <= sp.sl)              { sp.status = 'HIT_SL'; changed = true; }
+      else if(cur >= sp.t2)         { sp.status = 'HIT_T2'; changed = true; }
+      else if(cur >= sp.t1 && sp.status === 'LIVE') { sp.status = 'HIT_T1'; changed = true; }
+    } else {
+      if(cur >= sp.sl)              { sp.status = 'HIT_SL'; changed = true; }
+      else if(cur <= sp.t2)         { sp.status = 'HIT_T2'; changed = true; }
+      else if(cur <= sp.t1 && sp.status === 'LIVE') { sp.status = 'HIT_T1'; changed = true; }
+    }
+  });
+  if(changed) srRender();
+}
+
+function srFilter(f, btn) {
+  window._srFilter = f;
+  document.querySelectorAll('#tp-spikescanner .sfbar .sf').forEach(b => b.classList.remove('on'));
+  if(btn) btn.classList.add('on');
+  srRender();
+}
+
+function srRender() {
+  const list = document.getElementById('sr-list');
+  const empty = document.getElementById('sr-empty');
+  if(!list) return;
+
+  // Counters
+  const counts = {total:0, live:0, t1:0, t2:0, sl:0, exp:0};
+  window._spikeLog.forEach(s => {
+    counts.total++;
+    if(s.status==='LIVE') counts.live++;
+    else if(s.status==='HIT_T1') counts.t1++;
+    else if(s.status==='HIT_T2') counts.t2++;
+    else if(s.status==='HIT_SL') counts.sl++;
+    else if(s.status==='EXPIRED') counts.exp++;
+  });
+  ['total','live','t1','t2','sl','exp'].forEach(k => {
+    const el = document.getElementById('sr-cnt-'+k);
+    if(el) el.textContent = counts[k];
+  });
+
+  // Filter
+  const f = window._srFilter;
+  const visible = window._spikeLog.filter(s => {
+    if(f === 'all')      return true;
+    if(f === 'buy')      return s.type === 'buy';
+    if(f === 'sell')     return s.type === 'sell';
+    if(f === 'live')     return s.status === 'LIVE';
+    if(f === 'hit')      return s.status === 'HIT_T1' || s.status === 'HIT_T2';
+    if(f === 'resolved') return s.status !== 'LIVE';
+    return true;
+  });
+
+  if(!visible.length) {
+    if(empty) empty.style.display = 'block';
+    // Remove existing cards
+    list.querySelectorAll('.sr-card').forEach(c => c.remove());
+    return;
+  }
+  if(empty) empty.style.display = 'none';
+
+  const fmtP = v => v < 100 ? v.toFixed(2) : Math.round(v).toLocaleString('en-IN');
+  const statusHtml = s => {
+    if(s==='LIVE')    return '<span class="sr-status sr-st-live">● LIVE</span>';
+    if(s==='HIT_T1')  return '<span class="sr-status sr-st-t1">✓ HIT T1</span>';
+    if(s==='HIT_T2')  return '<span class="sr-status sr-st-t2">✓✓ HIT T2</span>';
+    if(s==='HIT_SL')  return '<span class="sr-status sr-st-sl">✗ STOPPED</span>';
+    if(s==='EXPIRED') return '<span class="sr-status sr-st-exp">EXPIRED</span>';
+    return '';
+  };
+  const scoreClass = sc => sc >= 7 ? 's-hi' : sc >= 4 ? 's-md' : 's-lo';
+  const sigDot = (label, on) =>
+    `<span class="sr-sig-dot ${on?'on':'off'}">${label}</span>`;
+
+  const html = visible.map(sp => {
+    const isResolved = sp.status !== 'LIVE';
+    const dirCol = sp.isBuy ? 'var(--go)' : 'var(--st)';
+    const dirArrow = sp.isBuy ? '▲' : '▼';
+    const sc = sp.sigs;
+    return `<div class="sr-card sr-${sp.type==='buy'?'buy':sp.type==='sell'?'sell':'oi'}${isResolved?' sr-resolved':''}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <div class="sr-score ${scoreClass(sp.score)}">${sp.score}</div>
+        <div style="flex:1">
+          <div style="display:flex;align-items:baseline;gap:6px">
+            <span style="font-size:13px;font-weight:700;color:var(--t0)">${sp.symbol}</span>
+            <span style="font-size:11px;font-weight:700;color:${dirCol}">${dirArrow} ${sp.isBuy?'BUY':'SELL'}</span>
+            <span style="font-size:8px;color:var(--t2);margin-left:2px">${sp.time||''}</span>
+          </div>
+          <div style="font-size:8.5px;color:var(--t2);margin-top:1px">${sp.trigger||sp.signal||''}</div>
+        </div>
+        ${statusHtml(sp.status)}
+      </div>
+      <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:5px">
+        ${sigDot('PRICE',sc.price)}
+        ${sigDot('VOL',sc.vol)}
+        ${sigDot('OI',sc.oi)}
+        ${sigDot('STRENGTH',sc.strength)}
+        ${sigDot('VWAP',sc.vwap)}
+        ${sigDot('BUY FLOW',sc.flow)}
+      </div>
+      <div class="sr-lvl">
+        <div class="sr-lvl-box" style="background:rgba(255,255,255,.04)">
+          <div class="sr-lvl-k">ENTRY</div>
+          <div class="sr-lvl-v" style="color:var(--t0)">${fmtP(sp.entry)}</div>
+        </div>
+        <div class="sr-lvl-box" style="background:rgba(255,51,85,.08)">
+          <div class="sr-lvl-k">SL</div>
+          <div class="sr-lvl-v" style="color:var(--st)">${fmtP(sp.sl)}</div>
+        </div>
+        <div class="sr-lvl-box" style="background:rgba(0,140,255,.08)">
+          <div class="sr-lvl-k">T1 +0.3%</div>
+          <div class="sr-lvl-v" style="color:var(--bl)">${fmtP(sp.t1)}</div>
+        </div>
+        <div class="sr-lvl-box" style="background:rgba(0,232,122,.08)">
+          <div class="sr-lvl-k">T2 +0.6%</div>
+          <div class="sr-lvl-v" style="color:var(--go)">${fmtP(sp.t2)}</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:8px;color:var(--t2)">
+        <span>Vol <b style="color:${sp.vol_mult>=5?'var(--go)':'var(--am)'}">${sp.vol_mult||0}×</b></span>
+        <span>·</span>
+        <span>OI <b style="color:${(sp.oi_pct||0)>=0?'var(--go)':'var(--st)'}">${(sp.oi_pct||0)>=0?'+':''}${(sp.oi_pct||0).toFixed(1)}%</b></span>
+        <span>·</span>
+        <span>Chg <b style="color:${(sp.chg_pct||0)>=0?'var(--go)':'var(--st)'}">${(sp.chg_pct||0)>=0?'+':''}${(sp.chg_pct||0).toFixed(2)}%</b></span>
+        <span style="margin-left:auto;font-size:7.5px;opacity:.6">Score ${sp.score}/10 · R:R 1:2.4</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Replace content (preserve empty msg element)
+  list.querySelectorAll('.sr-card').forEach(c => c.remove());
+  list.insertAdjacentHTML('afterbegin', html);
+}
+
+// ═══════════════════════════════════════════════════════════════════
 
 function tbGoLive() {
   window._histMode = false;
