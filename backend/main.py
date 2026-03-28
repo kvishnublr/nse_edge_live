@@ -149,17 +149,15 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="NSE EDGE v5", version="5.0.0", lifespan=lifespan)
 
 # ─── CORS CONFIGURATION ─────────────────────────────────────────────────────────
-# Only allow specific origins to prevent CSRF attacks
+_extra_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
 ALLOWED_ORIGINS = [
     "http://localhost:8080",
     "http://127.0.0.1:8080",
-    "localhost:8080",
-    "127.0.0.1:8080",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
+    "https://kvishnublr.github.io",   # GitHub Pages
     "null",   # file:// protocol sends Origin: null
-]
-# Note: file:// protocol cannot be in CORS allow_origins, so local file:// loads are unrestricted by browser
+] + _extra_origins
 
 app.add_middleware(
     CORSMiddleware,

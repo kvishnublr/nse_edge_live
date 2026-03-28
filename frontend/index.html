@@ -2211,8 +2211,10 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
 // LIVE DATA — WEBSOCKET CLIENT
 // ═══════════════════════════════════════════════
 (function startLiveData(){
-  const WS_URL = (location.protocol === 'https:' ? 'wss' : 'ws') +
-                 '://' + (location.hostname || 'localhost') + ':8000/ws';
+  const _backendBase = (window.location.hostname === 'kvishnublr.github.io' || window.location.hostname.endsWith('.railway.app'))
+    ? (window.NSE_EDGE_BACKEND || 'https://nse-edge-backend.up.railway.app')
+    : 'http://localhost:8000';
+  const WS_URL = _backendBase.replace(/^http/, 'ws') + '/ws';
 
   let ws = null;
   let reconnectDelay = 2000;
@@ -2619,7 +2621,9 @@ function updateConfidence(score) {
 // ═══════════════════════════════════════════════
 // BACKTEST PANEL
 // ═══════════════════════════════════════════════
-const API = 'http://localhost:8000';
+const API = (window.location.hostname === 'kvishnublr.github.io' || window.location.hostname.endsWith('.railway.app'))
+  ? (window.NSE_EDGE_BACKEND || 'https://nse-edge-backend.up.railway.app')
+  : 'http://localhost:8000';
 
 (function bt2Init(){
   const to   = new Date();
