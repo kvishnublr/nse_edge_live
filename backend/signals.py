@@ -394,11 +394,13 @@ def compute_verdict(gates: list) -> tuple:
         return "EXECUTE", "All 5 gates clear — deploy full position", pass_cnt
     elif has_fail or pass_cnt < 3:
         failed = [i + 1 for i, s in enumerate(states) if s == "st"]
-        return "NO TRADE", f"G{failed[0]} failed — stand down", pass_cnt
+        gnum = failed[0] if failed else next((i+1 for i,s in enumerate(states) if s in ("wt","am")), 1)
+        return "NO TRADE", f"G{gnum} failed — stand down", pass_cnt
     else:
         waiting = [i + 1 for i, s in enumerate(states) if s in ("wt", "am")]
         lbl = {1:"regime",2:"smart money",3:"structure",4:"trigger",5:"risk"}
-        return "WAIT", f"G{waiting[0]} {lbl.get(waiting[0],'signal')} not satisfied", pass_cnt
+        gnum = waiting[0] if waiting else 1
+        return "WAIT", f"G{gnum} {lbl.get(gnum,'signal')} not satisfied", pass_cnt
 
 
 # ─── SPIKE DETECTOR ───────────────────────────────────────────────────────────

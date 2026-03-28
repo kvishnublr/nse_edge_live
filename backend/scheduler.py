@@ -68,7 +68,7 @@ def job_prices():
         if prices and _ws:
             _ws({"type": "prices", "data": prices, "ts": time.time()})
     except Exception as e:
-        logger.debug(f"job_prices: {e}")
+        logger.warning(f"job_prices: {e}")
 
 
 # ─── JOB: FETCH OPTION CHAIN + RUN GATES (every 30 seconds) ──────────────────
@@ -181,7 +181,7 @@ def job_spikes():
             _ws({"type": "spikes", "data": _signals.state.get("spikes", []), "ts": time.time()})
             _ws({"type": "ticker", "data": _signals.state.get("ticker", []), "ts": time.time()})
     except Exception as e:
-        logger.debug(f"job_spikes: {e}")
+        logger.warning(f"job_spikes: {e}")
 
 
 # ─── BUILD SCHEDULER ─────────────────────────────────────────────────────────

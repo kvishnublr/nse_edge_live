@@ -166,7 +166,7 @@ def fetch_option_chain(kite, symbol: str = "NIFTY") -> Optional[dict]:
 
             c_oi     = cq.get("oi", 0)
             # Use OI change from prev close if available, else daily range
-            c_oi_chg = cq.get("oi") - cq.get("oi_prev_day_close", c_oi) if "oi" in cq else 0
+            c_oi_chg = cq.get("oi") - cq.get("oi_prev_day_close", 0) if "oi" in cq else 0
             if c_oi_chg == 0:  # Fallback if prev_day_close not available
                 c_oi_chg = cq.get("oi_day_high", 0) - cq.get("oi_day_low", 0)
             c_ltp    = cq.get("last_price", 0)
@@ -174,7 +174,7 @@ def fetch_option_chain(kite, symbol: str = "NIFTY") -> Optional[dict]:
 
             p_oi     = pq.get("oi", 0)
             # Use OI change from prev close if available, else daily range
-            p_oi_chg = pq.get("oi") - pq.get("oi_prev_day_close", p_oi) if "oi" in pq else 0
+            p_oi_chg = pq.get("oi") - pq.get("oi_prev_day_close", 0) if "oi" in pq else 0
             if p_oi_chg == 0:  # Fallback if prev_day_close not available
                 p_oi_chg = pq.get("oi_day_high", 0) - pq.get("oi_day_low", 0)
             p_ltp    = pq.get("last_price", 0)
