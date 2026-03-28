@@ -11,6 +11,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import Set
 
+import pytz
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -1032,6 +1033,160 @@ async def dayview_stocks(date: str):
         })
     except Exception as e:
         logger.error(f"Dayview stocks error: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/spikes/backtest")
+async def spikes_backtest(from_date: str = None, to_date: str = None):
+    """
+    Backtest Spike Radar strategy using 1-min OHLCV candles from Kite.
+    Spike = candle where vol > 2.5x rolling avg AND abs price move >= 0.5%
+    Entry at spike candle close, check next 30 candles for T1/T2/SL hit.
+    T1=+0.3%, T2=+0.6%, SL=-0.25% from entry.
+    """
+    import asyncio
+    from datetime import datetime, timedelta
+    from feed import get_kite
+    from config import KITE_TOKENS, FNO_SYMBOLS
+
+    try:
+        ist = pytz.timezone('Asia/Kolkata')
+        today = datetime.now(ist).date()
+
+        if not to_date:
+            to_date = str(today - timedelta(days=1))
+        if not from_date:
+            from_date = str(today - timedelta(days=7))
+
+        try:
+            fd = datetime.strptime(from_date, "%Y-%m-%d")
+            td = datetime.strptime(to_date,   "%Y-%m-%d")
+        except ValueError:
+            return JSONResponse({"error": "Invalid date format. Use YYYY-MM-DD"}, status_code=400)
+
+        if (td - fd).days > 30:
+            return JSONResponse({"error": "Max date range is 30 days (1-min data limit)"}, status_code=400)
+
+        kite = get_kite()
+        if not kite:
+            return JSONResponse({"error": "Kite not connected"}, status_code=503)
+
+        loop = asyncio.get_event_loop()
+
+        def _run():
+            results = []
+            summary = {"total": 0, "hit_t1": 0, "hit_t2": 0, "hit_sl": 0, "expired": 0}
+
+            symbols = [s for s in FNO_SYMBOLS if s in KITE_TOKENS and s not in ("INDIAVIX",)]
+
+            for sym in symbols:
+                token = KITE_TOKENS[sym]
+                try:
+                    candles = kite.historical_data(token, fd, td, "minute")
+                except Exception:
+                    continue
+
+                if len(candles) < 25:
+                    continue
+
+                # rolling 20-candle avg volume
+                for i in range(20, len(candles)):
+                    c = candles[i]
+                    vol  = c.get("volume", 0)
+                    close = c.get("close", 0)
+                    open_ = c.get("open",  0)
+                    if not vol or not close or not open_:
+                        continue
+
+                    avg_vol = sum(candles[j]["volume"] for j in range(i-20, i)) / 20
+                    if avg_vol == 0:
+                        continue
+
+                    vol_mult  = vol / avg_vol
+                    chg_pct   = (close - open_) / open_ * 100
+
+                    # Spike condition
+                    if vol_mult < 2.5 or abs(chg_pct) < 0.5:
+                        continue
+
+                    is_buy   = chg_pct > 0
+                    entry    = round(close * (1.0005 if is_buy else 0.9995), 2)
+                    sl       = round(entry * (0.9975 if is_buy else 1.0025), 2)
+                    t1       = round(entry * (1.003  if is_buy else 0.997),  2)
+                    t2       = round(entry * (1.006  if is_buy else 0.994),  2)
+
+                    result   = "EXPIRED"
+                    exit_p   = None
+                    exit_i   = None
+
+                    # check next 30 candles
+                    for k in range(i+1, min(i+31, len(candles))):
+                        hi = candles[k]["high"]
+                        lo = candles[k]["low"]
+                        if is_buy:
+                            if lo <= sl:
+                                result = "HIT_SL"; exit_p = sl; exit_i = k; break
+                            if hi >= t2:
+                                result = "HIT_T2"; exit_p = t2; exit_i = k; break
+                            if hi >= t1:
+                                result = "HIT_T1"; exit_p = t1; exit_i = k; break
+                        else:
+                            if hi >= sl:
+                                result = "HIT_SL"; exit_p = sl; exit_i = k; break
+                            if lo <= t2:
+                                result = "HIT_T2"; exit_p = t2; exit_i = k; break
+                            if lo <= t1:
+                                result = "HIT_T1"; exit_p = t1; exit_i = k; break
+
+                    pnl_pct = 0.0
+                    if exit_p:
+                        pnl_pct = round((exit_p - entry) / entry * 100 * (1 if is_buy else -1), 3)
+
+                    candle_time = c["date"]
+                    if hasattr(candle_time, "strftime"):
+                        candle_time = candle_time.strftime("%Y-%m-%d %H:%M")
+                    else:
+                        candle_time = str(candle_time)[:16]
+
+                    results.append({
+                        "symbol":   sym,
+                        "time":     candle_time,
+                        "type":     "BUY" if is_buy else "SELL",
+                        "vol_mult": round(vol_mult, 1),
+                        "chg_pct":  round(chg_pct,  2),
+                        "entry":    entry,
+                        "sl":       sl,
+                        "t1":       t1,
+                        "t2":       t2,
+                        "result":   result,
+                        "pnl_pct":  pnl_pct,
+                    })
+
+                    summary["total"] += 1
+                    if result == "HIT_T1":  summary["hit_t1"] += 1
+                    elif result == "HIT_T2": summary["hit_t2"] += 1
+                    elif result == "HIT_SL": summary["hit_sl"] += 1
+                    else:                    summary["expired"] += 1
+
+            # sort by time desc
+            results.sort(key=lambda x: x["time"], reverse=True)
+
+            hits    = summary["hit_t1"] + summary["hit_t2"]
+            win_rate = round(hits / summary["total"] * 100, 1) if summary["total"] else 0
+            avg_pnl  = round(sum(r["pnl_pct"] for r in results) / len(results), 3) if results else 0
+
+            return {
+                "summary":  {**summary, "win_rate": win_rate, "avg_pnl": avg_pnl},
+                "results":  results[:500],   # cap at 500 rows
+                "from_date": from_date,
+                "to_date":   to_date,
+            }
+
+        data = await loop.run_in_executor(None, _run)
+        return JSONResponse(data)
+
+    except Exception as e:
+        logger.error(f"Spike backtest error: {e}", exc_info=True)
         return JSONResponse({"error": str(e)}, status_code=500)
 
 

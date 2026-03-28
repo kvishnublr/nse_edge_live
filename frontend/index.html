@@ -794,6 +794,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   <!-- TAB: SPIKE RADAR -->
   <div class="tp" id="tp-spikescanner" style="padding:0;gap:0;overflow-y:hidden">
 
+    <!-- Sub-tab switcher: LIVE vs BACKTEST -->
+    <div style="display:flex;border-bottom:1px solid var(--b1);flex-shrink:0">
+      <button id="sr-sub-live" onclick="srSubTab('live')" style="flex:1;padding:6px;font-family:var(--fn);font-size:8px;font-weight:700;letter-spacing:1px;border:none;cursor:pointer;background:var(--s2);color:var(--go);border-bottom:2px solid var(--go)">⚡ LIVE RADAR</button>
+      <button id="sr-sub-bt" onclick="srSubTab('bt')" style="flex:1;padding:6px;font-family:var(--fn);font-size:8px;font-weight:700;letter-spacing:1px;border:none;cursor:pointer;background:var(--s1);color:var(--t2);border-bottom:2px solid transparent">⏱ BACKTEST</button>
+    </div>
+
+    <!-- LIVE RADAR panel -->
+    <div id="sr-live-panel" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden">
+
     <!-- Stats bar -->
     <div class="sr-statsbar">
       <div class="sr-stat"><span class="sr-stat-val" id="sr-cnt-total" style="color:var(--t0)">0</span><span class="sr-stat-lbl">DETECTED</span></div>
@@ -838,6 +847,55 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
         <span style="color:var(--t3)">Signals fire when Price ≥1.5% + Vol ≥2.5× avg · or OI spike ≥12%</span>
       </div>
     </div>
+
+    </div><!-- /sr-live-panel -->
+
+    <!-- BACKTEST panel -->
+    <div id="sr-bt-panel" style="display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden">
+
+      <!-- Controls -->
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--b1);flex-shrink:0;flex-wrap:wrap">
+        <span style="font-size:7.5px;color:var(--t2);letter-spacing:1px">FROM</span>
+        <input type="date" id="srbt-from" class="jfi" style="font-size:8px;padding:3px 6px;background:var(--s2);border:1px solid var(--b1);color:var(--t0);border-radius:3px">
+        <span style="font-size:7.5px;color:var(--t2);letter-spacing:1px">TO</span>
+        <input type="date" id="srbt-to" class="jfi" style="font-size:8px;padding:3px 6px;background:var(--s2);border:1px solid var(--b1);color:var(--t0);border-radius:3px">
+        <button onclick="srBtRun()" style="padding:4px 12px;font-family:var(--fn);font-size:8px;font-weight:700;letter-spacing:1px;border:1px solid var(--bl);color:var(--bl);background:var(--bl-d);border-radius:3px;cursor:pointer">▶ RUN</button>
+        <span id="srbt-status" style="font-size:7.5px;color:var(--t2)"></span>
+        <span style="margin-left:auto;font-size:7px;color:var(--t3)">Max 30 days · 1-min candles · T1=+0.3% T2=+0.6% SL=−0.25%</span>
+      </div>
+
+      <!-- Summary cards -->
+      <div id="srbt-summary" style="display:none;flex-shrink:0;padding:8px 10px;border-bottom:1px solid var(--b1)">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <div class="sr-stat"><span class="sr-stat-val" id="srbt-total" style="color:var(--t0)">0</span><span class="sr-stat-lbl">SPIKES</span></div>
+          <div style="width:1px;background:var(--b1);margin:2px 0"></div>
+          <div class="sr-stat"><span class="sr-stat-val" id="srbt-wr" style="color:var(--go)">0%</span><span class="sr-stat-lbl">WIN RATE</span></div>
+          <div class="sr-stat"><span class="sr-stat-val" id="srbt-t1" style="color:var(--go)">0</span><span class="sr-stat-lbl">HIT T1</span></div>
+          <div class="sr-stat"><span class="sr-stat-val" id="srbt-t2" style="color:var(--go)">0</span><span class="sr-stat-lbl">HIT T2</span></div>
+          <div class="sr-stat"><span class="sr-stat-val" id="srbt-sl" style="color:var(--st)">0</span><span class="sr-stat-lbl">HIT SL</span></div>
+          <div class="sr-stat"><span class="sr-stat-val" id="srbt-exp" style="color:var(--t2)">0</span><span class="sr-stat-lbl">EXPIRED</span></div>
+          <div class="sr-stat"><span class="sr-stat-val" id="srbt-apnl" style="color:var(--bl)">0%</span><span class="sr-stat-lbl">AVG P&L</span></div>
+        </div>
+      </div>
+
+      <!-- Results table -->
+      <div style="overflow-y:auto;flex:1;min-height:0;padding:0">
+        <div id="srbt-empty" style="text-align:center;padding:40px 16px;color:var(--t2);font-size:9px">
+          Select a date range and click RUN to backtest spike detection on 1-min candles.
+        </div>
+        <table id="srbt-tbl" class="xtbl" style="display:none;width:100%">
+          <thead>
+            <tr>
+              <th>SYMBOL</th><th>TIME</th><th>TYPE</th>
+              <th>VOL×</th><th>CHG%</th>
+              <th>ENTRY</th><th>SL</th><th>T1</th><th>T2</th>
+              <th>RESULT</th><th>P&L%</th>
+            </tr>
+          </thead>
+          <tbody id="srbt-tbody"></tbody>
+        </table>
+      </div>
+    </div><!-- /sr-bt-panel -->
 
   </div>
   <!-- /tp-spikescanner -->
@@ -3651,6 +3709,102 @@ function srRender() {
   // Replace content (preserve empty msg element)
   list.querySelectorAll('.sr-card').forEach(c => c.remove());
   list.insertAdjacentHTML('afterbegin', html);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SPIKE RADAR — BACKTEST
+// ═══════════════════════════════════════════════════════════════════
+
+function srSubTab(tab) {
+  const isLive = tab === 'live';
+  document.getElementById('sr-live-panel').style.display = isLive ? 'flex' : 'none';
+  document.getElementById('sr-bt-panel').style.display   = isLive ? 'none' : 'flex';
+  const lb = document.getElementById('sr-sub-live');
+  const bb = document.getElementById('sr-sub-bt');
+  lb.style.background    = isLive ? 'var(--s2)' : 'var(--s1)';
+  lb.style.color         = isLive ? 'var(--go)'  : 'var(--t2)';
+  lb.style.borderBottom  = isLive ? '2px solid var(--go)' : '2px solid transparent';
+  bb.style.background    = isLive ? 'var(--s1)' : 'var(--s2)';
+  bb.style.color         = isLive ? 'var(--t2)'  : 'var(--bl)';
+  bb.style.borderBottom  = isLive ? '2px solid transparent' : '2px solid var(--bl)';
+  if(!isLive) {
+    // default date range: last 7 days
+    const to = new Date(); to.setDate(to.getDate()-1);
+    const fr = new Date(); fr.setDate(fr.getDate()-8);
+    const fmt = d => d.toISOString().slice(0,10);
+    const fi = document.getElementById('srbt-from');
+    const ti = document.getElementById('srbt-to');
+    if(fi && !fi.value) fi.value = fmt(fr);
+    if(ti && !ti.value) ti.value = fmt(to);
+  }
+}
+
+async function srBtRun() {
+  const from = document.getElementById('srbt-from').value;
+  const to   = document.getElementById('srbt-to').value;
+  if(!from || !to) { alert('Select date range'); return; }
+  const status = document.getElementById('srbt-status');
+  status.textContent = 'Running...';
+  status.style.color = 'var(--am)';
+  document.getElementById('srbt-empty').style.display = 'block';
+  document.getElementById('srbt-empty').textContent   = 'Fetching 1-min candles and running spike detection...';
+  document.getElementById('srbt-tbl').style.display   = 'none';
+  document.getElementById('srbt-summary').style.display = 'none';
+
+  try {
+    const r = await fetch(`${API}/api/spikes/backtest?from_date=${from}&to_date=${to}`);
+    const d = await r.json();
+    if(d.error) { status.textContent = 'Error: ' + d.error; status.style.color='var(--st)'; return; }
+
+    const s = d.summary;
+    document.getElementById('srbt-total').textContent = s.total;
+    document.getElementById('srbt-wr').textContent    = s.win_rate + '%';
+    document.getElementById('srbt-t1').textContent    = s.hit_t1;
+    document.getElementById('srbt-t2').textContent    = s.hit_t2;
+    document.getElementById('srbt-sl').textContent    = s.hit_sl;
+    document.getElementById('srbt-exp').textContent   = s.expired;
+    document.getElementById('srbt-apnl').textContent  = (s.avg_pnl >= 0 ? '+' : '') + s.avg_pnl + '%';
+    document.getElementById('srbt-apnl').style.color  = s.avg_pnl >= 0 ? 'var(--go)' : 'var(--st)';
+    document.getElementById('srbt-wr').style.color    = s.win_rate >= 50 ? 'var(--go)' : 'var(--st)';
+    document.getElementById('srbt-summary').style.display = 'flex';
+
+    if(!d.results || !d.results.length) {
+      document.getElementById('srbt-empty').textContent = 'No spikes detected in this date range.';
+      document.getElementById('srbt-empty').style.display = 'block';
+      status.textContent = 'Done — 0 spikes'; status.style.color='var(--t2)';
+      return;
+    }
+
+    const rMap = { HIT_T2:'var(--go)', HIT_T1:'var(--bl)', HIT_SL:'var(--st)', EXPIRED:'var(--t2)' };
+    const rows = d.results.map(r => {
+      const rc = rMap[r.result] || 'var(--t2)';
+      const pc = r.pnl_pct >= 0 ? 'var(--go)' : 'var(--st)';
+      const tc = r.type === 'BUY' ? 'var(--go)' : 'var(--st)';
+      return `<tr>
+        <td style="color:var(--t0);font-weight:700">${r.symbol}</td>
+        <td style="color:var(--t2)">${r.time.slice(11)}</td>
+        <td style="color:${tc}">${r.type}</td>
+        <td style="color:var(--am)">${r.vol_mult}×</td>
+        <td style="color:${tc}">${r.chg_pct > 0 ? '+' : ''}${r.chg_pct}%</td>
+        <td>${r.entry}</td>
+        <td style="color:var(--st)">${r.sl}</td>
+        <td style="color:var(--bl)">${r.t1}</td>
+        <td style="color:var(--go)">${r.t2}</td>
+        <td style="color:${rc};font-weight:700">${r.result.replace('_',' ')}</td>
+        <td style="color:${pc};font-weight:700">${r.pnl_pct >= 0 ? '+' : ''}${r.pnl_pct}%</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('srbt-tbody').innerHTML = rows;
+    document.getElementById('srbt-tbl').style.display = 'table';
+    document.getElementById('srbt-empty').style.display = 'none';
+    status.textContent = `Done — ${s.total} spikes · ${s.win_rate}% win rate`;
+    status.style.color = 'var(--go)';
+  } catch(e) {
+    status.textContent = 'Failed: ' + e.message;
+    status.style.color = 'var(--st)';
+    document.getElementById('srbt-empty').textContent = 'Request failed. Is backend running?';
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
