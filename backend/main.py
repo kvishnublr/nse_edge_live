@@ -16,7 +16,8 @@ import pytz
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 
 import fetcher
 import signals
@@ -29,6 +30,8 @@ logging.basicConfig(
     format="%(asctime)s  %(name)-12s  %(levelname)-8s  %(message)s",
     datefmt="%H:%M:%S",
 )
+logging.getLogger("apscheduler.executors.default").setLevel(logging.WARNING)
+logging.getLogger("apscheduler.scheduler").setLevel(logging.WARNING)
 logger = logging.getLogger("main")
 
 # ─── WEBSOCKET HUB ────────────────────────────────────────────────────────────
@@ -169,6 +172,13 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
 )
 
+
+# ─── FRONTEND ─────────────────────────────────────────────────────────────────
+_FRONTEND = os.path.join(os.path.dirname(__file__), "..", "frontend", "index.html")
+
+@app.get("/")
+async def serve_frontend():
+    return FileResponse(os.path.abspath(_FRONTEND))
 
 # ─── WEBSOCKET ────────────────────────────────────────────────────────────────
 @app.websocket("/ws")

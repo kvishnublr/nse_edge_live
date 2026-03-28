@@ -28,17 +28,20 @@ _nse_session.headers.update(NSE_HEADERS)
 _nse_cookie_ts = 0
 
 def _nse_refresh_cookie():
-    """Refresh NSE session cookie."""
+    """Refresh NSE session cookie (2-step handshake NSE requires)."""
     global _nse_cookie_ts
     try:
+        # Step 1: hit homepage to get initial cookies
         resp = _nse_session.get(NSE_BASE, timeout=NSE_TIMEOUT)
-        if resp.status_code == 200:
-            _nse_cookie_ts = time.time()
-            logger.debug("NSE cookie refreshed")
-            return True
-        else:
+        if resp.status_code != 200:
             logger.warning(f"NSE cookie refresh failed: {resp.status_code}")
             return False
+        time.sleep(0.5)
+        # Step 2: hit market-data page to validate session
+        _nse_session.get(f"{NSE_BASE}/market-data/live-equity-market", timeout=NSE_TIMEOUT)
+        _nse_cookie_ts = time.time()
+        logger.debug("NSE cookie refreshed")
+        return True
     except Exception as e:
         logger.warning(f"NSE cookie refresh exception: {e}")
         return False
@@ -51,10 +54,22 @@ def _nse_get(url: str, max_retries: int = 3) -> Optional[dict]:
             _nse_refresh_cookie()
 
         try:
-            resp = _nse_session.get(url, timeout=NSE_TIMEOUT)
+            resp = _nse_session.get(url, timeout=NSE_TIMEOUT, headers={
+                "Accept": "application/json, text/plain, */*",
+                "sec-fetch-dest": "empty",
+                "sec-fetch-mode": "cors",
+                "sec-fetch-site": "same-origin",
+            })
 
             # Success
             if resp.status_code == 200:
+                ct = resp.headers.get("Content-Type", "")
+                if "json" not in ct:
+                    # NSE returned HTML (bot detection / Cloudflare challenge)
+                    logger.warning(f"NSE returned non-JSON ({ct[:40]}) — bot detection, retrying with cookie refresh")
+                    _nse_refresh_cookie()
+                    time.sleep(1)
+                    continue
                 return resp.json()
 
             # Unauthorized - refresh and retry
