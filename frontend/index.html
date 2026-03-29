@@ -747,12 +747,25 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
   <!-- TAB: STOCK OI SCANNER -->
   <div class="tp" id="tp-stocks">
-    <div class="sfbar">
-      <button class="sf on" onclick="filterStocks('all',this)">ALL</button>
-      <button class="sf" onclick="filterStocks('long',this)">LONG BUILDUP</button>
-      <button class="sf" onclick="filterStocks('short',this)">SHORT BUILDUP</button>
-      <button class="sf" onclick="filterStocks('top',this)">TOP PICKS ★</button>
-      <span style="margin-left:auto;font-size:8px;color:var(--t2)">★ = best intraday signal today · Sorted by score</span>
+    <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap;margin-bottom:6px">
+      <div class="sfbar" style="margin-bottom:0">
+        <button class="sf on" onclick="filterStocks('all',this)">ALL</button>
+        <button class="sf" onclick="filterStocks('long',this)">LONG BUILDUP</button>
+        <button class="sf" onclick="filterStocks('short',this)">SHORT BUILDUP</button>
+        <button class="sf" onclick="filterStocks('top',this)">TOP PICKS ★</button>
+      </div>
+      <div style="width:1px;height:18px;background:var(--b1)"></div>
+      <div style="display:flex;gap:3px;align-items:center">
+        <span style="font-size:7.5px;color:var(--t2);letter-spacing:.5px;margin-right:2px">GATE</span>
+        <button class="sf on" id="sgf-all" onclick="filterStocksGate('all',this)" style="font-size:7px;padding:2px 6px">ALL</button>
+        <button class="sf" id="sgf-g1" onclick="filterStocksGate('g1',this)" style="font-size:7px;padding:2px 6px">G1 REGIME</button>
+        <button class="sf" id="sgf-g2" onclick="filterStocksGate('g2',this)" style="font-size:7px;padding:2px 6px">G2 SMART$</button>
+        <button class="sf" id="sgf-g3" onclick="filterStocksGate('g3',this)" style="font-size:7px;padding:2px 6px">G3 STRUCT</button>
+        <button class="sf" id="sgf-g4" onclick="filterStocksGate('g4',this)" style="font-size:7px;padding:2px 6px">G4 TRIGGER</button>
+        <button class="sf" id="sgf-g5" onclick="filterStocksGate('g5',this)" style="font-size:7px;padding:2px 6px">G5 RISK</button>
+        <button class="sf" id="sgf-exe" onclick="filterStocksGate('exe',this)" style="font-size:7px;padding:2px 6px;color:var(--go)">★ EXECUTE</button>
+      </div>
+      <span style="margin-left:auto;font-size:8px;color:var(--t2)">★ = best intraday signal · Sorted by score</span>
     </div>
     <div style="overflow-y:auto;flex:1;min-height:0">
     <table class="xtbl stbl">
@@ -761,7 +774,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
           <th>#  STOCK</th><th>PRICE</th><th>CHG%</th>
           <th>OI CHNG</th><th>OI%</th><th>PCR</th>
           <th>VOL/AVG</th><th>ATR%</th><th>RS</th>
-          <th>DEL%</th><th>SIGNAL</th><th>SCORE</th>
+          <th>DEL%</th><th>GATES</th><th>SIGNAL</th><th>SCORE</th>
         </tr>
       </thead>
       <tbody id="stk-body"></tbody>
@@ -1387,6 +1400,7 @@ let curVIX='lo';
 let strikes=0;
 let trades=[];
 let stkFil='all';
+let stkGateFil='all';
 
 // ═══════════════════════════════════════════════
 // CLOCK + ZONE
@@ -1899,18 +1913,50 @@ const stocks=[
   {r:13,s:'TATASTEEL',sec:'Metal',pr:148,chg:-1.24,oiC:-11200,oiP:-14.2,pcr:0.61,vol:2.1,atr:2.1,del:28,rs:0.74,sig:'SHORT OI↑',sigt:'st',score:41,top:false,type:'short'},
 ];
 
+// Gate dot renderer: g = 'go'|'am'|'wt'|'st'
+function _gDot(g, lbl){
+  const c = g==='go'?'var(--go)':g==='st'?'var(--st)':g==='am'?'var(--am)':'var(--t2)';
+  return `<span title="${lbl}" style="width:7px;height:7px;border-radius:50%;background:${c};display:inline-block;flex-shrink:0"></span>`;
+}
+function _gateDots(g1,g2,g3,g4,g5){
+  return `<span style="display:flex;gap:2px;align-items:center">${_gDot(g1,'G1 REGIME')}${_gDot(g2,'G2 SMART$')}${_gDot(g3,'G3 STRUCT')}${_gDot(g4,'G4 TRIGGER')}${_gDot(g5,'G5 RISK')}</span>`;
+}
+// Derive gate states from static stock fields when API gate data not available
+function _deriveGates(x){
+  const g1 = (gState[1]||'go');
+  const g2 = x.pcr>=1.0?'go':x.pcr>=0.7?'am':'st';
+  const g3 = x.chg>0.15?'go':x.chg>-0.15?'am':'st';
+  const g4 = x.vol>=1.3?'go':x.vol>=1.0?'am':'wt';
+  const g5 = x.atr<=1.5?'go':x.atr<=2.5?'am':'am';
+  return {g1,g2,g3,g4,g5};
+}
+
 function renderStocks(){
   let d=[...stocks];
-  if(stkFil==='long')d=d.filter(x=>x.type==='long');
-  else if(stkFil==='short')d=d.filter(x=>x.type==='short');
-  else if(stkFil==='top')d=d.filter(x=>x.top);
+  if(stkFil==='long') d=d.filter(x=>x.type==='long');
+  else if(stkFil==='short') d=d.filter(x=>x.type==='short');
+  else if(stkFil==='top') d=d.filter(x=>x.top);
+  // Gate filter
+  if(stkGateFil && stkGateFil!=='all'){
+    d=d.filter(x=>{
+      const g=x.g1?x:{..._deriveGates(x)};
+      const gates={g1:g.g1||_deriveGates(x).g1,g2:g.g2||_deriveGates(x).g2,
+                   g3:g.g3||_deriveGates(x).g3,g4:g.g4||_deriveGates(x).g4,
+                   g5:g.g5||_deriveGates(x).g5};
+      if(stkGateFil==='exe') return ['g1','g2','g3','g4','g5'].every(k=>gates[k]==='go');
+      return gates[stkGateFil]==='go';
+    });
+  }
   d.sort((a,b)=>b.score-a.score);
   const sc=s=>'<span class="scr '+(s>=75?'hi':s>=55?'md':'lo')+'">'+s+'</span>';
   const sc2=t=>t==='go'?'background:var(--go-d);color:var(--go);border:1px solid var(--go-b)':
     t==='st'?'background:var(--st-d);color:var(--st);border:1px solid var(--st-b)':
     'background:var(--am-d);color:var(--am);border:1px solid var(--am-b)';
   const cc=v=>v>0?'var(--go)':'var(--st)';
-  document.getElementById('stk-body').innerHTML=d.map((x,i)=>`
+  document.getElementById('stk-body').innerHTML=d.map((x,i)=>{
+    const dg=_deriveGates(x);
+    const g1=x.g1||dg.g1, g2=x.g2||dg.g2, g3=x.g3||dg.g3, g4=x.g4||dg.g4, g5=x.g5||dg.g5;
+    return `
     <tr class="${x.top?'top':''}">
       <td><span style="color:var(--t2);font-size:8px;margin-right:3px">${i+1}</span><span style="font-weight:600;color:var(--t0)">${x.s}</span>${x.top?'<span style="color:var(--go);font-size:8px"> ★</span>':''}<br><span style="font-size:8px;color:var(--t2)">${x.sec}</span></td>
       <td style="font-weight:600">${x.pr.toLocaleString('en-IN')}</td>
@@ -1922,13 +1968,21 @@ function renderStocks(){
       <td style="color:${x.atr>1.5?'var(--am)':'var(--t0)'}">${x.atr.toFixed(1)}%</td>
       <td style="color:${x.rs>1.1?'var(--go)':x.rs>0.95?'var(--am)':'var(--st)'};font-weight:600">${x.rs>1?'+':''}${((x.rs-1)*100).toFixed(0)}%</td>
       <td style="color:${x.del>55?'var(--go)':x.del>44?'var(--am)':'var(--t2)'}">${x.del}%</td>
+      <td>${_gateDots(g1,g2,g3,g4,g5)}</td>
       <td><span class="sigtag" style="${sc2(x.sigt)}">${x.sig}</span></td>
       <td>${sc(x.score)}</td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 }
 function filterStocks(f,btn){
   stkFil=f;
-  document.querySelectorAll('.sf').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('.sfbar .sf').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  renderStocks();
+}
+function filterStocksGate(f,btn){
+  stkGateFil=f;
+  document.querySelectorAll('[id^="sgf-"]').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   renderStocks();
 }
@@ -3209,7 +3263,16 @@ async function tbDateChange(val) {
           TATAMOTORS:'Auto',LT:'Infra',BAJFINANCE:'NBFC',RELIANCE:'Energy'};
         const pcrC = d.chain ? (d.chain.pcr>1.3?'var(--go)':d.chain.pcr<0.8?'var(--st)':'var(--am)') : 'var(--t2)';
         const pcr  = d.chain ? (d.chain.pcr||0).toFixed(2) : '—';
-        const sorted = [...d.stocks].filter(s => s.symbol !== 'BANKNIFTY').sort((a,b) => Math.abs(b.chg_pct) - Math.abs(a.chg_pct));
+        let sorted = [...d.stocks].filter(s => s.symbol !== 'BANKNIFTY');
+        // Apply gate filter if active
+        if(stkGateFil && stkGateFil !== 'all') {
+          sorted = sorted.filter(s => {
+            const g = {g1:s.g1||'am',g2:s.g2||'am',g3:s.g3||'am',g4:s.g4||'am',g5:s.g5||'am'};
+            if(stkGateFil==='exe') return ['g1','g2','g3','g4','g5'].every(k=>g[k]==='go');
+            return g[stkGateFil]==='go';
+          });
+        }
+        sorted.sort((a,b) => Math.abs(b.chg_pct) - Math.abs(a.chg_pct));
         const scEl = v => '<span class="scr ' + (v>=75?'hi':v>=55?'md':'lo') + '">' + Math.min(99,Math.max(0,v)) + '</span>';
         stkBody.innerHTML = sorted.map((s, i) => {
           const oip   = s.oi_chg_pct || 0;
@@ -3221,6 +3284,12 @@ async function tbDateChange(val) {
           const sigt  = s.chg_pct >= 0.5 ? 'go' : s.chg_pct <= -0.5 ? 'st' : 'am';
           const score = Math.min(99, Math.round(50 + s.chg_pct*5 + oip*0.5 + (s.vol_ratio||1)*2));
           const star  = score >= 80 ? ' ★' : '';
+          // Gate dots: use API gate data if available, else derive
+          const g1h = s.g1 || (s.chg_pct>=0 ? 'go' : 'am');
+          const g2h = s.g2 || (parseFloat(pcr)>=1.0 ? 'go' : parseFloat(pcr)>=0.7 ? 'am' : 'st');
+          const g3h = s.g3 || (s.chg_pct>0.15 ? 'go' : s.chg_pct>-0.15 ? 'am' : 'st');
+          const g4h = s.g4 || (s.vol_ratio>=1.3 ? 'go' : s.vol_ratio>=1.0 ? 'am' : 'wt');
+          const g5h = s.g5 || (s.atr_pct<=1.5 ? 'go' : 'am');
           return '<tr class="'+(score>=80?'top':'')+'">'
             + '<td><span style="color:var(--t2);font-size:8px;margin-right:3px">'+(i+1)+'</span>'
             + '<span style="font-weight:600;color:var(--t0)">'+s.symbol+star+'</span><br>'
@@ -3234,12 +3303,13 @@ async function tbDateChange(val) {
             + '<td style="color:'+(s.atr_pct>=2?'var(--am)':'var(--t0)')+'">'+atrP+'</td>'
             + '<td style="color:'+rsC+'">'+rsP+'</td>'
             + '<td style="color:var(--t2)">—</td>'
+            + '<td>'+_gateDots(g1h,g2h,g3h,g4h,g5h)+'</td>'
             + '<td><span class="sigtag" style="'+sc2(sigt)+'">'+sig+'</span></td>'
             + '<td>'+scEl(score)+'</td></tr>';
         }).join('');
       } else {
         // Empty — token expired or no data for this date
-        stkBody.innerHTML = '<tr><td colspan="12" style="padding:18px;text-align:center;color:var(--am);font-size:9px;line-height:1.9">'
+        stkBody.innerHTML = '<tr><td colspan="13" style="padding:18px;text-align:center;color:var(--am);font-size:9px;line-height:1.9">'
           + 'Stock OI data not available for <b>'+val+'</b><br>'
           + '<span style="color:var(--t2)">Kite API token expired — regenerate token and restart backend to load historical stock data</span>'
           + '</td></tr>';

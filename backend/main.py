@@ -758,6 +758,9 @@ async def dayview_full(date: str):
                     "vol_ratio":  vol_r,
                     "atr_pct":    round(atr_v / dc * 100, 1) if dc > 0 else 0,
                     "rs_pct":     round(dp - chg_pct, 1),   # relative strength vs NIFTY
+                    "g1": g1i["state"], "g2": g2i["state"],
+                    "g3": g3s["state"], "g4": g4s["state"], "g5": g5s["state"],
+                    "pc": pc_s,
                 })
 
                 # Build pick entry for right panel (only strong signals)
