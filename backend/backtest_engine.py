@@ -46,7 +46,9 @@ def _g2(pcr: float, call_oi: int, put_oi: int) -> dict:
 
     if score <= 35 or pcr <= TH["pcr_bearish"]:
         st = "st"
-    elif score >= 70 and pcr >= TH["pcr_bullish"]:
+    elif score >= 75:          # strong score (bullish PCR + bullish OI net)
+        st = "go"
+    elif score >= 60 and pcr >= TH["pcr_bullish"]:  # PCR alone sufficient at moderate score
         st = "go"
     elif score >= 55:
         st = "am"
@@ -120,8 +122,8 @@ def _g5(close: float, atr: float, vix: float, mode: str = "intraday") -> dict:
     if mult < 0.5:                 score -= 20
     score = max(0, min(100, score))
 
-    st = "go" if (rr >= rr_min and mult >= 0.5) else \
-         "st" if (rr < 1.5 or mult <= 0.25) else "am"
+    st = "go" if (rr >= rr_min and mult >= 0.25) else \
+         "st" if (rr < 1.5 or mult <= 0.0) else "am"
     return {"state": st, "score": score}
 
 

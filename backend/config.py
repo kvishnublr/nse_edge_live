@@ -157,15 +157,15 @@ GATE = {
     "vix_low":           10.0,   # full size
     "vix_medium":        15.0,   # 75% size
     "vix_high":          20.0,   # 50% size / avoid
-    # G2 — Smart Money (optimizer: best PF=5.92 @ pcr 0.7/1.2)
-    "pcr_bullish":        1.2,
+    # G2 — Smart Money (pcr_bullish lowered: 1.0 passes on neutral/bullish OI)
+    "pcr_bullish":        1.0,
     "pcr_bearish":        0.7,
     # G4 — Trigger (optimizer: best PF=5.92 @ vol 1.3x)
     "vol_surge_min":      1.3,   # volume × average
     "oi_build_min":    5000,     # OI build contracts
-    # G5 — Risk
+    # G5 — Risk (positional lowered to 2.5 to allow realistic R:R; intraday unchanged)
     "rr_min_intraday":    2.0,
-    "rr_min_positional":  3.0,
+    "rr_min_positional":  2.5,
     "atr_multiplier":     1.5,
     # Spike detection
     "spike_price_pct":    1.5,
