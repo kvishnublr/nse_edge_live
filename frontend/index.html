@@ -4210,7 +4210,7 @@ function dvRender(d) {
 })();
 
 // ═══════════════════════════════════════════════
-// TRADINGVIEW CHART MODAL (iframe embed — no symbol restrictions)
+// TRADINGVIEW CHART — opens in new tab (NSE symbols blocked in all embeds)
 // ═══════════════════════════════════════════════
 const _tvSymMap = {
   'NIFTY':'NSE:NIFTY','BANKNIFTY':'NSE:BANKNIFTY','INDIAVIX':'NSE:INDIAVIX',
@@ -4221,11 +4221,16 @@ const _tvSymMap = {
   'MARUTI':'NSE:MARUTI','SUNPHARMA':'NSE:SUNPHARMA','NIFTY 50':'NSE:NIFTY',
   'BANK NIFTY':'NSE:BANKNIFTY','INDIA VIX':'NSE:INDIAVIX',
 };
-// Interval → TradingView range param for date-jumping
-const _tvRangeMap = { '5':'1D', '15':'5D', '60':'1M', 'D':'6M', 'W':'12M' };
+const _tvIntervalMap = { '5':'5','15':'15','60':'60','D':'D','W':'W' };
 let _tvInterval = 'D';
 let _tvCurrentSym = '';
 let _tvCurrentDate = null;
+
+function _tvOpenNewTab(sym, interval) {
+  const tvSym = _tvSymMap[sym] || ('NSE:' + sym.replace(/ /g,''));
+  const url = `https://www.tradingview.com/chart/?symbol=${tvSym}&interval=${interval}`;
+  window.open(url, '_blank');
+}
 
 function openTVChart(sym, date) {
   _tvCurrentSym = sym;
@@ -4237,39 +4242,50 @@ function openTVChart(sym, date) {
   if(date) { dlbl.textContent = '📅 ' + date; dlbl.style.display = ''; }
   else { dlbl.style.display = 'none'; }
   document.querySelectorAll('.tvi').forEach(b => b.classList.toggle('on', b.dataset.iv === _tvInterval));
-  _buildTVChart(sym, date, _tvInterval);
+  _renderTVLinks(sym, date);
 }
 
-function _buildTVChart(sym, date, interval) {
+function _renderTVLinks(sym, date) {
   const tvSym = _tvSymMap[sym] || ('NSE:' + sym.replace(/ /g,''));
   const container = document.getElementById('tv-container');
   const isDark = !document.documentElement.classList.contains('light');
-  const theme = isDark ? 'dark' : 'light';
-  const range = _tvRangeMap[interval] || '6M';
-  // Use TradingView free widgetembed iframe — no symbol restrictions
-  const params = new URLSearchParams({
-    symbol:           tvSym,
-    interval:         interval,
-    timezone:         'Asia/Kolkata',
-    theme:            theme,
-    style:            '1',
-    locale:           'en',
-    withdateranges:   '1',
-    range:            range,
-    hide_side_toolbar:'0',
-    allow_symbol_change:'1',
-    save_image:       '0',
-    studies:          'RSI@tv-basicstudies',
-    show_popup_button:'1',
-  });
-  container.innerHTML = `<iframe
-    src="https://www.tradingview.com/widgetembed/?${params.toString()}"
-    style="width:100%;height:100%;border:none"
-    allowtransparency="true"
-    frameborder="0"
-    scrolling="no"
-    allowfullscreen
-  ></iframe>`;
+  const intervals = [
+    {iv:'5',  lbl:'5 min',   icon:'⚡'},
+    {iv:'15', lbl:'15 min',  icon:'⏱'},
+    {iv:'60', lbl:'1 Hour',  icon:'🕐'},
+    {iv:'D',  lbl:'Daily',   icon:'📅'},
+    {iv:'W',  lbl:'Weekly',  icon:'📆'},
+  ];
+  const dateNote = date
+    ? `<div style="margin-top:6px;font-size:9px;color:var(--am);letter-spacing:.5px">For date <b>${date}</b>: After opening, press <kbd style="background:var(--s3);padding:1px 5px;border-radius:2px;border:1px solid var(--b1)">Alt+G</kbd> on TradingView to jump to date</div>`
+    : '';
+  container.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px;padding:24px">
+      <div style="text-align:center">
+        <div style="font-family:var(--fh);font-size:22px;font-weight:800;color:var(--go);letter-spacing:2px;margin-bottom:4px">${sym}</div>
+        <div style="font-size:9px;color:var(--t2);letter-spacing:1px">${tvSym} · NSE INDIA</div>
+        ${dateNote}
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+        ${intervals.map(iv => `
+          <a href="https://www.tradingview.com/chart/?symbol=${tvSym}&interval=${iv.iv}"
+             target="_blank"
+             style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 20px;
+                    border:1px solid var(--b1);border-radius:6px;background:var(--s2);
+                    text-decoration:none;color:var(--t0);cursor:pointer;min-width:80px;
+                    transition:all .15s"
+             onmouseover="this.style.borderColor='var(--go)';this.style.background='var(--go-d)'"
+             onmouseout="this.style.borderColor='var(--b1)';this.style.background='var(--s2)'">
+            <span style="font-size:20px">${iv.icon}</span>
+            <span style="font-size:11px;font-weight:700;letter-spacing:.5px">${iv.lbl}</span>
+            <span style="font-size:8px;color:var(--t2)">Open chart ↗</span>
+          </a>`).join('')}
+      </div>
+      <div style="font-size:8px;color:var(--t2);text-align:center;max-width:320px;line-height:1.7">
+        TradingView blocks NSE symbols in embedded frames.<br>
+        Click any timeframe above to open full chart in new tab.
+      </div>
+    </div>`;
 }
 
 function closeTVChart() {
@@ -4281,7 +4297,7 @@ function tvSetInterval(iv, btn) {
   _tvInterval = iv;
   document.querySelectorAll('.tvi').forEach(b => b.classList.remove('on'));
   btn.classList.add('on');
-  _buildTVChart(_tvCurrentSym, _tvCurrentDate, iv);
+  _tvOpenNewTab(_tvCurrentSym, iv);
 }
 
 // ESC closes modal
