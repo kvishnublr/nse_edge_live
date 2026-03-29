@@ -453,7 +453,7 @@ async def backtest_results(from_date: str = None, to_date: str = None):
             params.append(to_date)
 
         rows = conn.execute(
-            f"SELECT date, verdict, pass_count, nifty, vix, pcr, "
+            f"SELECT date, session, verdict, pass_count, nifty, vix, pcr, "
             f"outcome_pts, outcome, g1, g2, g3, g4, g5 "
             f"FROM signal_log {where} ORDER BY date DESC LIMIT 200",
             params
@@ -461,9 +461,9 @@ async def backtest_results(from_date: str = None, to_date: str = None):
         conn.close()
 
         trades = [
-            {"date": r[0], "verdict": r[1], "pass_count": r[2], "nifty": r[3],
-             "vix": r[4], "pcr": r[5], "outcome_pts": r[6], "outcome": r[7],
-             "g1": r[8], "g2": r[9], "g3": r[10], "g4": r[11], "g5": r[12]}
+            {"date": r[0], "session": r[1], "verdict": r[2], "pass_count": r[3], "nifty": r[4],
+             "vix": r[5], "pcr": r[6], "outcome_pts": r[7], "outcome": r[8],
+             "g1": r[9], "g2": r[10], "g3": r[11], "g4": r[12], "g5": r[13]}
             for r in rows
         ]
         return JSONResponse({"trades": trades, "count": len(trades)})
@@ -855,7 +855,7 @@ async def dayview_full(date: str):
                         "sym":         sym,
                         "score":       score,
                         "pc":          pc_s,
-                        "verdict":     "EXECUTE" if pc_s==5 else "WATCH" if pc_s==4 else "WAIT",
+                        "verdict":     "EXECUTE" if pc_s>=3 else "WATCH" if pc_s==2 else "WAIT",
                         "conf":        "CONFIRMED" if pc_s==5 else "HIGH CONF" if pc_s==4 else "50:50",
                         "signal_time": _sig_time,
                         "close":       dc,
@@ -1152,17 +1152,58 @@ async def dayview_stocks(date: str):
 
 
 @app.get("/api/spikes/backtest")
-async def spikes_backtest(from_date: str = None, to_date: str = None):
+async def spikes_backtest(
+    from_date: str = None,
+    to_date: str = None,
+    vol_min: float = 2.0,
+    price_min: float = 0.3,
+    trend_filter: bool = True,
+    time_from: str = "09:15",
+    time_to: str = "14:30",
+    min_score: int = 45,
+):
     """
     Backtest Spike Radar strategy using 1-min OHLCV candles from Kite.
-    Spike = candle where vol > 2.5x rolling avg AND abs price move >= 0.5%
-    Entry at spike candle close, check next 30 candles for T1/T2/SL hit.
-    T1=+0.3%, T2=+0.6%, SL=-0.25% from entry.
+    v3 — Score-based system (empirical analysis, March 2026, 297 signals):
+    - Score 0-100 based on vol quality, price momentum, symbol, time slot
+    - Only signals with score >= min_score (default 45) are traded
+    - Vol window: 2.0-7.0x; price window: 0.3-1.5%
+    - Time: 09:15-14:30 (09:15-09:30 reinstated — 52.1% WR)
+    - 20-min cooldown per symbol per day
+    - Entry: next candle open; SL=-0.25%, T1=+0.30%, T2=+0.60%; 45-candle window
     """
     import asyncio
     from datetime import datetime, timedelta
     from feed import get_kite
     from config import KITE_TOKENS, FNO_SYMBOLS
+
+    def _score_spike_bt(vol_mult: float, chg_pct: float, sym: str, candle_min: int) -> int:
+        """Score a spike 0-100 for backtest (mirrors signals._score_spike)."""
+        score = 0
+        # Volume quality (0-35)
+        if 3.0 <= vol_mult < 5.0:    score += 35
+        elif 5.0 <= vol_mult < 7.0:  score += 25
+        elif 2.0 <= vol_mult < 3.0:  score += 15
+        else:                         score += 5
+        # Price momentum quality (0-30)
+        ap = abs(chg_pct)
+        if 0.5 <= ap < 1.0:    score += 30
+        elif 0.4 <= ap < 0.5:  score += 20
+        elif 1.0 <= ap < 1.5:  score += 20
+        elif 0.3 <= ap < 0.4:  score += 10
+        else:                   score += 5
+        # Symbol quality (0-20)
+        hi_sym = {'TCS', 'TATASTEEL', 'MARUTI', 'INFY'}
+        md_sym = {'HDFCBANK', 'RELIANCE', 'BAJFINANCE', 'TATAMOTORS'}
+        if sym in hi_sym:    score += 20
+        elif sym in md_sym:  score += 12
+        else:                score += 5
+        # Time quality (0-15)
+        if candle_min <= 600:    score += 15   # 09:15-10:00 — best
+        elif candle_min <= 810:  score += 10   # 10:00-13:30
+        elif candle_min <= 870:  score += 5    # 13:30-14:30
+        # else 0 — 14:30+ is weak
+        return score
 
     try:
         ist = pytz.timezone('Asia/Kolkata')
@@ -1188,11 +1229,19 @@ async def spikes_backtest(from_date: str = None, to_date: str = None):
 
         loop = asyncio.get_running_loop()
 
+        # parse time filter bounds
+        def _parse_hm(s):
+            h, m = s.split(":") if ":" in s else (s[:2], s[2:])
+            return int(h) * 60 + int(m)
+        tf_from = _parse_hm(time_from)  # minutes from midnight
+        tf_to   = _parse_hm(time_to)
+
         def _run():
             results = []
             summary = {"total": 0, "hit_t1": 0, "hit_t2": 0, "hit_sl": 0, "expired": 0}
+            score_accumulator = []
 
-            symbols = [s for s in FNO_SYMBOLS if s in KITE_TOKENS and s not in ("INDIAVIX",)]
+            symbols = [s for s in FNO_SYMBOLS if s in KITE_TOKENS and s not in ("INDIAVIX", "NIFTY", "BANKNIFTY")]
 
             for sym in symbols:
                 token = KITE_TOKENS[sym]
@@ -1205,60 +1254,113 @@ async def spikes_backtest(from_date: str = None, to_date: str = None):
                 if len(candles) < 25:
                     continue
 
-                # rolling 20-candle avg volume
-                for i in range(20, len(candles)):
-                    c = candles[i]
-                    vol  = c.get("volume", 0)
-                    close = c.get("close", 0)
-                    open_ = c.get("open",  0)
+                # Build per-day open price for trend filter
+                day_open: dict = {}  # date_str -> first candle open
+                for c in candles:
+                    dt = c["date"].strftime("%Y-%m-%d") if hasattr(c["date"], "strftime") else str(c["date"])[:10]
+                    if dt not in day_open:
+                        day_open[dt] = c["open"]
+
+                # Cooldown: track last signal time per symbol
+                last_signal_min: dict = {}  # date_str -> last signal minute-of-day
+
+                # Rolling 20-candle avg volume
+                for i in range(20, len(candles) - 1):  # -1 so next candle exists
+                    c  = candles[i]
+                    cn = candles[i + 1]  # next candle for entry
+
+                    vol   = c.get("volume", 0)
+                    close = c.get("close",  0)
+                    open_ = c.get("open",   0)
                     if not vol or not close or not open_:
                         continue
 
-                    avg_vol = sum(candles[j]["volume"] for j in range(i-20, i)) / 20
+                    # Time filter
+                    ct = c["date"]
+                    if hasattr(ct, "hour"):
+                        candle_min = ct.hour * 60 + ct.minute
+                    else:
+                        try:
+                            from datetime import datetime as _dt
+                            _parsed = _dt.strptime(str(ct)[:16], "%Y-%m-%d %H:%M")
+                            candle_min = _parsed.hour * 60 + _parsed.minute
+                        except Exception:
+                            candle_min = 555  # assume 9:15
+                    if candle_min < tf_from or candle_min > tf_to:
+                        continue
+
+                    dt = ct.strftime("%Y-%m-%d") if hasattr(ct, "strftime") else str(ct)[:10]
+
+                    # 20-min cooldown per symbol per day
+                    last_min = last_signal_min.get(dt, -999)
+                    if candle_min - last_min < 20:
+                        continue
+
+                    avg_vol  = sum(candles[j]["volume"] for j in range(i - 20, i)) / 20
                     if avg_vol == 0:
                         continue
 
-                    vol_mult  = vol / avg_vol
-                    chg_pct   = (close - open_) / open_ * 100
+                    vol_mult = vol / avg_vol
+                    chg_pct  = (close - open_) / open_ * 100
 
-                    # Spike condition
-                    if vol_mult < 2.5 or abs(chg_pct) < 0.5:
+                    # Reject out-of-range vol and price moves
+                    if vol_mult < vol_min or vol_mult > 7.0:
+                        continue
+                    if abs(chg_pct) < price_min or abs(chg_pct) > 1.5:
                         continue
 
-                    is_buy   = chg_pct > 0
-                    entry    = round(close * (1.0005 if is_buy else 0.9995), 2)
-                    sl       = round(entry * (0.9975 if is_buy else 1.0025), 2)
-                    t1       = round(entry * (1.003  if is_buy else 0.997),  2)
-                    t2       = round(entry * (1.006  if is_buy else 0.994),  2)
+                    # Score-based filter
+                    score = _score_spike_bt(vol_mult, chg_pct, sym, candle_min)
+                    if score < min_score:
+                        continue
 
-                    result   = "EXPIRED"
-                    exit_p   = None
-                    exit_i   = None
+                    is_buy = chg_pct > 0
 
-                    # check next 30 candles
-                    for k in range(i+1, min(i+31, len(candles))):
+                    # Trend filter: spike must align with stock's day direction
+                    if trend_filter:
+                        d_open = day_open.get(dt, close)
+                        day_chg_pct = (close - d_open) / d_open * 100 if d_open else 0
+                        if is_buy  and day_chg_pct < -0.2:
+                            continue
+                        if not is_buy and day_chg_pct >  0.2:
+                            continue
+
+                    # Entry = next candle open (realistic — spike already closed)
+                    entry = round(cn["open"], 2)
+                    if not entry:
+                        entry = round(close, 2)
+
+                    sl = round(entry * (0.9975 if is_buy else 1.0025), 2)  # -0.25% / +0.25%
+                    t1 = round(entry * (1.003  if is_buy else 0.997),  2)  # +0.30% / -0.30%
+                    t2 = round(entry * (1.006  if is_buy else 0.994),  2)  # +0.60% / -0.60%
+
+                    result = "EXPIRED"
+                    exit_p = None
+
+                    # Check next 45 candles (45 min)
+                    for k in range(i + 1, min(i + 46, len(candles))):
                         hi = candles[k]["high"]
                         lo = candles[k]["low"]
                         if is_buy:
                             if lo <= sl:
-                                result = "HIT_SL"; exit_p = sl; exit_i = k; break
+                                result = "HIT_SL"; exit_p = sl; break
                             if hi >= t2:
-                                result = "HIT_T2"; exit_p = t2; exit_i = k; break
+                                result = "HIT_T2"; exit_p = t2; break
                             if hi >= t1:
-                                result = "HIT_T1"; exit_p = t1; exit_i = k; break
+                                result = "HIT_T1"; exit_p = t1; break
                         else:
                             if hi >= sl:
-                                result = "HIT_SL"; exit_p = sl; exit_i = k; break
+                                result = "HIT_SL"; exit_p = sl; break
                             if lo <= t2:
-                                result = "HIT_T2"; exit_p = t2; exit_i = k; break
+                                result = "HIT_T2"; exit_p = t2; break
                             if lo <= t1:
-                                result = "HIT_T1"; exit_p = t1; exit_i = k; break
+                                result = "HIT_T1"; exit_p = t1; break
 
                     pnl_pct = 0.0
                     if exit_p:
                         pnl_pct = round((exit_p - entry) / entry * 100 * (1 if is_buy else -1), 3)
 
-                    candle_time = c["date"]
+                    candle_time = ct
                     if hasattr(candle_time, "strftime"):
                         candle_time = candle_time.strftime("%Y-%m-%d %H:%M")
                     else:
@@ -1276,26 +1378,51 @@ async def spikes_backtest(from_date: str = None, to_date: str = None):
                         "t2":       t2,
                         "result":   result,
                         "pnl_pct":  pnl_pct,
+                        "score":    score,
                     })
 
                     summary["total"] += 1
-                    if result == "HIT_T1":  summary["hit_t1"] += 1
+                    if result == "HIT_T1":   summary["hit_t1"] += 1
                     elif result == "HIT_T2": summary["hit_t2"] += 1
                     elif result == "HIT_SL": summary["hit_sl"] += 1
                     else:                    summary["expired"] += 1
 
+                    score_accumulator.append(score)
+
+                    # Mark cooldown
+                    last_signal_min[dt] = candle_min
+
             # sort by time desc
             results.sort(key=lambda x: x["time"], reverse=True)
 
-            hits    = summary["hit_t1"] + summary["hit_t2"]
-            win_rate = round(hits / summary["total"] * 100, 1) if summary["total"] else 0
-            avg_pnl  = round(sum(r["pnl_pct"] for r in results) / len(results), 3) if results else 0
+            hits      = summary["hit_t1"] + summary["hit_t2"]
+            win_rate  = round(hits / summary["total"] * 100, 1) if summary["total"] else 0
+            avg_pnl   = round(sum(r["pnl_pct"] for r in results) / len(results), 3) if results else 0
+            avg_score = round(sum(score_accumulator) / len(score_accumulator), 1) if score_accumulator else 0
+            expect    = round(
+                (hits / summary["total"] * (0.003 + 0.006) / 2 -
+                 summary["hit_sl"] / summary["total"] * 0.0025) * 100, 3
+            ) if summary["total"] else 0
 
             return {
-                "summary":  {**summary, "win_rate": win_rate, "avg_pnl": avg_pnl},
-                "results":  results[:500],   # cap at 500 rows
+                "summary":  {**summary, "win_rate": win_rate, "avg_pnl": avg_pnl,
+                             "expectancy_pct": expect, "avg_score": avg_score},
+                "results":  results[:500],
                 "from_date": from_date,
                 "to_date":   to_date,
+                "params": {
+                    "vol_min": vol_min,
+                    "price_min": price_min,
+                    "trend_filter": trend_filter,
+                    "time_from": time_from,
+                    "time_to": time_to,
+                    "min_score": min_score,
+                    "sl_pct": 0.25,
+                    "t1_pct": 0.30,
+                    "t2_pct": 0.60,
+                    "exit_candles": 45,
+                    "cooldown_min": 20,
+                },
             }
 
         data = await loop.run_in_executor(None, _run)
@@ -1354,6 +1481,42 @@ async def telegram_test():
         if data.get("ok"):
             return JSONResponse({"ok": True, "message": "Test message sent successfully"})
         return JSONResponse({"ok": False, "error": data.get("description", "Unknown Telegram error")}, status_code=502)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=502)
+
+
+# ─── WHATSAPP ─────────────────────────────────────────────────────────────────
+@app.post("/api/whatsapp/test")
+async def whatsapp_test():
+    """Send a test WhatsApp message via CallMeBot to verify phone and API key."""
+    from config import WHATSAPP_PHONE, WHATSAPP_APIKEY
+
+    if not WHATSAPP_PHONE or not WHATSAPP_APIKEY:
+        return JSONResponse(
+            {"ok": False, "error": "WHATSAPP_PHONE or WHATSAPP_APIKEY not set in .env"},
+            status_code=400,
+        )
+
+    msg = (
+        f"NSE EDGE — WhatsApp test\n"
+        f"Bot connected. Alerts active.\n"
+        f"Verdict: {signals.state['verdict']}  Gates: {signals.state['pass_count']}/5"
+    )
+    try:
+        import requests as _req
+        import urllib.parse
+        encoded = urllib.parse.quote(msg)
+        loop = asyncio.get_event_loop()
+        def _get():
+            return _req.get(
+                f"https://api.callmebot.com/whatsapp.php?phone={WHATSAPP_PHONE}"
+                f"&text={encoded}&apikey={WHATSAPP_APIKEY}",
+                timeout=8,
+            )
+        resp = await loop.run_in_executor(None, _get)
+        if resp.status_code == 200:
+            return JSONResponse({"ok": True, "message": "WhatsApp test message sent"})
+        return JSONResponse({"ok": False, "error": f"CallMeBot returned HTTP {resp.status_code}"}, status_code=502)
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=502)
 

@@ -16,19 +16,24 @@ logger = logging.getLogger("backtest")
 # ─── HISTORICAL GATE RECONSTRUCTION ───────────────────────────────────────────
 def _g1(vix: float, vix_chg: float, fii_net: float) -> dict:
     score = 100
-    if vix >= TH["vix_high"]:       score -= 50
-    elif vix >= TH["vix_medium"]:   score -= 25
-    elif vix >= TH["vix_low"]:      score -= 10
-    if fii_net < -1000:             score -= 20
-    elif fii_net < 0:               score -= 10
-    if vix_chg > 5:                 score -= 10
+    # VERY STRICT - only trade in VERY low VIX
+    if vix >= TH["vix_high"]:       score -= 80
+    elif vix >= TH["vix_medium"]:   score -= 60
+    elif vix >= TH["vix_low"]:      score -= 40
+    # FII scoring
+    if fii_net < -30000:            score -= 35
+    elif fii_net < -15000:          score -= 25
+    elif fii_net < 0:               score -= 15
+    if vix_chg > 12:                score -= 20
+    elif vix_chg > 8:               score -= 10
     score = max(0, min(100, score))
 
-    if vix >= TH["vix_high"] or fii_net < -2000:
+    # Only GO in VERY low VIX
+    if vix >= TH["vix_high"]:
         st = "st"
-    elif vix >= TH["vix_medium"] or fii_net < 0:
+    elif vix >= TH["vix_medium"]:
         st = "am"
-    elif score >= 70:
+    elif score >= 45 and vix <= 11:
         st = "go"
     else:
         st = "wt"
@@ -38,17 +43,20 @@ def _g1(vix: float, vix_chg: float, fii_net: float) -> dict:
 def _g2(pcr: float, call_oi: int, put_oi: int) -> dict:
     net   = put_oi - call_oi
     score = 60
-    if pcr >= TH["pcr_bullish"]:   score += 25
+    # VERY STRICT PCR - require strong bullish
+    if pcr >= TH["pcr_bullish"]:   score += 45
+    elif pcr >= 1.15:              score += 30
+    elif pcr >= 1.0:               score += 15
     elif pcr <= TH["pcr_bearish"]: score -= 25
-    if net > 100_000:              score += 15
-    elif net < -100_000:           score -= 15
+    if net > 150_000:             score += 20
+    elif net > 75_000:            score += 10
+    elif net < -100_000:          score -= 15
     score = max(0, min(100, score))
 
-    if score <= 35 or pcr <= TH["pcr_bearish"]:
+    # Only GO with strong PCR
+    if pcr <= TH["pcr_bearish"]:
         st = "st"
-    elif score >= 75:          # strong score (bullish PCR + bullish OI net)
-        st = "go"
-    elif score >= 60 and pcr >= TH["pcr_bullish"]:  # PCR alone sufficient at moderate score
+    elif score >= 65 and pcr >= 1.15:
         st = "go"
     elif score >= 55:
         st = "am"
@@ -65,65 +73,63 @@ def _g3(close: float, high: float, low: float) -> dict:
     pos_pct = (close - low) / rng * 100
 
     score = 60
-    if pct > 0.1:       score += 20
-    elif pct < -0.15:   score -= 20
-    if pos_pct >= 60:   score += 15
-    elif pos_pct < 40:  score -= 10
+    if pct > 0.05:       score += 20
+    elif pct < -0.10:   score -= 15
+    if pos_pct >= 55:   score += 15
+    elif pos_pct < 35:  score -= 10
     score = max(0, min(100, score))
 
-    st = "go" if score >= 70 else "am" if score >= 50 else "st"
+    st = "go" if score >= 55 else "am" if score >= 40 else "st"
     return {"state": st, "score": score}
 
 
 def _g4(close: float, prev_close: float, volume: int, avg_vol: float) -> dict:
-    """Momentum from daily % change + volume vs 20-day average.
-    NIFTY index has no volume in Kite — falls back to price momentum only."""
+    """Momentum from daily % change + volume vs 20-day average."""
     chg_pct  = (close - prev_close) / prev_close * 100 if prev_close else 0
     no_vol   = avg_vol == 0 or volume == 0
 
     if no_vol:
-        # Price-only mode: use daily % move as trigger
         abs_chg = abs(chg_pct)
         score = 50
-        if abs_chg >= 1.0:   score += 30   # strong move
-        elif abs_chg >= 0.5: score += 15   # moderate move
-        elif abs_chg >= 0.3: score += 5    # weak move
-        else:                 score -= 10   # flat — no trigger
+        if abs_chg >= 1.0:   score += 35
+        elif abs_chg >= 0.5: score += 20
+        elif abs_chg >= 0.3: score += 10
         score = max(0, min(100, score))
-        st = "go" if score >= 70 else "wt" if score >= 45 else "am"
+        st = "go" if score >= 70 else "wt" if score >= 50 else "am"
     else:
         vol_mult = volume / avg_vol
         score = 50
-        if vol_mult >= TH["vol_surge_min"]: score += 20
-        elif vol_mult >= 1.0:               score += 5
-        if abs(chg_pct) >= 0.5:            score += 10
-        if vol_mult >= 2.0:                 score += 10
+        if vol_mult >= TH["vol_surge_min"]: score += 30
+        elif vol_mult >= 1.2:               score += 15
+        if abs(chg_pct) >= 0.5:            score += 20
+        elif abs(chg_pct) >= 0.3:          score += 10
         score = max(0, min(100, score))
-        st = "go" if score >= 70 else "wt" if score >= 45 else "am"
+        st = "go" if score >= 65 else "wt" if score >= 45 else "am"
 
     return {"state": st, "score": score}
 
 
 def _g5(close: float, atr: float, vix: float, mode: str = "intraday") -> dict:
-    """ATR-based stop/target. No live chain → default 1:2.5 R:R."""
+    """ATR-based stop/target. High R:R for high win rate."""
     if vix < TH["vix_low"]:       mult = 1.0
-    elif vix < TH["vix_medium"]:  mult = 0.75
-    elif vix < TH["vix_high"]:    mult = 0.50
-    else:                          mult = 0.25
+    elif vix < TH["vix_medium"]:  mult = 0.5
+    elif vix < TH["vix_high"]:   mult = 0.25
+    else:                          mult = 0.0
 
     stop_pts = atr * TH["atr_multiplier"]
-    rr       = 2.5   # default when no live chain data
+    rr       = 2.5
     rr_min   = TH["rr_min_intraday"] if mode == "intraday" else TH["rr_min_positional"]
 
     score = 60
-    if rr >= rr_min:              score += 30
-    elif rr >= rr_min * 0.8:      score += 10
-    else:                          score -= 30
-    if mult < 0.5:                 score -= 20
+    if rr >= rr_min:              score += 40
+    elif rr >= rr_min * 0.85:    score += 25
+    elif rr >= 2.0:              score += 10
+    if mult < 0.5:                score -= 25
+    if mult == 0:                  score = 0
     score = max(0, min(100, score))
 
-    st = "go" if (rr >= rr_min and mult >= 0.25) else \
-         "st" if (rr < 1.5 or mult <= 0.0) else "am"
+    st = "go" if (rr >= rr_min * 0.85 and mult >= 0.5) else \
+         "st" if (rr < 1.8 or mult < 0.25) else "am"
     return {"state": st, "score": score}
 
 

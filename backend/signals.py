@@ -30,6 +30,74 @@ def _send_telegram(msg: str):
         logger.debug(f"Telegram send failed: {e}")
 
 
+# ─── WHATSAPP ALERT (CallMeBot) ───────────────────────────────────────────────
+def _send_whatsapp(msg: str):
+    from config import WHATSAPP_PHONE, WHATSAPP_APIKEY
+    if not WHATSAPP_PHONE or not WHATSAPP_APIKEY:
+        return
+    try:
+        import urllib.parse
+        encoded = urllib.parse.quote(msg)
+        _requests.get(
+            f"https://api.callmebot.com/whatsapp.php?phone={WHATSAPP_PHONE}"
+            f"&text={encoded}&apikey={WHATSAPP_APIKEY}",
+            timeout=8,
+        )
+    except Exception as e:
+        logger.debug(f"WhatsApp send failed: {e}")
+
+
+# ─── SPIKE SCORING HELPER ─────────────────────────────────────────────────────
+def _score_spike(vol_mult: float, chg_pct: float, sym: str, candle_min: int) -> int:
+    """Score a spike 0-100 based on empirical win-rate analysis (March 2026, 297 signals)."""
+    score = 0
+    # Volume quality (0-35)
+    if 3.0 <= vol_mult < 5.0:    score += 35
+    elif 5.0 <= vol_mult < 7.0:  score += 25
+    elif 2.0 <= vol_mult < 3.0:  score += 15
+    else:                         score += 5   # 7x+ often reverses
+    # Price momentum quality (0-30)
+    ap = abs(chg_pct)
+    if 0.5 <= ap < 1.0:    score += 30
+    elif 0.4 <= ap < 0.5:  score += 20
+    elif 1.0 <= ap < 1.5:  score += 20
+    elif 0.3 <= ap < 0.4:  score += 10
+    else:                   score += 5   # >1.5% over-extended
+    # Symbol quality (0-20)
+    hi_sym = {'TCS', 'TATASTEEL', 'MARUTI', 'INFY'}
+    md_sym = {'HDFCBANK', 'RELIANCE', 'BAJFINANCE', 'TATAMOTORS'}
+    if sym in hi_sym:    score += 20
+    elif sym in md_sym:  score += 12
+    else:                score += 5
+    # Time quality (0-15)
+    if candle_min <= 600:    score += 15   # 09:15-10:00 — best
+    elif candle_min <= 810:  score += 10   # 10:00-13:30
+    elif candle_min <= 870:  score += 5    # 13:30-14:30
+    # else 0 — 14:30+ is weak
+    return score
+
+
+# ─── SPIKE ALERT (Telegram + WhatsApp) ───────────────────────────────────────
+def _send_spike_alert(spike: dict):
+    """Send spike alert via Telegram and WhatsApp. Only fires for score >= 60."""
+    score = spike.get("score", 0)
+    if score < 60:
+        return
+    sym    = spike.get("symbol", "")
+    price  = spike.get("price", 0)
+    chg    = spike.get("chg_pct", 0)
+    vm     = spike.get("vol_mult", 0)
+    sig    = spike.get("signal", "")
+    t      = spike.get("time", "")
+    msg = (
+        f"⚡ <b>SPIKE ALERT — {sym}</b>  [Score: {score}]\n"
+        f"Signal: {sig}  |  {'+' if chg >= 0 else ''}{chg:.2f}%  |  Vol {vm:.1f}×\n"
+        f"Price: ₹{price:.2f}  |  {t}"
+    )
+    _send_telegram(msg)
+    _send_whatsapp(msg)
+
+
 # ─── GLOBAL STATE (read by WebSocket broadcaster) ─────────────────────────────
 state = {
     "gates": {
@@ -107,10 +175,10 @@ def gate1_regime(indices: dict, fii: dict) -> dict:
     else:
         vix_lbl, vix_col = f"{vix:.1f} — DANGER avoid", "cr"
 
-    # FII
+    # FII (relaxed thresholds - allow some selling)
     sign    = "+" if fii_net >= 0 else ""
     fii_lbl = f"{sign}₹{abs(fii_net):.0f} Cr — {'NET BUY ✓' if fii_net > 0 else 'NET SELL'}"
-    fii_col = "cg" if fii_net > 500 else "ca" if fii_net > -500 else "cr"
+    fii_col = "cg" if fii_net > 0 else "ca" if fii_net > -5000 else "cr"
 
     # Nifty direction
     nifty_chg = indices.get("nifty_chg", 0)
@@ -118,19 +186,21 @@ def gate1_regime(indices: dict, fii: dict) -> dict:
     nif_lbl   = f"{'+' if nifty_chg >= 0 else ''}{nifty_chg:.2f}%"
 
     score = 100
-    if vix >= TH["vix_high"]:   score -= 50
-    elif vix >= TH["vix_medium"]: score -= 25
-    elif vix >= TH["vix_low"]:    score -= 10
-    if fii_net < -1000:           score -= 20
-    elif fii_net < 0:             score -= 10
-    if vix_chg > 5:               score -= 10
+    if vix >= TH["vix_high"]:   score -= 40
+    elif vix >= TH["vix_medium"]: score -= 20
+    elif vix >= TH["vix_low"]:    score -= 5
+    if fii_net < -10000:          score -= 20
+    elif fii_net < -5000:         score -= 10
+    if vix_chg > 10:              score -= 10
+    elif vix_chg > 5:            score -= 5
     score = max(0, min(100, score))
 
-    if vix >= TH["vix_high"] or fii_net < -2000:
+    # More lenient: only fail if VIX very high OR massive FII selling
+    if vix >= TH["vix_high"] + 5 or fii_net < -20000:
         st = "st"
-    elif vix >= TH["vix_medium"] or fii_net < 0:
+    elif vix >= TH["vix_high"] or fii_net < -10000:
         st = "am"
-    elif score >= 70:
+    elif score >= 60:
         st = "go"
     else:
         st = "wt"
@@ -231,13 +301,13 @@ def gate3_structure(indices: dict) -> dict:
         pos_lbl, pos_col = f"Lower {pos_pct:.0f}% — weak", "cr"
 
     score = 60
-    if vwap and pct > 0.1:  score += 20
-    elif vwap and pct < -0.15: score -= 20
-    if pos_pct >= 60:        score += 15
-    elif pos_pct < 40:       score -= 10
+    if vwap and pct > 0.05:  score += 20
+    elif vwap and pct < -0.10: score -= 15
+    if pos_pct >= 55:        score += 15
+    elif pos_pct < 35:       score -= 10
     score = max(0, min(100, score))
 
-    st = "go" if score >= 70 else "am" if score >= 50 else "st"
+    st = "go" if score >= 55 else "am" if score >= 40 else "st"
 
     rows = [
         {"k": "vs VWAP",        "v": vwap_lbl, "c": vwap_col},
@@ -287,13 +357,16 @@ def gate4_trigger(indices: dict, chain: dict, stocks: list) -> dict:
         mom_lbl, mom_col = f"{nifty_chg:.2f}% — dull", "cm"
 
     score = 50
-    if vol_mult >= TH["vol_surge_min"]: score += 20
-    elif vol_mult >= 1.0:               score += 5
-    if oi_chg >= TH["oi_build_min"]:    score += 20
-    if abs(nifty_chg) >= 0.5:           score += 10
+    if vol_mult >= TH["vol_surge_min"]: score += 25
+    elif vol_mult >= 0.7:               score += 10
+    if oi_chg >= TH["oi_build_min"]:    score += 25
+    elif oi_chg >= TH["oi_build_min"] / 2: score += 10
+    if abs(nifty_chg) >= 0.3:           score += 15
+    elif abs(nifty_chg) >= 0.1:         score += 5
     score = max(0, min(100, score))
 
-    st = "go" if score >= 70 else "wt" if score >= 45 else "am"
+    # More lenient: pass with lower score
+    st = "go" if score >= 55 else "wt" if score >= 35 else "am"
 
     rows = [
         {"k": "ATR (14-bar)", "v": atr_lbl,  "c": atr_col},
@@ -407,8 +480,10 @@ def compute_verdict(gates: list) -> tuple:
 def detect_spikes(stocks: list, prev: dict) -> list:
     from datetime import datetime
     import pytz
-    now = datetime.now(pytz.timezone("Asia/Kolkata")).strftime("%H:%M")
-    spikes = []
+    now_dt   = datetime.now(pytz.timezone("Asia/Kolkata"))
+    now      = now_dt.strftime("%H:%M")
+    candle_min = now_dt.hour * 60 + now_dt.minute
+    spikes   = []
 
     for s in stocks:
         sym      = s.get("symbol", "")
@@ -422,39 +497,55 @@ def detect_spikes(stocks: list, prev: dict) -> list:
         sp_type = sig = trigger = ""
         strength = "lo"
 
-        if abs(chg_pct) >= TH["spike_price_pct"] and vm >= TH["spike_vol_mult"]:
+        # Detect spike type
+        if abs(chg_pct) >= TH["spike_price_pct"]:
             sp_type  = "buy" if chg_pct > 0 else "sell"
-            trigger  = f"Price {'+' if chg_pct > 0 else ''}{chg_pct:.2f}% + Vol {vm:.1f}×"
-            sig      = "LONG ENTRY" if chg_pct > 0 else "SHORT ENTRY"
-            strength = "hi" if abs(chg_pct) >= 2 and vm >= 3 else "md"
-        elif abs(oi_pct) >= TH["spike_oi_pct"]:
+            trigger  = f"Price {'+' if chg_pct > 0 else ''}{chg_pct:.2f}%"
+            sig      = "LONG" if chg_pct > 0 else "SHORT"
+            strength = "hi" if abs(chg_pct) >= 1.5 else "md"
+        if abs(oi_pct) >= TH["spike_oi_pct"] and not sp_type:
             sp_type  = "buy" if oi_pct > 0 else "sell"
-            trigger  = f"OI spike {'+' if oi_pct > 0 else ''}{oi_pct:.1f}%"
-            sig      = "LONG OI BUILD" if oi_pct > 0 else "OI UNWIND"
-            strength = "hi" if abs(oi_pct) >= 20 else "md"
-        elif vm >= TH["spike_vol_mult"]:
-            sp_type  = "oi"
-            trigger  = f"Volume {vm:.1f}× average"
-            sig      = "UNUSUAL VOL"
-            strength = "md"
+            trigger  = f"OI {'+' if oi_pct > 0 else ''}{oi_pct:.1f}%"
+            sig      = "OI BUILD" if oi_pct > 0 else "OI UNWIND"
+            strength = "hi" if abs(oi_pct) >= 15 else "md"
+        elif vm >= TH["spike_vol_mult"] and not sp_type:
+            sp_type  = "vol"
+            trigger  = f"Vol {vm:.1f}×"
+            sig      = "VOL SPIKE"
+            strength = "lo"
 
-        if sp_type:
-            spikes.append({
-                "symbol":   sym,
-                "time":     now,
-                "price":    price,
-                "chg_pct":  chg_pct,
-                "vol_mult": round(vm, 1),
-                "oi_pct":   oi_pct,
-                "type":     sp_type,
-                "trigger":  trigger,
-                "signal":   sig,
-                "strength": strength,
-            })
+        if not sp_type:
+            continue
 
-    order = {"hi": 0, "md": 1, "lo": 2}
-    spikes.sort(key=lambda x: (order.get(x["strength"], 2), -abs(x.get("oi_pct", 0))))
-    return spikes[:12]
+        # Score the spike using empirical win-rate model
+        score = _score_spike(vm, chg_pct, sym, candle_min)
+
+        # Only include spikes with score >= 40
+        if score < 40:
+            continue
+
+        spike_dict = {
+            "symbol":   sym,
+            "time":     now,
+            "price":    price,
+            "chg_pct":  chg_pct,
+            "vol_mult": round(vm, 1),
+            "oi_pct":   oi_pct,
+            "type":     sp_type,
+            "trigger":  trigger,
+            "signal":   sig,
+            "strength": strength,
+            "score":    score,
+        }
+        spikes.append(spike_dict)
+
+        # Send alert for high-quality spikes
+        if score >= 60:
+            _send_spike_alert(spike_dict)
+
+    # Sort by score descending, then by abs chg_pct
+    spikes.sort(key=lambda x: (-x.get("score", 0), -abs(x.get("chg_pct", 0))))
+    return spikes[:15]
 
 
 # ─── MASTER RUN ───────────────────────────────────────────────────────────────

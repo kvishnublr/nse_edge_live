@@ -151,31 +151,35 @@ INTERVAL_STOCKS  = 30   # FnO stock OI refresh
 INTERVAL_FII     = 300  # FII/DII from NSE (updates ~hourly anyway)
 INTERVAL_SPIKES  = 10   # spike detection
 
-# ─── GATE THRESHOLDS (tune based on your trading style) ───────────────────────
+# ─── GATE THRESHOLDS (80% WIN RATE TARGET) ───────────────────────
 GATE = {
-    # G1 — Regime (optimizer: best PF=5.92 @ vix 10/15/20)
-    "vix_low":           10.0,   # full size
-    "vix_medium":        15.0,   # 75% size
-    "vix_high":          20.0,   # 50% size / avoid
-    # G2 — Smart Money (pcr_bullish lowered: 1.0 passes on neutral/bullish OI)
-    "pcr_bullish":        1.0,
-    "pcr_bearish":        0.7,
-    # G4 — Trigger (optimizer: best PF=5.92 @ vol 1.3x)
-    "vol_surge_min":      1.3,   # volume × average
-    "oi_build_min":    5000,     # OI build contracts
-    # G5 — Risk (positional lowered to 2.5 to allow realistic R:R; intraday unchanged)
-    "rr_min_intraday":    2.0,
-    "rr_min_positional":  2.5,
+    # G1 — Regime (relaxed to match 2025 profitable regime)
+    "vix_low":           11.0,   # full size below 11 (2025 was profitable)
+    "vix_medium":        12.0,   # 25% size
+    "vix_high":          15.0,   # BLOCK above 15
+    # G2 — Smart Money (VERY strict PCR)
+    "pcr_bullish":        1.25,   # strongly bullish
+    "pcr_bearish":        0.45,
+    # G4 — Trigger (strict)
+    "vol_surge_min":      1.4,
+    "oi_build_min":    6000,
+    # G5 — Risk (much stricter R:R for 80% WR target)
+    "rr_min_intraday":    3.0,
+    "rr_min_positional":  3.5,
     "atr_multiplier":     1.5,
     # Spike detection
-    "spike_price_pct":    1.5,
-    "spike_vol_mult":     2.5,
-    "spike_oi_pct":      12.0,
+    "spike_price_pct":    1.2,
+    "spike_vol_mult":     2.0,
+    "spike_oi_pct":       12.0,
 }
 
 # ─── TELEGRAM ALERTS ──────────────────────────────────────────────────────────
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID",   "").strip()
+
+# ─── WHATSAPP ALERTS (CallMeBot — free) ───────────────────────────────────────
+WHATSAPP_PHONE  = os.getenv("WHATSAPP_PHONE",  "").strip()
+WHATSAPP_APIKEY = os.getenv("WHATSAPP_APIKEY", "").strip()
 
 # ─── SESSION ZONES (IST minutes from midnight) ────────────────────────────────
 ZONES = {

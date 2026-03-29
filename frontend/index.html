@@ -584,6 +584,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <button class="sound-btn on" id="sound-tog" onclick="toggleSound()" title="Sound alerts (EXECUTE signal)"></button>
     <button onclick="exportCSV()" title="Export visible data as CSV" style="padding:2px 8px;font-family:var(--fn);font-size:8px;font-weight:600;border:1px solid var(--b1);border-radius:3px;cursor:pointer;color:var(--t1);background:transparent;letter-spacing:.5px">⬇ CSV</button>
     <button onclick="testTelegram()" title="Test Telegram alert" style="padding:2px 8px;font-family:var(--fn);font-size:8px;border:1px solid var(--b1);border-radius:3px;cursor:pointer;color:var(--t2);background:transparent">✈ TG</button>
+    <button onclick="testWhatsapp()" title="Test WhatsApp alert" style="padding:2px 8px;font-family:var(--fn);font-size:8px;border:1px solid var(--b1);border-radius:3px;cursor:pointer;color:var(--t2);background:transparent">📱 WA</button>
     <button onclick="showShortcuts()" title="Keyboard shortcuts (Press ?)" style="padding:2px 8px;font-family:var(--fn);font-size:8px;border:1px solid var(--b1);border-radius:3px;cursor:pointer;color:var(--t2);background:transparent">⌨</button>
     <button class="theme-tog" id="theme-tog" onclick="toggleTheme()" title="Toggle light/dark mode"></button>
   </div>
@@ -962,20 +963,48 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <!-- BACKTEST panel -->
     <div id="sr-bt-panel" style="display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden">
 
-      <!-- Controls -->
-      <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--b1);flex-shrink:0;flex-wrap:wrap">
+      <!-- Controls row 1: date range -->
+      <div style="display:flex;align-items:center;gap:6px;padding:6px 10px;border-bottom:1px solid var(--b1);flex-shrink:0">
         <span style="font-size:7.5px;color:var(--t2);letter-spacing:1px">FROM</span>
         <input type="date" id="srbt-from" class="jfi" style="font-size:8px;padding:3px 6px;background:var(--s2);border:1px solid var(--b1);color:var(--t0);border-radius:3px">
         <span style="font-size:7.5px;color:var(--t2);letter-spacing:1px">TO</span>
         <input type="date" id="srbt-to" class="jfi" style="font-size:8px;padding:3px 6px;background:var(--s2);border:1px solid var(--b1);color:var(--t0);border-radius:3px">
         <button onclick="srBtRun()" style="padding:4px 12px;font-family:var(--fn);font-size:8px;font-weight:700;letter-spacing:1px;border:1px solid var(--bl);color:var(--bl);background:var(--bl-d);border-radius:3px;cursor:pointer">▶ RUN</button>
         <span id="srbt-status" style="font-size:7.5px;color:var(--t2)"></span>
-        <span style="margin-left:auto;font-size:7px;color:var(--t3)">Max 30 days · 1-min candles · T1=+0.3% T2=+0.6% SL=−0.25%</span>
+        <span style="margin-left:auto;font-size:7px;color:var(--t3)">Max 30 days · 1-min candles</span>
+      </div>
+      <!-- Controls row 2: filter params -->
+      <div style="display:flex;align-items:center;gap:10px;padding:5px 10px;border-bottom:1px solid var(--b1);flex-shrink:0;flex-wrap:wrap;background:var(--s2)">
+        <div style="display:flex;align-items:center;gap:4px">
+          <span style="font-size:7px;color:var(--t2)">VOL≥</span>
+          <input type="number" id="srbt-volmin" value="3.0" step="0.5" min="1.5" max="10" style="width:44px;font-size:8px;padding:2px 4px;background:var(--s3);border:1px solid var(--b1);color:var(--t0);border-radius:2px;text-align:center">
+          <span style="font-size:7px;color:var(--t2)">×</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <span style="font-size:7px;color:var(--t2)">MOVE≥</span>
+          <input type="number" id="srbt-pricemin" value="0.6" step="0.1" min="0.3" max="3" style="width:40px;font-size:8px;padding:2px 4px;background:var(--s3);border:1px solid var(--b1);color:var(--t0);border-radius:2px;text-align:center">
+          <span style="font-size:7px;color:var(--t2)">%</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <span style="font-size:7px;color:var(--t2)">TIME</span>
+          <input type="time" id="srbt-tfrom" value="09:30" style="width:58px;font-size:8px;padding:2px 4px;background:var(--s3);border:1px solid var(--b1);color:var(--t0);border-radius:2px">
+          <span style="font-size:7px;color:var(--t2)">→</span>
+          <input type="time" id="srbt-tto" value="14:30" style="width:58px;font-size:8px;padding:2px 4px;background:var(--s3);border:1px solid var(--b1);color:var(--t0);border-radius:2px">
+        </div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="srbt-trend" checked style="cursor:pointer">
+          <label for="srbt-trend" style="font-size:7.5px;color:var(--t1);cursor:pointer">Trend filter</label>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <span style="font-size:7px;color:var(--t2)">MIN SCORE</span>
+          <input type="number" id="srbt-minscore" value="45" step="5" min="0" max="100" style="width:40px;font-size:8px;padding:2px 4px;background:var(--s3);border:1px solid var(--b1);color:var(--t0);border-radius:2px;text-align:center">
+        </div>
+        <div style="margin-left:auto;font-size:7px;color:var(--t2)">SL −0.25% · T1 +0.30% · T2 +0.60% · 45-min window · entry = next candle open</div>
       </div>
 
       <!-- Summary cards -->
       <div id="srbt-summary" style="display:none;flex-shrink:0;padding:8px 10px;border-bottom:1px solid var(--b1)">
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <div class="sr-stat"><span class="sr-stat-val" id="srbt-total" style="color:var(--t0)">0</span><span class="sr-stat-lbl">SPIKES</span></div>
           <div style="width:1px;background:var(--b1);margin:2px 0"></div>
           <div class="sr-stat"><span class="sr-stat-val" id="srbt-wr" style="color:var(--go)">0%</span><span class="sr-stat-lbl">WIN RATE</span></div>
@@ -984,6 +1013,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
           <div class="sr-stat"><span class="sr-stat-val" id="srbt-sl" style="color:var(--st)">0</span><span class="sr-stat-lbl">HIT SL</span></div>
           <div class="sr-stat"><span class="sr-stat-val" id="srbt-exp" style="color:var(--t2)">0</span><span class="sr-stat-lbl">EXPIRED</span></div>
           <div class="sr-stat"><span class="sr-stat-val" id="srbt-apnl" style="color:var(--bl)">0%</span><span class="sr-stat-lbl">AVG P&L</span></div>
+          <div class="sr-stat"><span class="sr-stat-val" id="srbt-exp2" style="color:var(--am)">0%</span><span class="sr-stat-lbl">EXPECTANCY</span></div>
+          <div class="sr-stat"><span class="sr-stat-val" id="srbt-avgscore" style="color:var(--bl)">—</span><span class="sr-stat-lbl">AVG SCORE</span></div>
         </div>
       </div>
 
@@ -998,7 +1029,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
               <th>SYMBOL</th><th>TIME</th><th>TYPE</th>
               <th>VOL×</th><th>CHG%</th>
               <th>ENTRY</th><th>SL</th><th>T1</th><th>T2</th>
-              <th>RESULT</th><th>P&L%</th>
+              <th>RESULT</th><th>P&L%</th><th>SCORE</th>
             </tr>
           </thead>
           <tbody id="srbt-tbody"></tbody>
@@ -1419,7 +1450,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
         <div style="overflow-x:auto;margin-top:6px">
           <table class="atbl">
             <thead><tr>
-              <th>DATE</th><th>VERDICT</th><th>GATES</th>
+              <th>DATE</th><th>TIME</th><th>VERDICT</th><th>GATES</th>
               <th>NIFTY</th><th>VIX</th><th>PCR</th>
               <th>G1</th><th>G2</th><th>G3</th><th>G4</th><th>G5</th>
               <th>ENTRY</th><th>TARGET</th><th>STOP</th><th>EXIT</th><th>P&amp;L</th><th>RESULT</th>
@@ -2920,9 +2951,26 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
               '</tr>';
           }).join('');
         }
-        // Update playbook PCR badge
-        const ico = document.querySelector('.ico');
-        if(ico) ico.textContent = 'PCR ' + pcr.toFixed(2);
+        // Update ALL instrument card .ico badges from chain data
+        const _icos = document.querySelectorAll('.ico');
+        const _icsList = document.querySelectorAll('.ics');
+        // NIFTY card (index 0): show PCR
+        if(_icos[0]) _icos[0].textContent = 'PCR ' + pcr.toFixed(2);
+        // NIFTY bias badge: bullish PCR = LONG, bearish = SHORT
+        if(_icsList[0]){
+          const nBias = pcr >= 1.1 ? 'LONG BIAS' : pcr <= 0.8 ? 'SHORT BIAS' : 'NEUTRAL';
+          _icsList[0].textContent = nBias;
+          _icsList[0].className = 'ics ' + (pcr >= 1.1 ? 'bg' : pcr <= 0.8 ? 'br' : 'ba');
+        }
+        // BANKNIFTY card (index 1): show PCR from chain (same market-wide PCR until BN chain available)
+        if(_icos[1]){
+          const bnOI = d.total_put_oi && d.total_call_oi
+            ? ((d.total_put_oi - d.total_call_oi) / Math.max(d.total_call_oi, 1) * 100)
+            : null;
+          _icos[1].textContent = bnOI != null
+            ? 'PCR ' + pcr.toFixed(2)
+            : 'PCR ' + pcr.toFixed(2);
+        }
         break;
       }
 
@@ -2966,33 +3014,58 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
         window.stocks && window.stocks.forEach(s => { stkStatic[s.s] = s; });
         // Just update price + oi columns if table exists
         const tbody = document.getElementById('stk-body');
-        if(!tbody || !tbody.children.length) break;
-        d.forEach(live => {
-          const rows = tbody.querySelectorAll('tr');
-          rows.forEach(row => {
-            const firstCell = row.querySelector('td:first-child');
-            if(firstCell && firstCell.textContent.includes(live.symbol)){
-              const cells = row.querySelectorAll('td');
-              if(cells[1]){
-                cells[1].textContent = live.price
-                  ? Math.round(live.price).toLocaleString('en-IN') : '—';
+        if(tbody && tbody.children.length) {
+          d.forEach(live => {
+            const rows = tbody.querySelectorAll('tr');
+            rows.forEach(row => {
+              const firstCell = row.querySelector('td:first-child');
+              if(firstCell && firstCell.textContent.includes(live.symbol)){
+                const cells = row.querySelectorAll('td');
+                if(cells[1]){
+                  cells[1].textContent = live.price
+                    ? Math.round(live.price).toLocaleString('en-IN') : '—';
+                }
+                if(cells[2] && live.chg_pct !== undefined){
+                  const chg = live.chg_pct;
+                  cells[2].style.color = chg >= 0 ? 'var(--go)' : 'var(--st)';
+                  cells[2].textContent = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
+                }
+                if(cells[4] && live.oi_chg_pct !== undefined){
+                  const oip = live.oi_chg_pct;
+                  cells[4].querySelector('span') &&
+                    (cells[4].querySelector('span').textContent =
+                      (oip >= 0 ? '+' : '') + oip.toFixed(1) + '%');
+                  cells[4].querySelector('span') &&
+                    (cells[4].querySelector('span').style.color = oip >= 0 ? 'var(--go)' : 'var(--st)');
+                }
               }
-              if(cells[2] && live.chg_pct !== undefined){
-                const chg = live.chg_pct;
-                cells[2].style.color = chg >= 0 ? 'var(--go)' : 'var(--st)';
-                cells[2].textContent = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
-              }
-              if(cells[4] && live.oi_chg_pct !== undefined){
-                const oip = live.oi_chg_pct;
-                cells[4].querySelector('span') &&
-                  (cells[4].querySelector('span').textContent =
-                    (oip >= 0 ? '+' : '') + oip.toFixed(1) + '%');
-                cells[4].querySelector('span') &&
-                  (cells[4].querySelector('span').style.color = oip >= 0 ? 'var(--go)' : 'var(--st)');
-              }
-            }
+            });
           });
+        }
+        // ── Update instrument card badges (BANKNIFTY, ICICIBANK, RELIANCE) ──
+        const _icMap = {'BANKNIFTY':'p1','ICICIBANK':'p2','RELIANCE':'p3'};
+        d.forEach(live => {
+          const elId = _icMap[live.symbol];
+          if(!elId) return;
+          const priceEl = document.getElementById(elId);
+          if(!priceEl) return;
+          const ic = priceEl.closest ? priceEl.closest('.ic') : priceEl.parentElement;
+          if(!ic) return;
+          const icbEl = ic.querySelector('.icb');
+          if(!icbEl) return;
+          const ics = icbEl.querySelector('.ics');
+          const ico = icbEl.querySelector('.ico');
+          const up = (live.chg_pct || 0) >= 0;
+          if(ics){ ics.textContent = up ? 'LONG BIAS' : 'SHORT BIAS'; ics.className = 'ics ' + (up ? 'bg' : 'br'); }
+          if(ico && live.oi_chg_pct != null){
+            const oip = Number(live.oi_chg_pct);
+            ico.textContent = 'OI ' + (oip >= 0 ? '+' : '') + oip.toFixed(1) + '%';
+            ico.style.color = oip >= 5 ? 'var(--go)' : oip >= 0 ? 'var(--t1)' : 'var(--st)';
+          }
         });
+        // ── Store for spike tracker ──
+        window._livePrices = window._livePrices || {};
+        d.forEach(s => { window._livePrices[s.symbol] = s; });
         break;
       }
 
@@ -3273,6 +3346,7 @@ function bt2RenderResults(data) {
     const rowStyle = isExec?'background:rgba(0,200,100,0.07)':isWatch?'background:rgba(255,180,0,0.05)':'';
     return `<tr style="${rowStyle};cursor:pointer" onclick="openChart('NIFTY','${t.date}')" title="Click to view chart for ${t.date}">
       <td style="color:var(--bl)">${t.date}</td>
+      <td style="color:var(--am);font-size:9px">${t.session || '—'}</td>
       <td style="color:${vc};font-weight:600">${vLabel}</td>
       <td style="color:${vc};font-weight:700">${t.pass_count}/5</td>
       <td style="font-weight:600">${(t.nifty||0).toFixed(0)}</td>
@@ -4061,8 +4135,21 @@ async function srBtRun() {
   document.getElementById('srbt-tbl').style.display   = 'none';
   document.getElementById('srbt-summary').style.display = 'none';
 
+  // Collect filter params
+  const volMin   = parseFloat(document.getElementById('srbt-volmin')?.value) || 2.0;
+  const priceMin = parseFloat(document.getElementById('srbt-pricemin')?.value) || 0.3;
+  const tfrom    = document.getElementById('srbt-tfrom')?.value || '09:15';
+  const tto      = document.getElementById('srbt-tto')?.value || '14:30';
+  const trendF   = document.getElementById('srbt-trend')?.checked !== false;
+  const minScore = parseInt(document.getElementById('srbt-minscore')?.value) || 45;
+
+  const url = `${API}/api/spikes/backtest?from_date=${from}&to_date=${to}`
+    + `&vol_min=${volMin}&price_min=${priceMin}`
+    + `&time_from=${encodeURIComponent(tfrom)}&time_to=${encodeURIComponent(tto)}`
+    + `&trend_filter=${trendF}&min_score=${minScore}`;
+
   try {
-    const r = await fetch(`${API}/api/spikes/backtest?from_date=${from}&to_date=${to}`);
+    const r = await fetch(url);
     const d = await r.json();
     if(d.error || d.detail || !d.summary) {
       const msg = d.error || (Array.isArray(d.detail) ? d.detail[0]?.msg : d.detail) || 'Unexpected response — check backend logs';
@@ -4080,41 +4167,56 @@ async function srBtRun() {
     document.getElementById('srbt-exp').textContent   = s.expired;
     document.getElementById('srbt-apnl').textContent  = (s.avg_pnl >= 0 ? '+' : '') + s.avg_pnl + '%';
     document.getElementById('srbt-apnl').style.color  = s.avg_pnl >= 0 ? 'var(--go)' : 'var(--st)';
-    document.getElementById('srbt-wr').style.color    = s.win_rate >= 50 ? 'var(--go)' : 'var(--st)';
+    document.getElementById('srbt-wr').style.color    = s.win_rate >= 55 ? 'var(--go)' : s.win_rate >= 45 ? 'var(--am)' : 'var(--st)';
+    const expEl = document.getElementById('srbt-exp2');
+    if(expEl && s.expectancy_pct !== undefined){
+      expEl.textContent = (s.expectancy_pct >= 0 ? '+' : '') + s.expectancy_pct + '%';
+      expEl.style.color = s.expectancy_pct >= 0 ? 'var(--am)' : 'var(--st)';
+    }
+    const avgScEl = document.getElementById('srbt-avgscore');
+    if(avgScEl && s.avg_score !== undefined){
+      avgScEl.textContent = s.avg_score;
+      avgScEl.style.color = s.avg_score >= 60 ? 'var(--go)' : s.avg_score >= 45 ? 'var(--am)' : 'var(--st)';
+    }
     document.getElementById('srbt-summary').style.display = 'flex';
 
     if(!d.results || !d.results.length) {
-      document.getElementById('srbt-empty').textContent = 'No spikes detected in this date range.';
+      document.getElementById('srbt-empty').textContent = 'No spikes detected with these filters. Try lowering Vol≥ or Move≥.';
       document.getElementById('srbt-empty').style.display = 'block';
       status.textContent = 'Done — 0 spikes'; status.style.color='var(--t2)';
       return;
     }
 
+    // Group results by date for context
     const rMap = { HIT_T2:'var(--go)', HIT_T1:'var(--bl)', HIT_SL:'var(--st)', EXPIRED:'var(--t2)' };
     const rows = d.results.map(r => {
       const rc = rMap[r.result] || 'var(--t2)';
       const pc = r.pnl_pct >= 0 ? 'var(--go)' : 'var(--st)';
       const tc = r.type === 'BUY' ? 'var(--go)' : 'var(--st)';
+      const dateStr = r.time.slice(0,10);
+      const timeStr = r.time.slice(11);
       return `<tr>
-        <td style="color:var(--t0);font-weight:700">${r.symbol}</td>
-        <td style="color:var(--t2)">${r.time.slice(11)}</td>
-        <td style="color:${tc}">${r.type}</td>
-        <td style="color:var(--am)">${r.vol_mult}×</td>
+        <td style="color:var(--t0);font-weight:700"><span class="tv-link" data-tvsym="${r.symbol}">${r.symbol}</span></td>
+        <td style="color:var(--t2);font-size:9px">${dateStr}<br><span style="color:var(--t1)">${timeStr}</span></td>
+        <td style="color:${tc};font-weight:700">${r.type}</td>
+        <td style="color:${r.vol_mult>=5?'var(--go)':r.vol_mult>=3?'var(--am)':'var(--t2)'}">${r.vol_mult}×</td>
         <td style="color:${tc}">${r.chg_pct > 0 ? '+' : ''}${r.chg_pct}%</td>
-        <td>${r.entry}</td>
-        <td style="color:var(--st)">${r.sl}</td>
-        <td style="color:var(--bl)">${r.t1}</td>
-        <td style="color:var(--go)">${r.t2}</td>
+        <td style="font-size:9px">${r.entry}</td>
+        <td style="color:var(--st);font-size:9px">${r.sl}</td>
+        <td style="color:var(--bl);font-size:9px">${r.t1}</td>
+        <td style="color:var(--go);font-size:9px">${r.t2}</td>
         <td style="color:${rc};font-weight:700">${r.result.replace('_',' ')}</td>
         <td style="color:${pc};font-weight:700">${r.pnl_pct >= 0 ? '+' : ''}${r.pnl_pct}%</td>
+        <td style="color:${r.score>=60?'var(--go)':r.score>=45?'var(--am)':'var(--st)'};font-weight:700">${r.score||'—'}</td>
       </tr>`;
     }).join('');
 
     document.getElementById('srbt-tbody').innerHTML = rows;
     document.getElementById('srbt-tbl').style.display = 'table';
     document.getElementById('srbt-empty').style.display = 'none';
-    status.textContent = `Done — ${s.total} spikes · ${s.win_rate}% win rate`;
-    status.style.color = 'var(--go)';
+    const wrColor = s.win_rate >= 55 ? '✓' : s.win_rate >= 45 ? '~' : '✗';
+    status.textContent = `Done — ${s.total} spikes · ${s.win_rate}% WR ${wrColor} · avg ${s.avg_pnl >= 0 ? '+' : ''}${s.avg_pnl}%`;
+    status.style.color = s.win_rate >= 55 ? 'var(--go)' : s.win_rate >= 45 ? 'var(--am)' : 'var(--st)';
   } catch(e) {
     status.textContent = 'Failed: ' + e.message;
     status.style.color = 'var(--st)';
@@ -4448,6 +4550,19 @@ async function testTelegram(){
     const d = await r.json();
     if(d.ok) notify('✓ Telegram message sent!');
     else notify('✗ Telegram error: ' + (d.error||'unknown'));
+  }catch(e){ notify('✗ Backend unreachable'); }
+}
+
+// ═══════════════════════════════════════════════
+// WHATSAPP TEST
+// ═══════════════════════════════════════════════
+async function testWhatsapp(){
+  try{
+    notify('Sending WhatsApp test...');
+    const r = await fetch('/api/whatsapp/test', {method:'POST'});
+    const d = await r.json();
+    if(d.ok) notify('✓ WhatsApp message sent!');
+    else notify('✗ WhatsApp error: ' + (d.error||'Set WHATSAPP_PHONE + WHATSAPP_APIKEY in .env'));
   }catch(e){ notify('✗ Backend unreachable'); }
 }
 
