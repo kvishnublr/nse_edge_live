@@ -535,17 +535,33 @@ def run_signal_engine(indices: dict, chain: dict, fii: dict,
     # ── Telegram alert on verdict change ──
     global _last_telegram_verdict
     if verdict != _last_telegram_verdict:
+        prev_verdict = _last_telegram_verdict
         _last_telegram_verdict = verdict
         if verdict == "EXECUTE":
-            nifty  = indices.get("nifty", 0)
+            nifty = indices.get("nifty", 0)
+            # Pull entry zone from gate5 rows if available
+            g5_rows = gates_dict.get(5, {}).get("rows", [])
+            entry_line = ""
+            for r in g5_rows:
+                if r.get("k") == "Target (CE wall)":
+                    entry_line += f"Target: {r['v']}  |  "
+                elif r.get("k") == "Stop distance":
+                    entry_line += f"SL: {r['v']}"
+            pos_lots = gates_dict.get(5, {}).get("position_size_lots", 0)
+            pos_rs   = gates_dict.get(5, {}).get("position_size_rupees", 0)
             msg = (
                 f"🟢 <b>NSE EDGE — EXECUTE SIGNAL</b>\n"
                 f"Nifty: <b>{nifty:.0f}</b>  |  VIX: {vix:.1f}  |  PCR: {pcr:.2f}\n"
-                f"FII: ₹{fii_net:.0f} Cr  |  Confidence: {confidence}/10\n"
-                f"All 5 gates PASS — <b>trade now</b>"
+                f"Gates: {pass_cnt}/5 PASS  |  Confidence: {confidence}/10\n"
+                f"FII: ₹{fii_net:.0f} Cr\n"
             )
+            if entry_line:
+                msg += f"{entry_line}\n"
+            if pos_lots:
+                msg += f"Size: {pos_lots} lot{'s' if pos_lots != 1 else ''} (₹{pos_rs:,})\n"
+            msg += "<b>All gates clear — trade now</b>"
             _send_telegram(msg)
-        elif verdict == "NO TRADE" and _last_telegram_verdict == "EXECUTE":
+        elif verdict == "NO TRADE" and prev_verdict == "EXECUTE":
             _send_telegram("🔴 <b>NSE EDGE — EXECUTE cancelled</b>\nGate failed — stand down.")
 
     # ── Log to DB for backtest analysis (non-blocking) ──

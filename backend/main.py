@@ -1323,6 +1323,41 @@ async def backtest_download_fii():
     return JSONResponse({"message": "FII history download started. Check /api/backtest/status."})
 
 
+# ─── TELEGRAM ─────────────────────────────────────────────────────────────────
+@app.post("/api/telegram/test")
+async def telegram_test():
+    """Send a test Telegram message to verify bot token and chat ID are correct."""
+    from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return JSONResponse(
+            {"ok": False, "error": "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set in .env"},
+            status_code=400,
+        )
+
+    msg = (
+        "✅ <b>NSE EDGE — Telegram test</b>\n"
+        "Bot is connected and alerts are active.\n"
+        f"Server verdict: <b>{signals.state['verdict']}</b>  "
+        f"Gates: {signals.state['pass_count']}/5"
+    )
+    try:
+        import requests as _req
+        loop = asyncio.get_event_loop()
+        def _post():
+            return _req.post(
+                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML"},
+                timeout=8,
+            ).json()
+        data = await loop.run_in_executor(None, _post)
+        if data.get("ok"):
+            return JSONResponse({"ok": True, "message": "Test message sent successfully"})
+        return JSONResponse({"ok": False, "error": data.get("description", "Unknown Telegram error")}, status_code=502)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=502)
+
+
 if __name__ == "__main__":
     uvicorn.run("main:app", host=HOST, port=PORT,
                 log_level="info", access_log=False, reload=False)

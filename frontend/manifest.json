@@ -1,0 +1,16 @@
+{
+  "name": "NSE EDGE — Intelligent Trading System",
+  "short_name": "NSE EDGE",
+  "description": "5-gate signal engine for NSE F&O trading",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d1520",
+  "theme_color": "#0d1520",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' fill='%230d1520'/><text x='96' y='130' font-size='100' text-anchor='middle' fill='%2300e87a'>⚡</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}

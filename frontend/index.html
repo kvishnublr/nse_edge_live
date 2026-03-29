@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>NSE EDGE — Intelligent Trading System v5</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0d1520">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
@@ -483,6 +485,76 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .vrrow{display:flex;align-items:center;justify-content:space-between;padding:4px 8px;border-radius:3px;background:var(--s2);border:1px solid var(--b1);font-size:9px;gap:6px;margin-bottom:3px}
 .vrn{font-weight:600;color:var(--t0);min-width:70px;flex-shrink:0}
 .vrv{font-weight:600;min-width:44px;text-align:right}
+
+/* P&L TRACKER */
+.pnl-card{background:var(--s2);border:1px solid var(--b1);border-radius:4px;padding:10px 12px;margin-bottom:8px}
+.pnl-hd{font-size:8px;color:var(--t2);letter-spacing:1px;margin-bottom:6px}
+.pnl-inp{background:var(--s3);border:1px solid var(--b1);color:var(--t0);font-family:var(--fn);font-size:11px;padding:5px 8px;border-radius:3px;outline:none;width:100%;transition:border-color .15s}
+.pnl-inp:focus{border-color:var(--bl)}
+.pnl-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px}
+.pnl-stat{padding:8px 10px;border-radius:3px;background:var(--s3);border:1px solid var(--b1);text-align:center}
+.pnl-sv{font-size:16px;font-weight:800;margin-bottom:2px}
+.pnl-sk{font-size:8px;color:var(--t2);letter-spacing:.5px}
+.pnl-row{display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--b1);font-size:9px}
+.pnl-row:last-child{border:none}
+.pnl-remove{background:none;border:none;color:var(--st);cursor:pointer;font-size:11px;padding:0 4px;opacity:.6}
+.pnl-remove:hover{opacity:1}
+
+/* SECTOR HEATMAP */
+.hm-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;flex:1}
+.hm-cell{border-radius:4px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;transition:transform .1s,box-shadow .1s;min-height:60px}
+.hm-cell:hover{transform:scale(1.03);box-shadow:0 0 10px rgba(0,0,0,.4)}
+.hm-sym{font-size:9px;font-weight:700;letter-spacing:.5px;text-align:center}
+.hm-pct{font-size:14px;font-weight:800}
+.hm-sec{font-size:7px;opacity:.7;letter-spacing:.3px}
+
+/* EXPIRY CALENDAR */
+.cal-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+.cal-card{padding:8px 10px;border-radius:4px;border:1px solid var(--b1);background:var(--s2)}
+.cal-label{font-size:8px;color:var(--t2);letter-spacing:1px;margin-bottom:2px}
+.cal-date{font-size:13px;font-weight:700;color:var(--t0)}
+.cal-days{font-size:8px;color:var(--am);margin-top:1px}
+.cal-event{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:3px;background:var(--s3);margin-bottom:3px;font-size:9px}
+.cal-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+
+/* KEYBOARD SHORTCUTS HELP */
+.kbd-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.kbd-row{display:flex;align-items:center;gap:6px;padding:3px 0;font-size:9px;color:var(--t1)}
+.kbd{background:var(--s3);border:1px solid var(--b1);border-radius:3px;padding:1px 6px;font-family:var(--fn);font-size:9px;color:var(--t0);font-weight:600}
+
+/* SOUND TOGGLE */
+.sound-btn{width:24px;height:14px;border-radius:7px;border:1px solid var(--b1);background:var(--s3);cursor:pointer;position:relative;transition:all .2s}
+.sound-btn::after{content:'';position:absolute;top:1px;left:1px;width:10px;height:10px;border-radius:50%;background:var(--t2);transition:all .2s}
+.sound-btn.on{background:var(--go-d);border-color:var(--go)}
+.sound-btn.on::after{left:11px;background:var(--go)}
+
+/* OI HEATMAP in chain tab */
+.oihm-bar{height:10px;border-radius:2px;margin-bottom:2px;transition:width .4s}
+
+/* PWA install banner */
+#pwa-banner{display:none;position:fixed;bottom:12px;right:12px;background:var(--s1);border:1px solid var(--go-b);border-radius:6px;padding:10px 14px;z-index:8000;font-size:10px;gap:10px;align-items:center;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+#pwa-banner.show{display:flex}
+
+/* MOBILE RESPONSIVE */
+@media (max-width:768px){
+  #grid{grid-template-columns:1fr!important}
+  #left,#right{display:none}
+  #center{height:100%}
+  #tabs{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .tab{white-space:nowrap;flex-shrink:0}
+  #tb .tbl>*:not(.logo):not(.sep):not(.lpill){display:none}
+  .tbr>*:not(.clk):not(.theme-tog){display:none}
+  .mtog{display:none}
+  .strow,.psgrid,.vrgrid,.cal-grid{grid-template-columns:1fr 1fr!important}
+  .hm-grid{grid-template-columns:repeat(3,1fr)!important}
+  .atbl{font-size:9px}
+  #tb{padding:0 8px}
+}
+@media (max-width:480px){
+  .strow,.psgrid,.vrgrid,.cal-grid{grid-template-columns:1fr!important}
+  .hm-grid{grid-template-columns:repeat(2,1fr)!important}
+  #tabs .tab{padding:6px 8px;font-size:7px}
+}
 </style>
 </head>
 <body>
@@ -509,6 +581,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       <button class="mb on" id="bi" onclick="setMode('intraday')">INTRADAY</button>
       <button class="mb" id="bp" onclick="setMode('positional')">POSITIONAL</button>
     </div>
+    <button class="sound-btn on" id="sound-tog" onclick="toggleSound()" title="Sound alerts (EXECUTE signal)"></button>
+    <button onclick="exportCSV()" title="Export visible data as CSV" style="padding:2px 8px;font-family:var(--fn);font-size:8px;font-weight:600;border:1px solid var(--b1);border-radius:3px;cursor:pointer;color:var(--t1);background:transparent;letter-spacing:.5px">⬇ CSV</button>
+    <button onclick="testTelegram()" title="Test Telegram alert" style="padding:2px 8px;font-family:var(--fn);font-size:8px;border:1px solid var(--b1);border-radius:3px;cursor:pointer;color:var(--t2);background:transparent">✈ TG</button>
+    <button onclick="showShortcuts()" title="Keyboard shortcuts (Press ?)" style="padding:2px 8px;font-family:var(--fn);font-size:8px;border:1px solid var(--b1);border-radius:3px;cursor:pointer;color:var(--t2);background:transparent">⌨</button>
     <button class="theme-tog" id="theme-tog" onclick="toggleTheme()" title="Toggle light/dark mode"></button>
   </div>
 </div>
@@ -659,6 +735,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <div class="tab" onclick="sw('stats',this)">STATS</div>
     <div class="tab analytics-tab" onclick="sw('analytics',this)">EDGE ANALYTICS</div>
     <div class="tab" style="color:var(--bl)" onclick="sw('backtest',this)">BACKTEST</div>
+    <div class="tab" style="color:var(--am)" onclick="sw('pnl',this)">P&amp;L TRACKER</div>
+    <div class="tab" onclick="sw('heatmap',this)">HEATMAP</div>
+    <div class="tab" style="color:var(--t2)" onclick="sw('calendar',this)">CALENDAR</div>
   </div>
 
   <div id="ta">
@@ -1353,6 +1432,52 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     </div><!-- /scroll -->
   </div><!-- /tp-backtest -->
 
+  <!-- TAB: P&L TRACKER -->
+  <div class="tp" id="tp-pnl" style="overflow-y:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-bottom:8px">
+      <div style="font-family:var(--fh);font-size:13px;font-weight:800;letter-spacing:2px;color:var(--go)">P&amp;L TRACKER</div>
+      <button onclick="pnlReset()" style="padding:2px 10px;font-family:var(--fn);font-size:8px;border:1px solid var(--st-b);border-radius:3px;cursor:pointer;color:var(--st);background:var(--st-d)">RESET</button>
+    </div>
+    <!-- Add trade form -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr) auto;gap:6px;flex-shrink:0;margin-bottom:8px">
+      <div><div style="font-size:8px;color:var(--t2);margin-bottom:2px">SYMBOL</div><input id="pnl-sym" placeholder="e.g. NIFTY" style="width:100%;background:var(--s3);border:1px solid var(--b1);border-radius:3px;padding:4px 7px;font-family:var(--fn);font-size:10px;color:var(--t0)"></div>
+      <div><div style="font-size:8px;color:var(--t2);margin-bottom:2px">DIRECTION</div><select id="pnl-dir" style="width:100%;background:var(--s3);border:1px solid var(--b1);border-radius:3px;padding:4px 7px;font-family:var(--fn);font-size:10px;color:var(--t0)"><option value="LONG">LONG</option><option value="SHORT">SHORT</option></select></div>
+      <div><div style="font-size:8px;color:var(--t2);margin-bottom:2px">ENTRY</div><input id="pnl-entry" type="number" placeholder="0" style="width:100%;background:var(--s3);border:1px solid var(--b1);border-radius:3px;padding:4px 7px;font-family:var(--fn);font-size:10px;color:var(--t0)"></div>
+      <div><div style="font-size:8px;color:var(--t2);margin-bottom:2px">EXIT</div><input id="pnl-exit" type="number" placeholder="0" style="width:100%;background:var(--s3);border:1px solid var(--b1);border-radius:3px;padding:4px 7px;font-family:var(--fn);font-size:10px;color:var(--t0)"></div>
+      <div><div style="font-size:8px;color:var(--t2);margin-bottom:2px">QTY (lots)</div><input id="pnl-qty" type="number" placeholder="1" style="width:100%;background:var(--s3);border:1px solid var(--b1);border-radius:3px;padding:4px 7px;font-family:var(--fn);font-size:10px;color:var(--t0)"></div>
+      <div style="display:flex;align-items:flex-end"><button onclick="pnlAdd()" style="padding:5px 12px;font-family:var(--fn);font-size:9px;font-weight:700;border:1px solid var(--go-b);border-radius:3px;cursor:pointer;color:var(--go);background:var(--go-d);white-space:nowrap">+ ADD</button></div>
+    </div>
+    <!-- Summary cards -->
+    <div id="pnl-summary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;flex-shrink:0;margin-bottom:8px">
+      <div style="padding:8px 10px;border-radius:3px;border:1px solid var(--b1);background:var(--s2)"><div style="font-size:8px;color:var(--t2);margin-bottom:2px">TOTAL P&amp;L</div><div id="pnl-total" style="font-size:14px;font-weight:700;color:var(--t0)">₹0</div></div>
+      <div style="padding:8px 10px;border-radius:3px;border:1px solid var(--b1);background:var(--s2)"><div style="font-size:8px;color:var(--t2);margin-bottom:2px">WIN RATE</div><div id="pnl-wr" style="font-size:14px;font-weight:700;color:var(--t0)">0%</div></div>
+      <div style="padding:8px 10px;border-radius:3px;border:1px solid var(--b1);background:var(--s2)"><div style="font-size:8px;color:var(--t2);margin-bottom:2px">BEST TRADE</div><div id="pnl-best" style="font-size:14px;font-weight:700;color:var(--go)">₹0</div></div>
+      <div style="padding:8px 10px;border-radius:3px;border:1px solid var(--b1);background:var(--s2)"><div style="font-size:8px;color:var(--t2);margin-bottom:2px">WORST TRADE</div><div id="pnl-worst" style="font-size:14px;font-weight:700;color:var(--st)">₹0</div></div>
+    </div>
+    <!-- Trade log -->
+    <div id="pnl-log" style="flex:1;overflow-y:auto">
+      <div style="color:var(--t2);text-align:center;padding:20px;font-size:10px">No trades logged yet. Add a trade above.</div>
+    </div>
+  </div>
+
+  <!-- TAB: HEATMAP -->
+  <div class="tp" id="tp-heatmap" style="overflow-y:auto">
+    <div style="font-family:var(--fh);font-size:13px;font-weight:800;letter-spacing:2px;color:var(--bl);flex-shrink:0;margin-bottom:8px">SECTOR HEATMAP</div>
+    <div style="font-size:9px;color:var(--t2);margin-bottom:10px;flex-shrink:0">Click any sector to see top stocks. Size = market cap weight. Color = day's change.</div>
+    <div id="hm-grid" style="flex:1;min-height:0;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;grid-auto-rows:80px"></div>
+    <div style="margin-top:10px;display:flex;align-items:center;gap:8px;justify-content:center;flex-shrink:0">
+      <div style="font-size:8px;color:var(--t2)">−2%</div>
+      <div style="height:8px;width:120px;border-radius:4px;background:linear-gradient(to right,var(--st),var(--s3),var(--go))"></div>
+      <div style="font-size:8px;color:var(--t2)">+2%</div>
+    </div>
+  </div>
+
+  <!-- TAB: CALENDAR -->
+  <div class="tp" id="tp-calendar" style="overflow-y:auto">
+    <div style="font-family:var(--fh);font-size:13px;font-weight:800;letter-spacing:2px;color:var(--am);flex-shrink:0;margin-bottom:8px">EXPIRY &amp; EARNINGS CALENDAR</div>
+    <div id="cal-grid" style="display:flex;flex-direction:column;gap:4px;flex:1;min-height:0;overflow-y:auto"></div>
+  </div>
+
   </div><!-- /ta -->
 </div><!-- /center -->
 
@@ -2034,8 +2159,14 @@ const swingData=[
     return'color:var(--st);border:1px solid var(--st-b)';
   };
   const sc=s=>s>=80?'var(--go)':s>=65?'var(--am)':'var(--st)';
-  document.getElementById('sw-body').innerHTML=swingData.map(d=>`
-    <tr style="${d.score>=80?'background:rgba(0,232,122,.03)':''}">
+  const _swGpc=s=>s>=80?5:s>=70?4:s>=60?3:s>=50?2:1;
+  document.getElementById('sw-body').innerHTML=swingData.map(d=>{
+    const gpc=_swGpc(d.score);
+    const gg='go',ag='am',wg='wt',sg='st';
+    const g1d=gpc>=1?gg:sg,g2d=gpc>=2?gg:sg,g3d=gpc>=3?gg:ag,g4d=gpc>=4?gg:wg,g5d=gpc>=5?gg:wg;
+    const sigLbl=gpc>=4?'EXECUTE':gpc>=3?'WAIT':'NO TRADE';
+    const sigCss=gpc>=4?'color:var(--go);border:1px solid var(--go-b)':gpc>=3?'color:var(--am);border:1px solid var(--am-b)':'color:var(--t2);border:1px solid var(--b1)';
+    return`<tr style="${d.score>=80?'background:rgba(0,232,122,.03)':''}">
       <td><span style="color:var(--t2);font-size:8px;margin-right:3px">${d.r}</span><span class="tv-link" data-tvsym="${d.s}" style="font-weight:600;color:var(--t0)">${d.s}</span></td>
       <td style="color:var(--t2);font-size:9px">${d.sec}</td>
       <td style="font-weight:600">${d.pr.toLocaleString('en-IN')}</td>
@@ -2044,13 +2175,13 @@ const swingData=[
       <td style="color:var(--go);font-weight:600">${d.tgt.toLocaleString('en-IN')}</td>
       <td style="color:var(--st)">${d.stop.toLocaleString('en-IN')}</td>
       <td style="color:${d.rr>=2.5?'var(--go)':d.rr>=2?'var(--am)':'var(--st)'};font-weight:600">1:${d.rr.toFixed(1)}</td>
-      <td style="color:${d.del>55?'var(--go)':d.del>44?'var(--am)':'var(--t2)'}">${d.del}%</td>
-      <td style="color:${d.rsi>55&&d.rsi<70?'var(--go)':d.rsi<45?'var(--am)':'var(--t2)'}">${d.rsi}</td>
-      <td style="color:${d.rs>1.1?'var(--go)':d.rs>0.95?'var(--am)':'var(--st)'}">${d.rs>1?'+':''}${((d.rs-1)*100).toFixed(0)}%</td>
+      <td>${_gateDots(g1d,g2d,g3d,g4d,g5d)}</td>
+      <td style="color:${gpc>=4?'var(--go)':gpc>=3?'var(--am)':'var(--t2)'};font-weight:700">${gpc}/5</td>
+      <td><span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:2px;${sigCss}">${sigLbl}</span></td>
       <td style="color:var(--bl);font-size:9px">${d.cat}</td>
       <td style="color:var(--t2)">${d.days}</td>
       <td><span style="font-size:10px;font-weight:700;color:${sc(d.score)}">${d.score}</span><div class="swbar"><div class="swbf" style="width:${d.score}%;background:${sc(d.score)}"></div></div></td>
-    </tr>`).join('');
+    </tr>`;}).join('');
 })();
 
 // ═══════════════════════════════════════════════
@@ -3457,7 +3588,9 @@ async function tbDateChange(val) {
             <td style="color:var(--go);font-weight:600">${tgt.toLocaleString('en-IN')}</td>
             <td style="color:var(--st)">${sl.toLocaleString('en-IN')}</td>
             <td style="color:${rr>=2.5?'var(--go)':rr>=2?'var(--am)':'var(--st)'};font-weight:600">1:${rr.toFixed(1)}</td>
-            <td style="color:var(--t2)">—</td><td style="color:var(--t2)">—</td><td style="color:var(--t2)">—</td>
+            <td>${_gateDots(p.g1||'wt',p.g2||'wt',p.g3||'wt',p.g4||'wt',p.g5||'wt')}</td>
+            <td style="color:${(()=>{const pc=[p.g1,p.g2,p.g3,p.g4,p.g5].filter(g=>g==='go').length;return pc>=4?'var(--go)':pc>=3?'var(--am)':'var(--t2)'})()};font-weight:700">${[p.g1,p.g2,p.g3,p.g4,p.g5].filter(g=>g==='go').length}/5</td>
+            <td><span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:2px;${(()=>{const pc=[p.g1,p.g2,p.g3,p.g4,p.g5].filter(g=>g==='go').length;return pc>=4?'color:var(--go);border:1px solid var(--go-b)':pc>=3?'color:var(--am);border:1px solid var(--am-b)':'color:var(--t2);border:1px solid var(--b1)'})()}">${(()=>{const pc=[p.g1,p.g2,p.g3,p.g4,p.g5].filter(g=>g==='go').length;return pc>=4?'EXECUTE':pc>=3?'WAIT':'NO TRADE'})()}</span></td>
             <td style="color:${ocColor};font-size:9px;font-weight:700">${ocLabel}${p.signal_time?'<br><span style="font-size:7px;color:var(--t2);font-weight:400">⏱ '+p.signal_time+'</span>':''}</td>
             <td style="color:var(--t2)">${_holdM[p.setup]||'5–8d'}</td>
             <td><span style="font-size:10px;font-weight:700;color:${_sc(sc)}">${sc}</span><div class="swbar"><div class="swbf" style="width:${sc}%;background:${_sc(sc)}"></div></div></td>
@@ -4025,9 +4158,14 @@ function tbGoLive() {
       return'color:var(--st);border:1px solid var(--st-b)';
     };
     const sc=s=>s>=80?'var(--go)':s>=65?'var(--am)':'var(--st)';
+    const _gpc=s=>s>=80?5:s>=70?4:s>=60?3:s>=50?2:1;
     const sb=document.getElementById('sw-body');
-    if(sb) sb.innerHTML=swingData.map(d=>`
-      <tr style="${d.score>=80?'background:rgba(0,232,122,.03)':''}">
+    if(sb) sb.innerHTML=swingData.map(d=>{
+      const gpc=_gpc(d.score);
+      const g1d=gpc>=1?'go':'st',g2d=gpc>=2?'go':'st',g3d=gpc>=3?'go':'am',g4d=gpc>=4?'go':'wt',g5d=gpc>=5?'go':'wt';
+      const sigLbl=gpc>=4?'EXECUTE':gpc>=3?'WAIT':'NO TRADE';
+      const sigCss=gpc>=4?'color:var(--go);border:1px solid var(--go-b)':gpc>=3?'color:var(--am);border:1px solid var(--am-b)':'color:var(--t2);border:1px solid var(--b1)';
+      return`<tr style="${d.score>=80?'background:rgba(0,232,122,.03)':''}">
         <td><span style="color:var(--t2);font-size:8px;margin-right:3px">${d.r}</span><span class="tv-link" data-tvsym="${d.s}" style="font-weight:600;color:var(--t0)">${d.s}</span></td>
         <td style="color:var(--t2);font-size:9px">${d.sec}</td>
         <td style="font-weight:600">${d.pr.toLocaleString('en-IN')}</td>
@@ -4036,13 +4174,13 @@ function tbGoLive() {
         <td style="color:var(--go);font-weight:600">${d.tgt.toLocaleString('en-IN')}</td>
         <td style="color:var(--st)">${d.stop.toLocaleString('en-IN')}</td>
         <td style="color:${d.rr>=2.5?'var(--go)':d.rr>=2?'var(--am)':'var(--st)'};font-weight:600">1:${d.rr.toFixed(1)}</td>
-        <td style="color:${d.del>55?'var(--go)':d.del>44?'var(--am)':'var(--t2)'}">${d.del}%</td>
-        <td style="color:${d.rsi>55&&d.rsi<70?'var(--go)':d.rsi<45?'var(--am)':'var(--t2)'}">${d.rsi}</td>
-        <td style="color:${d.rs>1.1?'var(--go)':d.rs>0.95?'var(--am)':'var(--st)'}">${d.rs>1?'+':''}${((d.rs-1)*100).toFixed(0)}%</td>
+        <td>${_gateDots(g1d,g2d,g3d,g4d,g5d)}</td>
+        <td style="color:${gpc>=4?'var(--go)':gpc>=3?'var(--am)':'var(--t2)'};font-weight:700">${gpc}/5</td>
+        <td><span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:2px;${sigCss}">${sigLbl}</span></td>
         <td style="color:var(--bl);font-size:9px">${d.cat}</td>
         <td style="color:var(--t2)">${d.days}</td>
         <td><span style="font-size:10px;font-weight:700;color:${sc(d.score)}">${d.score}</span><div class="swbar"><div class="swbf" style="width:${d.score}%;background:${sc(d.score)}"></div></div></td>
-      </tr>`).join('');
+      </tr>`;}).join('');
   })();
   // Restore Key Levels to live static content
   const lv2r = document.querySelector('#tp-levels .lv2');
@@ -4300,6 +4438,335 @@ function tvSetInterval(iv, btn) {
   _tvOpenNewTab(_tvCurrentSym, iv);
 }
 
+// ═══════════════════════════════════════════════
+// TELEGRAM TEST
+// ═══════════════════════════════════════════════
+async function testTelegram(){
+  try{
+    notify('Sending Telegram test...');
+    const r = await fetch('/api/telegram/test', {method:'POST'});
+    const d = await r.json();
+    if(d.ok) notify('✓ Telegram message sent!');
+    else notify('✗ Telegram error: ' + (d.error||'unknown'));
+  }catch(e){ notify('✗ Backend unreachable'); }
+}
+
+// ═══════════════════════════════════════════════
+// SOUND ALERTS
+// ═══════════════════════════════════════════════
+let _soundOn = localStorage.getItem('nse_sound') !== 'off';
+(function(){
+  const btn = document.getElementById('sound-tog');
+  if(btn){ btn.classList.toggle('on', _soundOn); btn.title = _soundOn ? 'Sound ON — click to mute' : 'Sound OFF — click to enable'; }
+})();
+
+function toggleSound(){
+  _soundOn = !_soundOn;
+  localStorage.setItem('nse_sound', _soundOn ? 'on' : 'off');
+  const btn = document.getElementById('sound-tog');
+  if(btn){ btn.classList.toggle('on', _soundOn); btn.title = _soundOn ? 'Sound ON — click to mute' : 'Sound OFF — click to enable'; }
+  notify(_soundOn ? 'Sound alerts ON' : 'Sound alerts OFF');
+}
+
+function _playAlert(type){
+  if(!_soundOn) return;
+  try {
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    if(type==='execute'){ osc.frequency.setValueAtTime(880,ctx.currentTime); osc.frequency.setValueAtTime(1100,ctx.currentTime+0.1); }
+    else if(type==='warn'){ osc.frequency.setValueAtTime(440,ctx.currentTime); }
+    else { osc.frequency.setValueAtTime(660,ctx.currentTime); }
+    gain.gain.setValueAtTime(0.3,ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.4);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime+0.4);
+  } catch(e){}
+}
+
+// ═══════════════════════════════════════════════
+// EXPORT CSV
+// ═══════════════════════════════════════════════
+function exportCSV(){
+  const activeTab = document.querySelector('.tp.on');
+  if(!activeTab){ notify('No active tab'); return; }
+  const id = activeTab.id;
+  let rows = [], filename = 'nse_edge_export.csv';
+
+  if(id === 'tp-stocks'){
+    filename = 'stock_oi.csv';
+    rows.push(['#','Symbol','Price','Chg%','OI','OI%','PCR','Vol/Avg','ATR%','RS%','Signal','Score']);
+    activeTab.querySelectorAll('tbody tr').forEach(tr=>{
+      rows.push([...tr.querySelectorAll('td')].map(td=>'"'+(td.textContent.trim().replace(/"/g,'""'))+'"'));
+    });
+  } else if(id === 'tp-swing'){
+    filename = 'swing_radar.csv';
+    rows.push(['#','Stock','Sector','Price','Setup','Entry Zone','Target','Stop','R:R','Gates','PC','Signal','Outcome','Hold','Score']);
+    activeTab.querySelectorAll('tbody tr').forEach(tr=>{
+      rows.push([...tr.querySelectorAll('td')].map(td=>'"'+(td.textContent.trim().replace(/"/g,'""'))+'"'));
+    });
+  } else if(id === 'tp-backtest'){
+    filename = 'backtest_results.csv';
+    rows.push(['Date','Nifty','VIX','PCR','FII','G1','G2','G3','G4','G5','Verdict','Entry','Target','Stop','Exit','P&L pts','Outcome']);
+    activeTab.querySelectorAll('tbody tr').forEach(tr=>{
+      rows.push([...tr.querySelectorAll('td')].map(td=>'"'+(td.textContent.trim().replace(/"/g,'""'))+'"'));
+    });
+  } else if(id === 'tp-pnl'){
+    filename = 'pnl_tracker.csv';
+    rows.push(['#','Symbol','Direction','Entry','Exit','Qty','P&L','Result']);
+    activeTab.querySelectorAll('#pnl-log .pnl-row').forEach((row,i)=>{
+      rows.push([...row.querySelectorAll('[data-val]')].map(el=>'"'+(el.dataset.val||el.textContent.trim())+'"'));
+    });
+  } else {
+    notify('Export not supported for this tab');
+    return;
+  }
+
+  if(rows.length <= 1){ notify('No data to export'); return; }
+  const csv = rows.map(r=>Array.isArray(r)?r.join(','):r).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+  notify('Exported: ' + filename);
+}
+
+// ═══════════════════════════════════════════════
+// KEYBOARD SHORTCUTS MODAL
+// ═══════════════════════════════════════════════
+function showShortcuts(){
+  const existing = document.getElementById('kbd-modal');
+  if(existing){ existing.remove(); return; }
+  const m = document.createElement('div');
+  m.id = 'kbd-modal';
+  m.style.cssText='position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center';
+  m.innerHTML=`<div style="background:var(--s1);border:1px solid var(--b1);border-radius:6px;padding:20px;min-width:340px;max-width:480px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-family:var(--fh);font-size:14px;font-weight:800;letter-spacing:2px;color:var(--t0)">KEYBOARD SHORTCUTS</div>
+      <button onclick="document.getElementById('kbd-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--t2);font-size:14px">✕</button>
+    </div>
+    ${[
+      ['1–9','Switch to tab (Kill Zones=1, Levels=2, Chain=3, Stocks=4, Swing=5, Spike=6, Journal=7, Stats=8, Analytics=9)'],
+      ['B','Open Backtest tab'],
+      ['S','Toggle sound alerts'],
+      ['E','Export current tab as CSV'],
+      ['T','Toggle light/dark theme'],
+      ['Esc','Close any modal'],
+      ['?','Show this help'],
+    ].map(([k,d])=>`<div style="display:flex;align-items:flex-start;gap:12px;padding:6px 0;border-bottom:1px solid var(--b1)">
+      <kbd style="flex-shrink:0;background:var(--s3);border:1px solid var(--b1);border-radius:3px;padding:2px 8px;font-family:var(--fn);font-size:10px;font-weight:700;color:var(--t0);min-width:28px;text-align:center">${k}</kbd>
+      <span style="font-size:9px;color:var(--t2);line-height:1.5">${d}</span>
+    </div>`).join('')}
+  </div>`;
+  m.addEventListener('click', e=>{ if(e.target===m) m.remove(); });
+  document.body.appendChild(m);
+}
+
+// Global keyboard shortcuts
+document.addEventListener('keydown', e => {
+  // skip if typing in input
+  if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+  const tabIds = ['killzones','levels','chain','stocks','swing','spikescanner','journal','stats','analytics'];
+  if(e.key>='1' && e.key<='9'){ const t=tabIds[parseInt(e.key)-1]; if(t) { const b=document.querySelector(`.tab[onclick*="'${t}'"]`); if(b){sw(t,b);} } return; }
+  if(e.key==='b'||e.key==='B'){ const b=document.querySelector(`.tab[onclick*="'backtest'"]`); if(b) sw('backtest',b); return; }
+  if(e.key==='s'||e.key==='S'){ toggleSound(); return; }
+  if(e.key==='e'||e.key==='E'){ exportCSV(); return; }
+  if(e.key==='t'||e.key==='T'){ const tog=document.querySelector('.theme-tog'); if(tog) tog.click(); return; }
+  if(e.key==='?'){ showShortcuts(); return; }
+});
+
+// ═══════════════════════════════════════════════
+// SECTOR HEATMAP
+// ═══════════════════════════════════════════════
+const _sectors = [
+  {name:'Banking',sym:['HDFCBANK','ICICIBANK','AXISBANK','KOTAKBANK','INDUSINDBK'],chg:1.2,weight:3},
+  {name:'PSU Bank',sym:['SBIN'],chg:-0.4,weight:1.5},
+  {name:'IT',sym:['TCS','INFY'],chg:2.1,weight:2.5},
+  {name:'Energy',sym:['RELIANCE'],chg:0.6,weight:2},
+  {name:'Auto',sym:['MARUTI','TATAMOTORS'],chg:-1.1,weight:1.5},
+  {name:'Pharma',sym:['SUNPHARMA'],chg:0.9,weight:1},
+  {name:'NBFC',sym:['BAJFINANCE'],chg:-0.2,weight:1},
+  {name:'Infra',sym:['LT'],chg:0.3,weight:1},
+  {name:'Steel',sym:['TATASTEEL'],chg:-1.8,weight:1},
+  {name:'Index',sym:['NIFTY','BANKNIFTY'],chg:0.4,weight:2},
+];
+
+function renderHeatmap(){
+  const grid = document.getElementById('hm-grid');
+  if(!grid) return;
+  // Try to use live price data
+  const lp = window._livePrices || {};
+  grid.innerHTML = _sectors.map(s => {
+    // Try to compute actual change from live data
+    let chg = s.chg;
+    const prices = s.sym.map(sym => lp[sym]).filter(Boolean);
+    if(prices.length){ chg = prices.reduce((a,p)=>a+(p.chg_pct||0),0)/prices.length; }
+    const abs = Math.abs(chg);
+    const clr = chg>1.5?'var(--go)':chg>0.5?'rgba(0,232,122,.6)':chg>0?'rgba(0,232,122,.3)':chg>-0.5?'rgba(255,170,0,.3)':chg>-1.5?'rgba(255,51,85,.4)':'var(--st)';
+    const bg = chg>0?`rgba(0,232,122,${Math.min(0.18,abs*0.07)})`:`rgba(255,51,85,${Math.min(0.18,abs*0.07)})`;
+    const border = chg>0?`rgba(0,232,122,${Math.min(0.4,abs*0.15)})`:`rgba(255,51,85,${Math.min(0.4,abs*0.15)})`;
+    return`<div style="border-radius:4px;border:1px solid ${border};background:${bg};padding:8px;cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;min-height:70px"
+      onclick="hmDrill('${s.name}')"
+      onmouseover="this.style.opacity='.8'" onmouseout="this.style.opacity='1'">
+      <div style="font-size:9px;font-weight:700;color:var(--t0);letter-spacing:.5px">${s.name}</div>
+      <div style="font-size:13px;font-weight:700;color:${clr}">${chg>=0?'+':''}${chg.toFixed(2)}%</div>
+      <div style="font-size:7.5px;color:var(--t2)">${s.sym.join(' · ')}</div>
+    </div>`;
+  }).join('');
+}
+
+function hmDrill(sectorName){
+  const s = _sectors.find(x=>x.name===sectorName);
+  if(!s) return;
+  notify(sectorName + ': ' + s.sym.join(', ') + ' — click stock name to open chart');
+}
+
+// ═══════════════════════════════════════════════
+// EXPIRY / EARNINGS CALENDAR
+// ═══════════════════════════════════════════════
+function renderCalendar(){
+  const grid = document.getElementById('cal-grid');
+  if(!grid) return;
+  const today = new Date();
+  const events = [
+    // Monthly/weekly expiry pattern (nearest upcoming)
+    ...(()=>{
+      const evts=[];
+      for(let i=0;i<30;i++){
+        const d=new Date(today); d.setDate(d.getDate()+i);
+        if(d.getDay()===4){ // Thursday
+          const label = i===0?'TODAY':i<=7?'THIS WEEK':'UPCOMING';
+          evts.push({date:d,type:'expiry',label:'Weekly Expiry — NIFTY/BANKNIFTY options',badge:label,color:'var(--am)'});
+          if(d.getDate()<=7){ evts.push({date:d,type:'expiry',label:'Monthly Expiry — ALL F&O contracts',badge:'MONTHLY',color:'var(--st)'}); }
+          break;
+        }
+      }
+      return evts;
+    })(),
+    {date:new Date(today.getFullYear(),today.getMonth()+1,1),type:'result',label:'HDFC Bank — Quarterly Results (Est.)',badge:'RESULTS',color:'var(--bl)'},
+    {date:new Date(today.getFullYear(),today.getMonth()+1,5),type:'result',label:'TCS — Q4 Earnings Release',badge:'RESULTS',color:'var(--bl)'},
+    {date:new Date(today.getFullYear(),today.getMonth()+1,10),type:'macro',label:'RBI MPC Meeting — Rate Decision',badge:'MACRO',color:'var(--go)'},
+    {date:new Date(today.getFullYear(),today.getMonth()+1,15),type:'macro',label:'India CPI Inflation Data Release',badge:'MACRO',color:'var(--go)'},
+  ].sort((a,b)=>a.date-b.date);
+
+  const fmt=d=>{const opts={weekday:'short',day:'2-digit',month:'short'};return d.toLocaleDateString('en-IN',opts);};
+  grid.innerHTML = events.map(ev=>{
+    const daysLeft = Math.round((ev.date-today)/(1000*60*60*24));
+    const dl = daysLeft===0?'TODAY':daysLeft===1?'TOMORROW':daysLeft+' days';
+    return`<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:3px;border:1px solid var(--b1);background:var(--s2)">
+      <div style="flex-shrink:0;min-width:60px;text-align:center">
+        <div style="font-size:8px;color:${ev.color};font-weight:700;letter-spacing:.5px">${ev.badge}</div>
+        <div style="font-size:9px;color:var(--t1);margin-top:1px">${fmt(ev.date)}</div>
+      </div>
+      <div style="flex:1;font-size:10px;color:var(--t0)">${ev.label}</div>
+      <div style="flex-shrink:0;font-size:8px;font-weight:700;padding:2px 8px;border-radius:2px;border:1px solid ${ev.color === 'var(--st)' ? 'var(--st-b)' : ev.color === 'var(--am)' ? 'var(--am-b)' : ev.color === 'var(--go)' ? 'var(--go-b)' : 'var(--bl-b)'};color:${ev.color}">${dl}</div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════
+// P&L TRACKER
+// ═══════════════════════════════════════════════
+let _pnlTrades = JSON.parse(localStorage.getItem('nse_pnl_trades')||'[]');
+
+const _lotSizes = {NIFTY:25,BANKNIFTY:15,ICICIBANK:1375,SBIN:3000,HDFCBANK:550,AXISBANK:1200,
+  KOTAKBANK:400,INDUSINDBK:700,LT:150,TCS:300,RELIANCE:500,TATAMOTORS:1800,
+  BAJFINANCE:125,TATASTEEL:5500,INFY:600,MARUTI:30,SUNPHARMA:350};
+
+function pnlAdd(){
+  const sym=(document.getElementById('pnl-sym').value||'').toUpperCase().trim();
+  const dir=document.getElementById('pnl-dir').value;
+  const entry=parseFloat(document.getElementById('pnl-entry').value)||0;
+  const exit=parseFloat(document.getElementById('pnl-exit').value)||0;
+  const qty=parseInt(document.getElementById('pnl-qty').value)||1;
+  if(!sym||!entry||!exit){notify('Fill Symbol, Entry and Exit');return;}
+  const lotSz = _lotSizes[sym]||1;
+  const ptsRaw = dir==='LONG'?exit-entry:entry-exit;
+  const pnl = Math.round(ptsRaw * qty * lotSz);
+  _pnlTrades.push({sym,dir,entry,exit,qty,lotSz,pnl,ts:Date.now()});
+  localStorage.setItem('nse_pnl_trades',JSON.stringify(_pnlTrades));
+  document.getElementById('pnl-sym').value='';
+  document.getElementById('pnl-entry').value='';
+  document.getElementById('pnl-exit').value='';
+  document.getElementById('pnl-qty').value='1';
+  pnlRender();
+  _playAlert(pnl>0?'execute':'warn');
+}
+
+function pnlReset(){
+  if(!confirm('Reset all P&L trades?')) return;
+  _pnlTrades=[];
+  localStorage.removeItem('nse_pnl_trades');
+  pnlRender();
+}
+
+function pnlRender(){
+  const log=document.getElementById('pnl-log');
+  if(!log) return;
+  const total=_pnlTrades.reduce((a,t)=>a+t.pnl,0);
+  const wins=_pnlTrades.filter(t=>t.pnl>0);
+  const wr=_pnlTrades.length?Math.round(wins.length/_pnlTrades.length*100):0;
+  const best=_pnlTrades.length?Math.max(..._pnlTrades.map(t=>t.pnl)):0;
+  const worst=_pnlTrades.length?Math.min(..._pnlTrades.map(t=>t.pnl)):0;
+  const fmt=n=>(n>=0?'+':'')+n.toLocaleString('en-IN');
+  const el=id=>document.getElementById(id);
+  if(el('pnl-total')){el('pnl-total').textContent='₹'+fmt(total);el('pnl-total').style.color=total>=0?'var(--go)':'var(--st)';}
+  if(el('pnl-wr')){el('pnl-wr').textContent=wr+'%';el('pnl-wr').style.color=wr>=50?'var(--go)':'var(--am)';}
+  if(el('pnl-best')) el('pnl-best').textContent='₹'+fmt(best);
+  if(el('pnl-worst')){el('pnl-worst').textContent='₹'+fmt(worst);el('pnl-worst').style.color=worst<0?'var(--st)':'var(--go)';}
+
+  if(!_pnlTrades.length){
+    log.innerHTML='<div style="color:var(--t2);text-align:center;padding:20px;font-size:10px">No trades logged yet. Add a trade above.</div>';
+    return;
+  }
+  log.innerHTML=[..._pnlTrades].reverse().map((t,i)=>{
+    const c=t.pnl>0?'var(--go)':t.pnl<0?'var(--st)':'var(--t2)';
+    const pct=t.entry?((t.exit-t.entry)/t.entry*100*(t.dir==='SHORT'?-1:1)).toFixed(2):'0';
+    return`<div class="pnl-row" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:3px;border:1px solid var(--b1);background:var(--s2);margin-bottom:4px">
+      <span style="color:var(--t2);font-size:8px;min-width:18px">${_pnlTrades.length-i}</span>
+      <span style="font-weight:700;color:var(--t0);min-width:80px" data-val="${t.sym}">${t.sym}</span>
+      <span style="font-size:8px;padding:1px 6px;border-radius:2px;border:1px solid ${t.dir==='LONG'?'var(--go-b)':'var(--st-b)'};color:${t.dir==='LONG'?'var(--go)':'var(--st)'}" data-val="${t.dir}">${t.dir}</span>
+      <span style="color:var(--t2);font-size:9px" data-val="${t.entry}">${t.entry}→<span style="color:var(--t0)">${t.exit}</span></span>
+      <span style="font-size:8px;color:var(--t2)" data-val="${t.qty}">${t.qty} lot${t.qty>1?'s':''} × ${t.lotSz}</span>
+      <span style="font-size:10px;font-weight:700;color:${c};margin-left:auto" data-val="${t.pnl}">₹${fmt(t.pnl)}</span>
+      <span style="font-size:8px;color:${c}">(${pct}%)</span>
+    </div>`;
+  }).join('');
+}
+
+pnlRender();
+
+// Patch sw() to render heatmap/calendar/pnl on first open
+const _swOrig = sw;
+window.sw = function(id, btn){
+  _swOrig(id, btn);
+  if(id==='heatmap') renderHeatmap();
+  if(id==='calendar') renderCalendar();
+  if(id==='pnl') pnlRender();
+};
+
+// ═══════════════════════════════════════════════
+// PWA — SERVICE WORKER REGISTRATION
+// ═══════════════════════════════════════════════
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('/sw.js').catch(()=>{});
+  });
+}
+
+// Show PWA install banner
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  const banner = document.getElementById('pwa-banner');
+  if(banner){
+    banner.style.display = 'flex';
+    document.getElementById('pwa-install-btn').addEventListener('click', ()=>{
+      e.prompt(); banner.style.display='none';
+    });
+  }
+});
+
 // ESC closes modal
 document.addEventListener('keydown', e => { if(e.key==='Escape') closeTVChart(); });
 
@@ -4312,6 +4779,13 @@ document.addEventListener('click', e => {
   }
 });
 </script>
+
+<!-- PWA Install Banner -->
+<div id="pwa-banner" style="display:none;position:fixed;bottom:12px;right:12px;z-index:9997;background:var(--s1);border:1px solid var(--go-b);border-radius:6px;padding:10px 14px;align-items:center;gap:12px;box-shadow:0 4px 20px rgba(0,0,0,.4)">
+  <span style="font-size:9px;color:var(--t0)">📱 Install NSE EDGE as app</span>
+  <button id="pwa-install-btn" style="padding:3px 10px;font-family:var(--fn);font-size:8px;font-weight:700;border:1px solid var(--go-b);border-radius:3px;cursor:pointer;color:var(--go);background:var(--go-d)">INSTALL</button>
+  <button onclick="document.getElementById('pwa-banner').style.display='none'" style="background:none;border:none;cursor:pointer;color:var(--t2);font-size:12px">✕</button>
+</div>
 
 <!-- TradingView Chart Modal -->
 <div id="tv-modal">
