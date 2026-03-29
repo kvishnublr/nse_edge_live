@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>NSE EDGE — Intelligent Trading System v5</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://s3.tradingview.com/tv.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -80,6 +82,20 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 ::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px}
 ::-webkit-scrollbar-track{background:transparent}
 
+/* TV CHART MODAL */
+#tv-modal{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);flex-direction:column}
+#tv-modal.open{display:flex}
+#tv-topbar{display:flex;align-items:center;gap:10px;padding:0 14px;height:40px;background:var(--s1);border-bottom:1px solid var(--b1);flex-shrink:0}
+#tv-sym-lbl{font-family:var(--fh);font-size:14px;font-weight:800;letter-spacing:2px;color:var(--go)}
+#tv-date-lbl{font-size:9px;color:var(--am);letter-spacing:.5px;padding:2px 7px;border:1px solid var(--am-b);border-radius:2px;background:var(--am-d)}
+#tv-interval{display:flex;gap:2px;margin-left:auto}
+.tvi{padding:3px 9px;font-family:var(--fn);font-size:9px;font-weight:600;letter-spacing:1px;border:1px solid var(--b1);border-radius:2px;cursor:pointer;color:var(--t2);background:var(--s2);transition:all .15s}
+.tvi.on{background:var(--go);color:#000;border-color:var(--go)}
+#tv-close{margin-left:10px;padding:4px 10px;font-family:var(--fn);font-size:10px;border:1px solid var(--b1);border-radius:2px;cursor:pointer;color:var(--t1);background:var(--s3)}
+#tv-close:hover{background:var(--st-d);border-color:var(--st-b);color:var(--st)}
+#tv-container{flex:1;min-height:0}
+.tv-link{cursor:pointer;transition:color .12s}
+.tv-link:hover{color:var(--go)!important;text-decoration:underline;text-underline-offset:2px}
 /* TOPBAR */
 #tb{height:36px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:var(--s1);border-bottom:1px solid var(--b1);flex-shrink:0}
 .tbl{display:flex;align-items:center;gap:14px}
@@ -361,6 +377,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
 /* NOTIF */
 #notif{position:fixed;bottom:30px;right:12px;background:var(--s2);border:1px solid var(--go-b);color:var(--go);padding:6px 14px;border-radius:3px;font-size:10px;font-weight:600;z-index:9999;display:none;letter-spacing:.5px}
+.chart-btn{background:var(--s3);color:var(--t1);border:1px solid var(--b1);padding:4px 10px;border-radius:3px;cursor:pointer;font-size:10px;font-weight:600}
+.chart-btn:hover{background:var(--go-d);color:var(--go);border-color:var(--go-b)}
 
 /* FLASH */
 @keyframes fg{0%{color:var(--go)}100%{}}
@@ -605,25 +623,25 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   <!-- INSTRUMENTS -->
   <div id="inst">
     <div class="ic sel" onclick="selIC(this)">
-      <div class="icn">NIFTY 50</div>
+      <div class="icn tv-link" data-tvsym="NIFTY" title="Click to open TradingView chart">NIFTY 50</div>
       <div class="icp cg" id="p0">—</div>
       <div class="icc cg">— · —%</div>
       <div class="icb"><span class="ics bg">LONG BIAS</span><span class="ico">PCR —</span></div>
     </div>
     <div class="ic" onclick="selIC(this)">
-      <div class="icn">BANK NIFTY</div>
+      <div class="icn tv-link" data-tvsym="BANKNIFTY" title="Click to open TradingView chart">BANK NIFTY</div>
       <div class="icp cg" id="p1">—</div>
       <div class="icc cg">— · —%</div>
       <div class="icb"><span class="ics bg">LONG BIAS</span><span class="ico">OI —</span></div>
     </div>
     <div class="ic" onclick="selIC(this)">
-      <div class="icn">ICICI BANK</div>
+      <div class="icn tv-link" data-tvsym="ICICIBANK" title="Click to open TradingView chart">ICICI BANK</div>
       <div class="icp cg" id="p2">—</div>
       <div class="icc cg">— · —%</div>
       <div class="icb"><span class="ics bg">LONG BIAS</span><span class="ico">OI —</span></div>
     </div>
     <div class="ic" style="border-right:none" onclick="selIC(this)">
-      <div class="icn">RELIANCE</div>
+      <div class="icn tv-link" data-tvsym="RELIANCE" title="Click to open TradingView chart">RELIANCE</div>
       <div class="icp cr" id="p3">—</div>
       <div class="icc cr">— · —%</div>
       <div class="icb"><span class="ics bg">LONG BIAS</span><span class="ico">OI —</span></div>
@@ -795,8 +813,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
         <tr>
           <th>#  STOCK</th><th>SECTOR</th><th>PRICE</th><th>SETUP</th>
           <th>ENTRY ZONE</th><th>TARGET</th><th>STOP</th>
-          <th>R:R</th><th>DEL%</th><th>WK RSI</th><th>RS</th>
-          <th>CATALYST</th><th>HOLD</th><th>SCORE</th>
+          <th>R:R</th><th>GATES</th><th>PC</th><th>SIGNAL</th>
+          <th>OUTCOME</th><th>HOLD</th><th>SCORE</th>
         </tr>
       </thead>
       <tbody id="sw-body"></tbody>
@@ -1386,6 +1404,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
 <div id="notif"></div>
 
+<!-- CHART MODAL (replaced by TradingView modal — kept for DOM compatibility) -->
+<div id="chart-modal" style="display:none"><span id="chart-sym"></span><span id="chart-date"></span><div id="chart-container"></div></div>
+
 <script>
 'use strict';
 
@@ -1598,7 +1619,7 @@ function renderHistPicksHtml(picks, mode) {
     </div>`;
     return `<div class="rpk ${p.cls||'rpk-am'}">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
-        <span class="rpkn" style="color:${vc}">${p.sym}</span>
+        <span class="rpkn tv-link" data-tvsym="${p.sym}" style="color:${vc}">${p.sym}</span>
         <span class="bd ${bdc}">${p.score||0}</span>
       </div>
       <div class="rpkm">${p.meta||''}</div>
@@ -1678,7 +1699,7 @@ function setMode(m){
         const ocColor = p.outcome==='PROFIT'?'var(--go)':p.outcome==='LOSS'?'var(--st)':'var(--t2)';
         const ocLabel = p.outcome && p.outcome!=='NO_DATA' && p.outcome!=='UNKNOWN' ? p.outcome.replace('_',' ') : '—';
         return `<tr style="${sc>=80?'background:rgba(0,232,122,.03)':''}">
-          <td><span style="color:var(--t2);font-size:8px;margin-right:3px">${i+1}</span><span style="font-weight:600;color:var(--t0)">${p.sym}</span></td>
+          <td><span style="color:var(--t2);font-size:8px;margin-right:3px">${i+1}</span><span class="tv-link" data-tvsym="${p.sym}" style="font-weight:600;color:var(--t0)">${p.sym}</span></td>
           <td style="color:var(--t2);font-size:9px">${_secM2[p.sym]||'Market'}</td>
           <td style="font-weight:600">${Math.round(pr).toLocaleString('en-IN')}</td>
           <td><span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:2px;${_sc2b(p.setup)}">${(p.setup||'—').toUpperCase()}</span></td>
@@ -1730,7 +1751,7 @@ function setMode(m){
           '</div>';
         return '<div class="rpk '+p.cls+'" onclick="sw(\''+p.tab+'\')">'+
           '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">'+
-          '<span class="rpkn" style="color:var(--go)">'+p.sym+'</span>'+
+          '<span class="rpkn tv-link" data-tvsym="'+p.sym+'" style="color:var(--go)">'+p.sym+'</span>'+
           '<span class="bd bg">'+p.score+'</span></div>'+
           '<div class="rpkm">'+p.meta+'</div>'+
           '<div class="rpkr '+p.rc+'" style="margin-bottom:0">'+p.reason+'</div>'+
@@ -1958,7 +1979,7 @@ function renderStocks(){
     const g1=x.g1||dg.g1, g2=x.g2||dg.g2, g3=x.g3||dg.g3, g4=x.g4||dg.g4, g5=x.g5||dg.g5;
     return `
     <tr class="${x.top?'top':''}">
-      <td><span style="color:var(--t2);font-size:8px;margin-right:3px">${i+1}</span><span style="font-weight:600;color:var(--t0)">${x.s}</span>${x.top?'<span style="color:var(--go);font-size:8px"> ★</span>':''}<br><span style="font-size:8px;color:var(--t2)">${x.sec}</span></td>
+      <td><span style="color:var(--t2);font-size:8px;margin-right:3px">${i+1}</span><span class="tv-link" data-tvsym="${x.s}" style="font-weight:600;color:var(--t0)">${x.s}</span>${x.top?'<span style="color:var(--go);font-size:8px"> ★</span>':''}<br><span style="font-size:8px;color:var(--t2)">${x.sec}</span></td>
       <td style="font-weight:600">${x.pr.toLocaleString('en-IN')}</td>
       <td style="color:${cc(x.chg)};font-weight:600">${x.chg>0?'+':''}${x.chg.toFixed(2)}%</td>
       <td style="color:${cc(x.oiC)}">${x.oiC>0?'+':''}${x.oiC.toLocaleString()}</td>
@@ -2016,7 +2037,7 @@ const swingData=[
   const sc=s=>s>=80?'var(--go)':s>=65?'var(--am)':'var(--st)';
   document.getElementById('sw-body').innerHTML=swingData.map(d=>`
     <tr style="${d.score>=80?'background:rgba(0,232,122,.03)':''}">
-      <td><span style="color:var(--t2);font-size:8px;margin-right:3px">${d.r}</span><span style="font-weight:600;color:var(--t0)">${d.s}</span></td>
+      <td><span style="color:var(--t2);font-size:8px;margin-right:3px">${d.r}</span><span class="tv-link" data-tvsym="${d.s}" style="font-weight:600;color:var(--t0)">${d.s}</span></td>
       <td style="color:var(--t2);font-size:9px">${d.sec}</td>
       <td style="font-weight:600">${d.pr.toLocaleString('en-IN')}</td>
       <td><span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:2px;${sc2(d.setup)}">${d.setup}</span></td>
@@ -2401,9 +2422,11 @@ function btRenderPage(){
       const hp=d.entry>0;
       const ps=d.pnl>0?'<span style="color:var(--go);font-weight:600">+'+d.pnl+' pts</span>':'<span style="color:var(--st);font-weight:600">'+d.pnl+' pts</span>';
       const pw=!hp?(d.pnl>0?'<span style="color:var(--go)">+'+d.pnl+' pts</span>':'<span style="color:var(--st)">'+d.pnl+' pts</span>'):'<span style="color:var(--t2)">N/A</span>';
-      return '<tr>'+
+      const sym = d.sig ? d.sig.split(' ')[0] : 'NIFTY';
+      const sigLink = `<span style="color:#38beff;cursor:pointer;font-weight:700" onclick="event.stopPropagation();openChart('${sym}','${d.date}')" title="Click to view chart">${d.sig}</span>`;
+      return '<tr style="cursor:pointer" onclick="openChart(\''+sym+'\',\''+d.date+'\')">'+
         '<td style="color:var(--t2);font-size:8px;white-space:nowrap">'+d.dt+'</td>'+
-        '<td style="font-weight:600;color:var(--t0)">'+d.sig+'</td>'+
+        '<td style="font-weight:600;color:var(--t0)">'+sigLink+'</td>'+
         '<td style="color:'+(d.dir==='L'?'var(--go)':'var(--st)')+';font-weight:700">'+(d.dir==='L'?'LONG':'SHORT')+'</td>'+
         '<td style="color:var(--am);font-weight:600">'+d.gate+'</td>'+
         '<td style="color:var(--t2);font-size:9px">'+d.reason+'</td>'+
@@ -2853,7 +2876,7 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
           (s === 'hi' ? 'HIGH' : s === 'md' ? 'MED' : 'LOW') + '</span>';
         tbody2.innerHTML = d.map(sp =>
           '<tr class="' + (sp.type === 'buy' ? 'sbuy' : sp.type === 'sell' ? 'ssell' : 'soi') + '">' +
-          '<td style="font-weight:600;color:var(--t0)">' + sp.symbol + '</td>' +
+          '<td><span class="tv-link" data-tvsym="' + sp.symbol + '" style="font-weight:600;color:var(--t0)">' + sp.symbol + '</span></td>' +
           '<td style="color:var(--t2)">' + (sp.time || '—') + '</td>' +
           '<td style="font-weight:600">' + (sp.price ? Math.round(sp.price).toLocaleString('en-IN') : '—') + '</td>' +
           '<td style="color:' + (sp.chg_pct >= 0 ? 'var(--go)' : 'var(--st)') + ';font-weight:600">' +
@@ -2949,6 +2972,21 @@ function updateConfidence(score) {
   if(el3) el3.innerHTML = dots;
   if(el4){ el4.textContent = score.toFixed(1); el4.style.color = col; }
 }
+
+// ═══════════════════════════════════════════════
+// CHART MODAL (Investing.com style using Chart.js)
+// ═══════════════════════════════════════════════
+let chart = null;
+// Legacy openChart — now delegates to TradingView modal
+function openChart(symbol, dateStr){
+  openTVChart(symbol, dateStr || window._histDate || null);
+}
+function closeChart(){ closeTVChart(); }
+function setChartRange(){}
+
+// Legacy stubs — replaced by TradingView
+function loadChartData(){}
+function generateMockChartData(){}
 
 // ═══════════════════════════════════════════════
 // BACKTEST PANEL
@@ -3103,8 +3141,8 @@ function bt2RenderResults(data) {
       ? `<span style="color:${oc};font-weight:600">${t.outcome_pts>0?'+':''}${t.outcome_pts}</span>` : '—';
     const f0 = v => v!=null ? Math.round(v) : '—';
     const rowStyle = isExec?'background:rgba(0,200,100,0.07)':isWatch?'background:rgba(255,180,0,0.05)':'';
-    return `<tr style="${rowStyle}" onclick="dvLoadDate('${t.date}')" title="Click to drill down ${t.date}">
-      <td style="cursor:pointer;color:var(--bl)">${t.date}</td>
+    return `<tr style="${rowStyle};cursor:pointer" onclick="openChart('NIFTY','${t.date}')" title="Click to view chart for ${t.date}">
+      <td style="color:var(--bl)">${t.date}</td>
       <td style="color:${vc};font-weight:600">${vLabel}</td>
       <td style="color:${vc};font-weight:700">${t.pass_count}/5</td>
       <td style="font-weight:600">${(t.nifty||0).toFixed(0)}</td>
@@ -3292,7 +3330,7 @@ async function tbDateChange(val) {
           const g5h = s.g5 || (s.atr_pct<=1.5 ? 'go' : 'am');
           return '<tr class="'+(score>=80?'top':'')+'">'
             + '<td><span style="color:var(--t2);font-size:8px;margin-right:3px">'+(i+1)+'</span>'
-            + '<span style="font-weight:600;color:var(--t0)">'+s.symbol+star+'</span><br>'
+            + '<span class="tv-link" data-tvsym="'+s.symbol+'" style="font-weight:600;color:var(--t0)">'+s.symbol+star+'</span><br>'
             + '<span style="font-size:8px;color:var(--t2)">'+(secM[s.symbol]||'Market')+'</span></td>'
             + '<td style="font-weight:600">'+Math.round(s.price).toLocaleString('en-IN')+'</td>'
             + '<td style="color:'+cc(s.chg_pct)+';font-weight:600">'+(s.chg_pct>=0?'+':'')+s.chg_pct.toFixed(2)+'%</td>'
@@ -3412,7 +3450,7 @@ async function tbDateChange(val) {
           const ocColor = p.outcome==='PROFIT'?'var(--go)':p.outcome==='LOSS'?'var(--st)':'var(--t2)';
           const ocLabel = p.outcome && p.outcome!=='NO_DATA' && p.outcome!=='UNKNOWN' ? p.outcome.replace('_',' ') : '—';
           return `<tr style="${sc>=80?'background:rgba(0,232,122,.03)':''}">
-            <td><span style="color:var(--t2);font-size:8px;margin-right:3px">${i+1}</span><span style="font-weight:600;color:var(--t0)">${p.sym}</span></td>
+            <td><span style="color:var(--t2);font-size:8px;margin-right:3px">${i+1}</span><span class="tv-link" data-tvsym="${p.sym}" style="font-weight:600;color:var(--t0)">${p.sym}</span></td>
             <td style="color:var(--t2);font-size:9px">${_secM[p.sym]||'Market'}</td>
             <td style="font-weight:600">${Math.round(pr).toLocaleString('en-IN')}</td>
             <td><span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:2px;${_sc2(p.setup)}">${(p.setup||'—').toUpperCase()}</span></td>
@@ -3991,7 +4029,7 @@ function tbGoLive() {
     const sb=document.getElementById('sw-body');
     if(sb) sb.innerHTML=swingData.map(d=>`
       <tr style="${d.score>=80?'background:rgba(0,232,122,.03)':''}">
-        <td><span style="color:var(--t2);font-size:8px;margin-right:3px">${d.r}</span><span style="font-weight:600;color:var(--t0)">${d.s}</span></td>
+        <td><span style="color:var(--t2);font-size:8px;margin-right:3px">${d.r}</span><span class="tv-link" data-tvsym="${d.s}" style="font-weight:600;color:var(--t0)">${d.s}</span></td>
         <td style="color:var(--t2);font-size:9px">${d.sec}</td>
         <td style="font-weight:600">${d.pr.toLocaleString('en-IN')}</td>
         <td><span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:2px;${sc2(d.setup)}">${d.setup}</span></td>
@@ -4171,6 +4209,116 @@ function dvRender(d) {
     }
   } catch(e) {}
 })();
+
+// ═══════════════════════════════════════════════
+// TRADINGVIEW CHART MODAL
+// ═══════════════════════════════════════════════
+const _tvSymMap = {
+  'NIFTY':'NSE:NIFTY','BANKNIFTY':'NSE:BANKNIFTY','INDIAVIX':'NSE:INDIAVIX',
+  'ICICIBANK':'NSE:ICICIBANK','SBIN':'NSE:SBIN','HDFCBANK':'NSE:HDFCBANK',
+  'AXISBANK':'NSE:AXISBANK','KOTAKBANK':'NSE:KOTAKBANK','INDUSINDBK':'NSE:INDUSINDBK',
+  'LT':'NSE:LT','TCS':'NSE:TCS','RELIANCE':'NSE:RELIANCE','TATAMOTORS':'NSE:TATAMOTORS',
+  'BAJFINANCE':'NSE:BAJFINANCE','TATASTEEL':'NSE:TATASTEEL','INFY':'NSE:INFY',
+  'MARUTI':'NSE:MARUTI','SUNPHARMA':'NSE:SUNPHARMA','NIFTY 50':'NSE:NIFTY',
+  'BANK NIFTY':'NSE:BANKNIFTY','INDIA VIX':'NSE:INDIAVIX',
+};
+let _tvWidget = null;
+let _tvInterval = 'D';
+
+function openTVChart(sym, date) {
+  const tvSym = _tvSymMap[sym] || ('NSE:' + sym);
+  const modal = document.getElementById('tv-modal');
+  modal.classList.add('open');
+  document.getElementById('tv-sym-lbl').textContent = sym;
+  const dlbl = document.getElementById('tv-date-lbl');
+  if(date) { dlbl.textContent = '📅 ' + date; dlbl.style.display = ''; }
+  else { dlbl.style.display = 'none'; }
+  // Set active interval btn
+  document.querySelectorAll('.tvi').forEach(b => b.classList.toggle('on', b.dataset.iv === _tvInterval));
+  _buildTVChart(tvSym, date, _tvInterval);
+}
+
+function _buildTVChart(tvSym, date, interval) {
+  const container = document.getElementById('tv-container');
+  container.innerHTML = '<div id="tv-chart-div" style="height:100%;width:100%"></div>';
+  if(typeof TradingView === 'undefined') {
+    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--t2);font-size:11px">TradingView failed to load — check internet connection</div>';
+    return;
+  }
+  const isDark = !document.documentElement.classList.contains('light');
+  _tvWidget = new TradingView.widget({
+    container_id: 'tv-chart-div',
+    autosize: true,
+    symbol: tvSym,
+    interval: interval,
+    timezone: 'Asia/Kolkata',
+    theme: isDark ? 'dark' : 'light',
+    style: '1',
+    locale: 'en',
+    toolbar_bg: isDark ? '#121d2c' : '#f2f5fb',
+    hide_side_toolbar: false,
+    allow_symbol_change: true,
+    withdateranges: true,
+    hide_top_toolbar: false,
+    studies: ['RSI@tv-basicstudies','Volume@tv-basicstudies'],
+    show_popup_button: true,
+    popup_width: '1000',
+    popup_height: '650',
+  });
+  if(date && _tvWidget.onChartReady) {
+    _tvWidget.onChartReady(() => {
+      try {
+        const ts = new Date(date).getTime() / 1000;
+        const span = interval==='D' ? 90*86400 : interval==='W' ? 365*86400 : 30*86400;
+        _tvWidget.chart().setVisibleRange({ from: ts - span * 0.6, to: ts + span * 0.4 });
+      } catch(e){}
+    });
+  }
+}
+
+function closeTVChart() {
+  document.getElementById('tv-modal').classList.remove('open');
+  if(_tvWidget) { try { _tvWidget.remove(); } catch(e){} _tvWidget = null; }
+  document.getElementById('tv-container').innerHTML = '';
+}
+
+function tvSetInterval(iv, btn) {
+  _tvInterval = iv;
+  document.querySelectorAll('.tvi').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  const sym = document.getElementById('tv-sym-lbl').textContent;
+  const date = document.getElementById('tv-date-lbl').textContent.replace('📅 ','').trim() || null;
+  _buildTVChart(_tvSymMap[sym] || ('NSE:'+sym), date || null, iv);
+}
+
+// ESC closes modal
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeTVChart(); });
+
+// Delegated click handler — any .tv-link click opens chart
+document.addEventListener('click', e => {
+  const el = e.target.closest('.tv-link');
+  if(el && el.dataset.tvsym) {
+    e.stopPropagation();
+    openTVChart(el.dataset.tvsym, window._histDate || null);
+  }
+});
 </script>
+
+<!-- TradingView Chart Modal -->
+<div id="tv-modal">
+  <div id="tv-topbar">
+    <span id="tv-sym-lbl"></span>
+    <span id="tv-date-lbl"></span>
+    <div id="tv-interval">
+      <button class="tvi" data-iv="5" onclick="tvSetInterval('5',this)">5m</button>
+      <button class="tvi" data-iv="15" onclick="tvSetInterval('15',this)">15m</button>
+      <button class="tvi" data-iv="60" onclick="tvSetInterval('60',this)">1h</button>
+      <button class="tvi on" data-iv="D" onclick="tvSetInterval('D',this)">1D</button>
+      <button class="tvi" data-iv="W" onclick="tvSetInterval('W',this)">1W</button>
+    </div>
+    <button id="tv-close" onclick="closeTVChart()">✕ CLOSE</button>
+  </div>
+  <div id="tv-container"></div>
+</div>
 </body>
 </html>

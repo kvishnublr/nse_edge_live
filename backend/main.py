@@ -322,6 +322,47 @@ async def get_indices():
     return JSONResponse(fetcher.fetch_indices() or {"error": "no data"})
 
 
+@app.get("/api/chart/{symbol}")
+async def get_chart_data(symbol: str, from_date: str = None, to_date: str = None):
+    """Return OHLCV data for charting."""
+    from feed import get_kite
+    from datetime import datetime, timedelta
+    from config import KITE_TOKENS
+    
+    symbol = symbol.upper()
+    if symbol not in KITE_TOKENS:
+        return JSONResponse({"error": f"Unknown symbol: {symbol}"}, status_code=400)
+    
+    try:
+        kite = get_kite()
+        if not from_date:
+            from_date = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
+        if not to_date:
+            to_date = datetime.now().strftime("%Y-%m-%d")
+        
+        token = KITE_TOKENS[symbol]
+        data = kite.historical_data(token, from_date, to_date, "day")
+        
+        candles = []
+        volume = []
+        for d in data:
+            ts = int(d["date"].timestamp())
+            candles.append({
+                "time": ts,
+                "open": d["open"],
+                "high": d["high"],
+                "low": d["low"],
+                "close": d["close"],
+            })
+            vol = d.get("volume", 0) or 0
+            color = "rgba(0,232,122,0.3)" if d["close"] >= d["open"] else "rgba(255,51,85,0.3)"
+            volume.append({"time": ts, "value": vol, "color": color})
+        
+        return JSONResponse({"candles": candles, "volume": volume})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.get("/api/fii")
 async def get_fii():
     return JSONResponse(fetcher.fetch_fii_dii() or {"error": "no data"})
@@ -833,6 +874,8 @@ async def dayview_full(date: str):
                         "reason":      f"R:R 1:{rr_val} · {pc_s}/5 gates · {'LONG BUILDUP' if dp>0 and pc_s>=4 else 'MOMENTUM' if dp>0 else 'WATCH'}",
                         "reason_p":    f"R:R 1:{rr_val_p} · {pc_s}/5 gates · Swing Target",
                         "cls":         "rpk-go" if pc_s>=4 else "rpk-am",
+                        "g1": g1i["state"], "g2": g2i["state"],
+                        "g3": g3s["state"], "g4": g4s["state"], "g5": g5s["state"],
                     })
             except Exception: continue
 
