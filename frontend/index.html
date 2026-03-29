@@ -1535,9 +1535,10 @@ const MODES={
 function renderHistPicksHtml(picks, mode) {
   const rpp = document.getElementById('rp-picks');
   if(!rpp || !picks || !picks.length) return;
-  // For positional mode show swing/higher R:R picks (rr>=2.5), intraday shows all
-  const filtered = mode==='positional' ? picks.filter(p=>parseFloat(p.rr)>=2.5) : picks;
-  const list = filtered.length ? filtered : picks; // fallback to all if filter empty
+  const isPos = mode === 'positional';
+  // Positional: prefer higher R:R picks; intraday: all picks
+  const filtered = isPos ? picks.filter(p => parseFloat(p.rr_p || p.rr) >= 2.5) : picks;
+  const list = filtered.length ? filtered : picks;
   rpp.innerHTML = list.map(p => {
     const vc  = p.verdict==='EXECUTE' ? 'var(--go)' : p.verdict==='WATCH' ? 'var(--am)' : 'var(--t2)';
     const bdc = p.verdict==='EXECUTE' ? 'bg' : p.verdict==='WATCH' ? 'ba' : 'bm';
@@ -1546,7 +1547,11 @@ function renderHistPicksHtml(picks, mode) {
       : p.conf==='HIGH CONF'
         ? 'color:var(--bl);border:1px solid rgba(56,190,255,.35);background:rgba(56,190,255,.10)'
         : 'color:var(--am);border:1px solid rgba(255,183,0,.35);background:rgba(255,183,0,.10)';
-    const levelsHtml = (p.entry && p.sl && p.target)
+    // Use mode-specific target and RR
+    const tgt    = isPos ? (p.target_p || p.target) : p.target;
+    const rr     = isPos ? (p.rr_p     || p.rr)     : p.rr;
+    const reason = isPos ? (p.reason_p || p.reason)  : p.reason;
+    const levelsHtml = (p.entry && p.sl && tgt)
       ? `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px;margin:5px 0 3px">
           <div style="background:rgba(255,255,255,.04);border-radius:2px;padding:3px 4px;text-align:center">
             <div style="font-size:7px;color:var(--t2);letter-spacing:.5px">ENTRY</div>
@@ -1558,7 +1563,7 @@ function renderHistPicksHtml(picks, mode) {
           </div>
           <div style="background:rgba(0,232,122,.08);border-radius:2px;padding:3px 4px;text-align:center">
             <div style="font-size:7px;color:var(--t2);letter-spacing:.5px">TARGET</div>
-            <div style="font-size:10px;font-weight:700;color:var(--go)">${p.target}</div>
+            <div style="font-size:10px;font-weight:700;color:var(--go)">${tgt}</div>
           </div>
         </div>` : '';
     const outcomeMap = {
@@ -1574,7 +1579,7 @@ function renderHistPicksHtml(picks, mode) {
       : '';
     const footerHtml = `<div style="display:flex;align-items:center;gap:5px;margin-top:4px">
       ${p.conf ? `<span style="font-size:7.5px;font-weight:700;padding:1px 5px;border-radius:2px;letter-spacing:.4px;${confStyle}">${p.conf}</span>` : ''}
-      ${p.rr ? `<span style="font-size:8px;color:var(--t2)">R:R 1:${p.rr}</span>` : ''}
+      ${rr ? `<span style="font-size:8px;color:var(--t2)">R:R 1:${rr}</span>` : ''}
       ${p.signal_time ? `<span style="font-size:8px;color:var(--t2);margin-left:auto">⏱ ${p.signal_time}</span>` : ''}
     </div>`;
     return `<div class="rpk ${p.cls||'rpk-am'}">
@@ -1584,7 +1589,7 @@ function renderHistPicksHtml(picks, mode) {
       </div>
       <div class="rpkm">${p.meta||''}</div>
       ${levelsHtml}
-      <div class="rpkr" style="color:${vc};margin-bottom:0">${p.reason||''}</div>
+      <div class="rpkr" style="color:${vc};margin-bottom:0">${reason||''}</div>
       ${outcomeHtml}
       ${footerHtml}
     </div>`;
@@ -1634,6 +1639,45 @@ function setMode(m){
     const picks2 = window._histData && window._histData.stock_picks;
     if(picks2 && picks2.length) {
       renderHistPicksHtml(picks2, m);
+      // Also re-render Swing Radar with mode-correct targets
+      const _isPos2 = m === 'positional';
+      const _secM2 = {HDFCBANK:'Banking',ICICIBANK:'Banking',AXISBANK:'Banking',KOTAKBANK:'Banking',
+        INDUSINDBK:'Banking',SBIN:'PSU Bank',BANKNIFTY:'Index',TCS:'IT',INFY:'IT',
+        MARUTI:'Auto',TATAMOTORS:'Auto',LT:'Infra',BAJFINANCE:'NBFC',RELIANCE:'Energy'};
+      const _holdM2 = {Breakout:'3–5d',Pullback:'4–7d',Recovery:'5–8d',Momentum:'4–6d'};
+      const _sc2b = t => t==='Breakout'?'color:var(--go);border:1px solid var(--go-b)'
+        : t==='Pullback'?'color:var(--am);border:1px solid var(--am-b)'
+        : t==='Recovery'?'color:var(--st);border:1px solid var(--st-b)'
+        : 'color:var(--bl);border:1px solid var(--bl-b)';
+      const _scb = s => s>=80?'var(--go)':s>=65?'var(--am)':'var(--st)';
+      const swb = document.getElementById('sw-body');
+      if(swb) swb.innerHTML = picks2.map((p, i) => {
+        const pr   = parseFloat(p.close)||0;
+        const entN = parseFloat(p.entry)||pr;
+        const atr  = parseFloat(p.atr)||(pr*0.015);
+        const ezLo = Math.round(entN - 0.3*atr).toLocaleString('en-IN');
+        const ezHi = Math.round(entN + 0.2*atr).toLocaleString('en-IN');
+        const tgt  = Math.round(parseFloat(_isPos2 ? (p.target_p||p.target) : p.target)||0);
+        const sl   = Math.round(parseFloat(p.sl)||0);
+        const rr   = parseFloat(_isPos2 ? (p.rr_p||p.rr) : p.rr)||0;
+        const sc   = p.score||0;
+        const ocColor = p.outcome==='PROFIT'?'var(--go)':p.outcome==='LOSS'?'var(--st)':'var(--t2)';
+        const ocLabel = p.outcome && p.outcome!=='NO_DATA' && p.outcome!=='UNKNOWN' ? p.outcome.replace('_',' ') : '—';
+        return `<tr style="${sc>=80?'background:rgba(0,232,122,.03)':''}">
+          <td><span style="color:var(--t2);font-size:8px;margin-right:3px">${i+1}</span><span style="font-weight:600;color:var(--t0)">${p.sym}</span></td>
+          <td style="color:var(--t2);font-size:9px">${_secM2[p.sym]||'Market'}</td>
+          <td style="font-weight:600">${Math.round(pr).toLocaleString('en-IN')}</td>
+          <td><span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:2px;${_sc2b(p.setup)}">${(p.setup||'—').toUpperCase()}</span></td>
+          <td style="color:var(--am)">${ezLo}–${ezHi}</td>
+          <td style="color:var(--go);font-weight:600">${tgt.toLocaleString('en-IN')}</td>
+          <td style="color:var(--st)">${sl.toLocaleString('en-IN')}</td>
+          <td style="color:${rr>=2.5?'var(--go)':rr>=2?'var(--am)':'var(--st)'};font-weight:600">1:${rr.toFixed(1)}</td>
+          <td style="color:var(--t2)">—</td><td style="color:var(--t2)">—</td><td style="color:var(--t2)">—</td>
+          <td style="color:${ocColor};font-size:9px;font-weight:700">${ocLabel}${p.signal_time?'<br><span style="font-size:7px;color:var(--t2);font-weight:400">⏱ '+p.signal_time+'</span>':''}</td>
+          <td style="color:var(--t2)">${_holdM2[p.setup]||'5–8d'}</td>
+          <td><span style="font-size:10px;font-weight:700;color:${_scb(sc)}">${sc}</span><div class="swbar"><div class="swbf" style="width:${sc}%;background:${_scb(sc)}"></div></div></td>
+        </tr>`;
+      }).join('');
     } else if(rpp2) {
       const pc = window._histData && window._histData.gates ? window._histData.gates.pass_count : 0;
       rpp2.innerHTML = `<div style="padding:14px 10px;text-align:center;color:var(--t2);font-size:9px;line-height:1.6">
@@ -3281,18 +3325,22 @@ async function tbDateChange(val) {
 
     // ── [HIST] Swing Radar ───────────────────────────────────────────────────
     const swBody = document.getElementById('sw-body');
+    const _isPos = (typeof curMode !== 'undefined' && curMode === 'positional');
     if(swBody) {
       if(d.stock_picks && d.stock_picks.length) {
         swBody.innerHTML = d.stock_picks.map((p, i) => {
           const pr   = parseFloat(p.close)||0;
-          const atr  = parseFloat(p.atr)||(pr*0.015);
           const entN = parseFloat(p.entry)||pr;
+          const atr  = parseFloat(p.atr)||(pr*0.015);
           const ezLo = Math.round(entN - 0.3*atr).toLocaleString('en-IN');
           const ezHi = Math.round(entN + 0.2*atr).toLocaleString('en-IN');
-          const tgt  = Math.round(parseFloat(p.target)||0);
+          const tgt  = Math.round(parseFloat(_isPos ? (p.target_p||p.target) : p.target)||0);
           const sl   = Math.round(parseFloat(p.sl)||0);
-          const rr   = parseFloat(p.rr)||0;
+          const rr   = parseFloat(_isPos ? (p.rr_p||p.rr) : p.rr)||0;
           const sc   = p.score||0;
+          const ocMap = {PROFIT:'✓ PROFIT','color':'var(--go)',LOSS:'✗ LOSS',NOT_EXECUTED:'— NOT EXEC'};
+          const ocColor = p.outcome==='PROFIT'?'var(--go)':p.outcome==='LOSS'?'var(--st)':'var(--t2)';
+          const ocLabel = p.outcome && p.outcome!=='NO_DATA' && p.outcome!=='UNKNOWN' ? p.outcome.replace('_',' ') : '—';
           return `<tr style="${sc>=80?'background:rgba(0,232,122,.03)':''}">
             <td><span style="color:var(--t2);font-size:8px;margin-right:3px">${i+1}</span><span style="font-weight:600;color:var(--t0)">${p.sym}</span></td>
             <td style="color:var(--t2);font-size:9px">${_secM[p.sym]||'Market'}</td>
@@ -3303,7 +3351,7 @@ async function tbDateChange(val) {
             <td style="color:var(--st)">${sl.toLocaleString('en-IN')}</td>
             <td style="color:${rr>=2.5?'var(--go)':rr>=2?'var(--am)':'var(--st)'};font-weight:600">1:${rr.toFixed(1)}</td>
             <td style="color:var(--t2)">—</td><td style="color:var(--t2)">—</td><td style="color:var(--t2)">—</td>
-            <td style="color:var(--bl);font-size:9px">${p.meta||'—'}</td>
+            <td style="color:${ocColor};font-size:9px;font-weight:700">${ocLabel}${p.signal_time?'<br><span style="font-size:7px;color:var(--t2);font-weight:400">⏱ '+p.signal_time+'</span>':''}</td>
             <td style="color:var(--t2)">${_holdM[p.setup]||'5–8d'}</td>
             <td><span style="font-size:10px;font-weight:700;color:${_sc(sc)}">${sc}</span><div class="swbar"><div class="swbf" style="width:${sc}%;background:${_sc(sc)}"></div></div></td>
           </tr>`;

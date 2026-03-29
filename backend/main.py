@@ -772,21 +772,26 @@ async def dayview_full(date: str):
 
                     if dp >= 1.5:
                         setup = "Breakout"
-                        entry_p = dc * 1.003           # slight buffer above close
+                        entry_p = dc * 1.003
                     elif dp > 0:
                         setup = "Pullback"
-                        entry_p = dc - 0.25 * atr_v   # buy on small dip
+                        entry_p = dc - 0.25 * atr_v
                     else:
                         setup = "Recovery"
-                        entry_p = dc + 0.15 * atr_v   # wait for confirmation
+                        entry_p = dc + 0.15 * atr_v
 
-                    sl_p    = max(swing_low, entry_p - 1.6 * atr_v)
-                    risk_p  = max(entry_p - sl_p, atr_v * 0.5)
-                    tgt_p   = entry_p + 2.5 * risk_p
-                    # If there's nearby resistance, cap target there
+                    sl_p       = max(swing_low, entry_p - 1.6 * atr_v)
+                    risk_p     = max(entry_p - sl_p, atr_v * 0.5)
+                    # Intraday target: 2.5x risk; Positional target: 4x risk
+                    tgt_p_i    = entry_p + 2.5 * risk_p
+                    tgt_p_pos  = entry_p + 4.0 * risk_p
                     if 0 < (swing_high - entry_p) < 2.5 * risk_p:
-                        tgt_p = swing_high + 0.5 * atr_v
-                    rr_val  = round((tgt_p - entry_p) / risk_p, 1) if risk_p > 0 else 0.0
+                        tgt_p_i = swing_high + 0.5 * atr_v
+                    if 0 < (swing_high - entry_p) < 4.0 * risk_p:
+                        tgt_p_pos = swing_high + 0.5 * atr_v
+                    tgt_p   = tgt_p_i  # default shown (intraday)
+                    rr_val  = round((tgt_p_i - entry_p) / risk_p, 1) if risk_p > 0 else 0.0
+                    rr_val_p= round((tgt_p_pos - entry_p) / risk_p, 1) if risk_p > 0 else 0.0
 
                     def _pf(p):
                         return str(int(round(p))) if p >= 100 else f"{p:.1f}"
@@ -797,28 +802,34 @@ async def dayview_full(date: str):
                               else 'Auto' if sym in ['MARUTI','TATAMOTORS']
                               else 'Market')
 
+                    # signal_time: for historical dates use 09:15 (market open); for today use current time
                     import pytz as _pytz
-                    _ist = datetime.datetime.now(_pytz.timezone('Asia/Kolkata'))
+                    _ist_now = datetime.datetime.now(_pytz.timezone('Asia/Kolkata'))
+                    _today_str = _ist_now.strftime("%Y-%m-%d")
+                    _sig_time = _ist_now.strftime("%H:%M") if date == _today_str else "09:15"
                     stock_picks.append({
-                        "sym":      sym,
-                        "score":    score,
-                        "pc":       pc_s,
-                        "verdict":  "EXECUTE" if pc_s==5 else "WATCH" if pc_s==4 else "WAIT",
-                        "conf":     "CONFIRMED" if pc_s==5 else "HIGH CONF" if pc_s==4 else "50:50",
-                        "signal_time": _ist.strftime("%H:%M"),
-                        "close":    dc,
-                        "chg_pct":  dp,
-                        "vol_ratio": vol_r,
-                        "atr":      atr_v,
-                        "oi_chg_pct": oi_chg_proxy,
-                        "setup":    setup,
-                        "entry":    _pf(entry_p),
-                        "sl":       _pf(sl_p),
-                        "target":   _pf(tgt_p),
-                        "rr":       rr_val,
-                        "meta":     f"{setup} · {sector} · Vol {vol_r}x · PCR {pcr:.2f}",
-                        "reason":   f"R:R 1:{rr_val} · {pc_s}/5 gates · {'LONG BUILDUP' if dp>0 and pc_s>=4 else 'MOMENTUM' if dp>0 else 'WATCH'}",
-                        "cls":      "rpk-go" if pc_s>=4 else "rpk-am",
+                        "sym":         sym,
+                        "score":       score,
+                        "pc":          pc_s,
+                        "verdict":     "EXECUTE" if pc_s==5 else "WATCH" if pc_s==4 else "WAIT",
+                        "conf":        "CONFIRMED" if pc_s==5 else "HIGH CONF" if pc_s==4 else "50:50",
+                        "signal_time": _sig_time,
+                        "close":       dc,
+                        "chg_pct":     dp,
+                        "vol_ratio":   vol_r,
+                        "atr":         atr_v,
+                        "oi_chg_pct":  oi_chg_proxy,
+                        "setup":       setup,
+                        "entry":       _pf(entry_p),
+                        "sl":          _pf(sl_p),
+                        "target":      _pf(tgt_p_i),
+                        "target_p":    _pf(tgt_p_pos),
+                        "rr":          rr_val,
+                        "rr_p":        rr_val_p,
+                        "meta":        f"{setup} · {sector} · Vol {vol_r}x · PCR {pcr:.2f}",
+                        "reason":      f"R:R 1:{rr_val} · {pc_s}/5 gates · {'LONG BUILDUP' if dp>0 and pc_s>=4 else 'MOMENTUM' if dp>0 else 'WATCH'}",
+                        "reason_p":    f"R:R 1:{rr_val_p} · {pc_s}/5 gates · Swing Target",
+                        "cls":         "rpk-go" if pc_s>=4 else "rpk-am",
                     })
             except Exception: continue
 
@@ -846,19 +857,24 @@ async def dayview_full(date: str):
                     tgt   = float(pk["target"])
 
                     outcome = "NOT_EXECUTED"
+                    entry_triggered = False
                     for c5 in candles_5m:
                         ct = c5["date"]
                         if hasattr(ct, "hour"):
                             if ct.hour < sig_h or (ct.hour == sig_h and ct.minute < sig_m):
                                 continue
                         hi, lo = c5["high"], c5["low"]
-                        # LONG: target=high hit, sl=low hit
+                        if not entry_triggered:
+                            if hi >= entry:
+                                entry_triggered = True
+                            else:
+                                continue
+                        # Entry triggered — now check target/SL
                         if lo <= sl:
                             outcome = "LOSS"; break
                         if hi >= tgt:
                             outcome = "PROFIT"; break
-                        if hi >= entry:
-                            outcome = "NOT_EXECUTED"  # entry triggered but neither hit yet
+                        outcome = "NOT_EXECUTED"  # in trade, neither hit yet
 
                     pk["outcome"] = outcome
                 except Exception:
