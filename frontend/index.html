@@ -6,7 +6,6 @@
 <title>NSE EDGE — Intelligent Trading System v5</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://s3.tradingview.com/tv.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -4211,7 +4210,7 @@ function dvRender(d) {
 })();
 
 // ═══════════════════════════════════════════════
-// TRADINGVIEW CHART MODAL
+// TRADINGVIEW CHART MODAL (iframe embed — no symbol restrictions)
 // ═══════════════════════════════════════════════
 const _tvSymMap = {
   'NIFTY':'NSE:NIFTY','BANKNIFTY':'NSE:BANKNIFTY','INDIAVIX':'NSE:INDIAVIX',
@@ -4222,63 +4221,59 @@ const _tvSymMap = {
   'MARUTI':'NSE:MARUTI','SUNPHARMA':'NSE:SUNPHARMA','NIFTY 50':'NSE:NIFTY',
   'BANK NIFTY':'NSE:BANKNIFTY','INDIA VIX':'NSE:INDIAVIX',
 };
-let _tvWidget = null;
+// Interval → TradingView range param for date-jumping
+const _tvRangeMap = { '5':'1D', '15':'5D', '60':'1M', 'D':'6M', 'W':'12M' };
 let _tvInterval = 'D';
+let _tvCurrentSym = '';
+let _tvCurrentDate = null;
 
 function openTVChart(sym, date) {
-  const tvSym = _tvSymMap[sym] || ('NSE:' + sym);
+  _tvCurrentSym = sym;
+  _tvCurrentDate = date || null;
   const modal = document.getElementById('tv-modal');
   modal.classList.add('open');
   document.getElementById('tv-sym-lbl').textContent = sym;
   const dlbl = document.getElementById('tv-date-lbl');
   if(date) { dlbl.textContent = '📅 ' + date; dlbl.style.display = ''; }
   else { dlbl.style.display = 'none'; }
-  // Set active interval btn
   document.querySelectorAll('.tvi').forEach(b => b.classList.toggle('on', b.dataset.iv === _tvInterval));
-  _buildTVChart(tvSym, date, _tvInterval);
+  _buildTVChart(sym, date, _tvInterval);
 }
 
-function _buildTVChart(tvSym, date, interval) {
+function _buildTVChart(sym, date, interval) {
+  const tvSym = _tvSymMap[sym] || ('NSE:' + sym.replace(/ /g,''));
   const container = document.getElementById('tv-container');
-  container.innerHTML = '<div id="tv-chart-div" style="height:100%;width:100%"></div>';
-  if(typeof TradingView === 'undefined') {
-    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--t2);font-size:11px">TradingView failed to load — check internet connection</div>';
-    return;
-  }
   const isDark = !document.documentElement.classList.contains('light');
-  _tvWidget = new TradingView.widget({
-    container_id: 'tv-chart-div',
-    autosize: true,
-    symbol: tvSym,
-    interval: interval,
-    timezone: 'Asia/Kolkata',
-    theme: isDark ? 'dark' : 'light',
-    style: '1',
-    locale: 'en',
-    toolbar_bg: isDark ? '#121d2c' : '#f2f5fb',
-    hide_side_toolbar: false,
-    allow_symbol_change: true,
-    withdateranges: true,
-    hide_top_toolbar: false,
-    studies: ['RSI@tv-basicstudies','Volume@tv-basicstudies'],
-    show_popup_button: true,
-    popup_width: '1000',
-    popup_height: '650',
+  const theme = isDark ? 'dark' : 'light';
+  const range = _tvRangeMap[interval] || '6M';
+  // Use TradingView free widgetembed iframe — no symbol restrictions
+  const params = new URLSearchParams({
+    symbol:           tvSym,
+    interval:         interval,
+    timezone:         'Asia/Kolkata',
+    theme:            theme,
+    style:            '1',
+    locale:           'en',
+    withdateranges:   '1',
+    range:            range,
+    hide_side_toolbar:'0',
+    allow_symbol_change:'1',
+    save_image:       '0',
+    studies:          'RSI@tv-basicstudies',
+    show_popup_button:'1',
   });
-  if(date && _tvWidget.onChartReady) {
-    _tvWidget.onChartReady(() => {
-      try {
-        const ts = new Date(date).getTime() / 1000;
-        const span = interval==='D' ? 90*86400 : interval==='W' ? 365*86400 : 30*86400;
-        _tvWidget.chart().setVisibleRange({ from: ts - span * 0.6, to: ts + span * 0.4 });
-      } catch(e){}
-    });
-  }
+  container.innerHTML = `<iframe
+    src="https://www.tradingview.com/widgetembed/?${params.toString()}"
+    style="width:100%;height:100%;border:none"
+    allowtransparency="true"
+    frameborder="0"
+    scrolling="no"
+    allowfullscreen
+  ></iframe>`;
 }
 
 function closeTVChart() {
   document.getElementById('tv-modal').classList.remove('open');
-  if(_tvWidget) { try { _tvWidget.remove(); } catch(e){} _tvWidget = null; }
   document.getElementById('tv-container').innerHTML = '';
 }
 
@@ -4286,9 +4281,7 @@ function tvSetInterval(iv, btn) {
   _tvInterval = iv;
   document.querySelectorAll('.tvi').forEach(b => b.classList.remove('on'));
   btn.classList.add('on');
-  const sym = document.getElementById('tv-sym-lbl').textContent;
-  const date = document.getElementById('tv-date-lbl').textContent.replace('📅 ','').trim() || null;
-  _buildTVChart(_tvSymMap[sym] || ('NSE:'+sym), date || null, iv);
+  _buildTVChart(_tvCurrentSym, _tvCurrentDate, iv);
 }
 
 // ESC closes modal
