@@ -112,6 +112,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .mtog{display:flex;background:var(--s2);border:1px solid var(--b1);border-radius:3px;overflow:hidden}
 .mb{padding:4px 12px;font-family:var(--fn);font-size:9px;font-weight:600;letter-spacing:1.5px;border:none;cursor:pointer;color:var(--t2);background:transparent;transition:all .15s}
 .mb.on{background:var(--go);color:#000}
+.tbdate-wrap{display:flex;align-items:center;gap:7px;padding:3px 8px;border:1px solid var(--b1);border-radius:5px;background:linear-gradient(180deg,var(--s2),var(--s1))}
+.tbdate-label{font-size:9px;color:var(--bl);letter-spacing:1.2px;font-weight:700;text-transform:uppercase}
+#tb-date{background:var(--s3);border:1px solid var(--bl-b);color:var(--t0);font-family:var(--fn);font-size:10px;font-weight:600;padding:4px 8px;border-radius:4px;outline:none;cursor:pointer;width:124px;box-shadow:inset 0 0 0 1px rgba(56,190,255,.05)}
+#tb-date:hover,#tb-date:focus{border-color:var(--bl);box-shadow:0 0 0 3px rgba(56,190,255,.08)}
+#tb-live-btn{display:none;padding:4px 11px;font-family:var(--fn);font-size:9px;font-weight:700;border:1px solid var(--go);color:var(--go);background:var(--go-d);border-radius:4px;cursor:pointer;letter-spacing:.6px}
+#tb-live-btn:hover{background:var(--go);color:#04110a}
 
 /* GRID */
 #grid{flex:1;display:grid;grid-template-columns:252px 1fr 200px;overflow:hidden}
@@ -123,6 +129,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .pht{font-size:7px;font-weight:600;letter-spacing:1.5px;color:var(--t2)}
 .bd{font-size:7px;font-weight:600;letter-spacing:.3px;padding:1px 5px;border-radius:2px}
 .bg{background:var(--go-d);color:var(--go);border:1px solid var(--go-b)}
+.ocdom{font-size:9px;padding:3px 9px;border-radius:3px;font-weight:800;letter-spacing:1px;display:inline-flex;align-items:center;min-height:20px}
 .br{background:var(--st-d);color:var(--st);border:1px solid var(--st-b)}
 .ba{background:var(--am-d);color:var(--am);border:1px solid var(--am-b)}
 .bb{background:var(--bl-d);color:var(--bl);border:1px solid var(--bl-b)}
@@ -260,9 +267,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .lvl{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-radius:3px;border:1px solid var(--b1);background:var(--s2);margin-bottom:3px;cursor:pointer;transition:background .15s}
 .lvl:hover{background:var(--s3)}
 .lk{font-size:9px;color:var(--t2)}.lp{font-size:12px;font-weight:600}.lt{font-size:8px;font-weight:600;padding:1px 6px;border-radius:2px}
-.wbox{padding:9px 11px;background:var(--am-d);border:1px solid var(--am-b);border-radius:3px}
-.wt2{font-size:8px;color:var(--am);letter-spacing:1px;margin-bottom:5px}
-.wi{font-size:9px;color:var(--t1);line-height:1.55}
+.wbox{padding:12px 14px;background:linear-gradient(135deg,rgba(255,183,77,.16),rgba(255,106,61,.13));border:1px solid rgba(255,166,77,.42);border-left:5px solid #ff9f43;border-radius:6px;box-shadow:inset 0 0 0 1px rgba(255,200,120,.06),0 4px 14px rgba(255,140,0,.08)}
+.wt2{font-size:10px;color:#ffb86b;letter-spacing:1.2px;margin-bottom:7px;font-weight:800;text-shadow:0 0 10px rgba(255,170,90,.12)}
+.wi{font-size:10px;color:#ffd8ab;line-height:1.7;font-weight:600}
+.light .wbox{background:linear-gradient(135deg,rgba(255,196,92,.24),rgba(255,122,69,.19));border-color:rgba(214,108,24,.55);border-left-color:#e67e22;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18),0 4px 14px rgba(214,108,24,.10)}
+.light .wt2{color:#a84b00;text-shadow:none}
+.light .wi{color:#5f2d00}
 
 /* OPTION CHAIN */
 .ochead{display:flex;align-items:center;gap:14px;padding:6px 10px;background:var(--s2);border-radius:3px;border:1px solid var(--b1);margin-bottom:8px;flex-shrink:0;flex-wrap:wrap}
@@ -285,6 +295,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .scr.hi{background:var(--go);color:#000}.scr.md{background:var(--am-d);color:var(--am);border:1px solid var(--am-b)}.scr.lo{background:var(--st-d);color:var(--st);border:1px solid var(--st-b)}
 .stbl tr.top td{background:rgba(0,232,122,.04)!important}
 .stbl tr.top td:first-child{border-left:2px solid var(--go)}
+.tradebox{display:flex;flex-direction:column;gap:2px;min-width:120px}
+.tradebox .thd{font-size:7px;font-weight:800;letter-spacing:.8px}
+.tradebox .tln{font-size:8px;line-height:1.35;color:var(--t1)}
+.tradebox .tg{color:var(--go);font-weight:700}
+.tradebox .tr{color:var(--st);font-weight:700}
+.tradebox .ta{color:var(--am);font-weight:700}
+.tradebox .ttm{font-size:7px;line-height:1.2;color:var(--bl);font-weight:700;letter-spacing:.4px}
+.tradebox .tos{font-size:7px;line-height:1.25;font-weight:700;letter-spacing:.35px}
 
 /* SWING */
 .swbar{height:3px;border-radius:2px;background:var(--b1);margin-top:2px;overflow:hidden}
@@ -395,10 +413,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .asec{display:none;flex:1;flex-direction:column;gap:8px;min-height:0}
 .asec.on{display:flex;overflow-y:auto;padding:12px}
 .ahdrow{display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0;gap:12px}
-.atitle{font-family:var(--fh);font-size:12px;font-weight:700;color:var(--t0);margin-bottom:2px}
-.asub{font-size:9px;color:var(--t2)}
+.atitle{font-family:var(--fh);font-size:15px;font-weight:800;color:var(--t0);margin-bottom:3px;letter-spacing:.4px}
+.asub{font-size:10px;color:var(--t1);line-height:1.45}
 .acard{background:var(--s3);border:1px solid var(--b1);border-radius:4px;padding:10px}
-.acardt{font-size:8px;color:var(--t2);letter-spacing:1.5px;font-weight:600;margin-bottom:6px}
+.acardt{font-size:9px;color:var(--bl);letter-spacing:1.2px;font-weight:700;margin-bottom:7px;text-transform:uppercase}
 .atbl{width:100%;border-collapse:collapse;font-size:9px}
 .atbl th{padding:4px 8px;text-align:right;color:var(--t2);font-weight:600;letter-spacing:.5px;border-bottom:1px solid var(--b1);background:var(--s3);position:sticky;top:0}
 .atbl th:first-child,.atbl td:first-child{text-align:left}
@@ -569,10 +587,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <span class="zlbl" id="zlbl">ZONE: —</span>
     <div class="sep"></div>
     <!-- DATE VIEWER CONTROL -->
-    <div style="display:flex;align-items:center;gap:6px">
-      <span style="font-size:8px;color:var(--t2);letter-spacing:1px;font-weight:600">DATE VIEW</span>
-      <input type="date" id="tb-date" style="background:var(--s3);border:1px solid var(--b1);color:var(--t0);font-family:var(--fn);font-size:9px;padding:2px 6px;border-radius:3px;outline:none;cursor:pointer;width:110px" onchange="tbDateChange(this.value)">
-      <button id="tb-live-btn" onclick="tbGoLive()" style="display:none;padding:2px 10px;font-family:var(--fn);font-size:8px;font-weight:700;border:1px solid var(--go);color:var(--go);background:transparent;border-radius:3px;cursor:pointer;letter-spacing:.5px">&#9654; BACK TO LIVE</button>
+    <div class="tbdate-wrap">
+      <span class="tbdate-label">Date View</span>
+      <input type="date" id="tb-date" onchange="tbDateChange(this.value)">
+      <button id="tb-live-btn" onclick="tbGoLive()">&#9654; Back To Live</button>
     </div>
   </div>
   <div class="tbr">
@@ -690,7 +708,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   <!-- PLAYBOOK ROW -->
   <div id="pb">
     <div class="pbc"><div class="pbk">BIAS</div><div class="pbv cg" id="pb-bias">BULLISH</div><div class="pbs" id="pb-mode">Intraday</div></div>
-    <div class="pbc"><div class="pbk">CONFIDENCE</div><div class="pbv ca" id="pb-conf">MODERATE</div><div class="pbs">3 / 5 gates</div></div>
+    <div class="pbc"><div class="pbk">CONFIDENCE</div><div class="pbv ca" id="pb-conf">MODERATE</div><div class="pbs" id="pb-conf-s">3 / 5 gates</div></div>
     <div class="pbc"><div class="pbk" id="pb-al-k">ALLOWED</div><div class="pbv cg" id="pb-al-v">LONGS ONLY</div><div class="pbs" id="pb-al-s">No shorts today</div></div>
     <div class="pbc"><div class="pbk" id="pb-wn-k">BEST WINDOW</div><div class="pbv cg" id="pb-wn-v">10:00 – 13:30</div><div class="pbs" id="pb-wn-s">Trend kill zone</div></div>
     <div class="pbc" style="border-right:none"><div class="pbk">TODAY</div><div class="pbv" id="pb-date" style="font-size:11px">—</div><div class="pbs cg" id="pb-mkt">NSE open</div></div>
@@ -826,7 +844,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       <div class="ochi"><span class="ochk">ATM STRIKE</span><span class="ochv ca">24,400</span></div>
       <div class="ochi"><span class="ochk">EXPIRY</span><span class="ochv cm">27 Mar</span></div>
       <div class="ochi"><span class="ochk">IV RANK</span><span class="ochv cg">28 (LOW)</span></div>
-      <div style="margin-left:auto"><span class="bd bg">PUT WRITERS DOMINANT</span></div>
+      <div style="margin-left:auto"><span class="bd bg ocdom">PUT WRITERS DOMINANT</span></div>
     </div>
     <div style="overflow-y:auto;flex:1;min-height:0">
     <table class="xtbl oct">
@@ -871,7 +889,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
           <th>#  STOCK</th><th>PRICE</th><th>CHG%</th>
           <th>OI CHNG</th><th>OI%</th><th>PCR</th>
           <th>VOL/AVG</th><th>ATR%</th><th>RS</th>
-          <th>DEL%</th><th>GATES</th><th>SIGNAL</th><th>SCORE</th>
+          <th>DEL%</th><th>GATES</th><th>SIGNAL</th><th>TRADE</th><th>SCORE</th>
         </tr>
       </thead>
       <tbody id="stk-body"></tbody>
@@ -1514,11 +1532,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
 <!-- RIGHT PANE -->
 <div class="pn" id="right">
-  <div class="ph"><span class="pht">MACRO CONTEXT</span><span class="bd bm">EOD DATA</span></div>
-  <div class="mi"><div><div class="min">SGX NIFTY</div><div class="miv cg">24,430</div></div><div style="text-align:right"><div class="mic cg">+0.38%</div><div class="mit">Pre-market</div></div></div>
+  <div class="ph"><span class="pht">MACRO CONTEXT</span><span class="bd bm" id="macro-badge">LIVE + REF</span></div>
+  <div class="mi"><div><div class="min">NIFTY SPOT</div><div class="miv cg" id="rp-nifty">24,430</div></div><div style="text-align:right"><div class="mic cg" id="rp-nifty-chg">+0.38%</div><div class="mit" id="rp-nifty-lbl">Live index move</div></div></div>
   <div class="mi"><div><div class="min">INDIA VIX</div><div class="miv cg" id="rp-vix">13.2</div></div><div style="text-align:right"><div class="mic cg" id="rp-vix-chg">−1.2%</div><div class="mit cg" id="rp-vix-lbl">LOW → full size</div></div></div>
   <div class="mi"><div><div class="min">FII CASH</div><div class="miv cg" id="rp-fii">+₹2,840 Cr</div></div><div style="text-align:right"><div class="mic cg" id="rp-fii-lbl">NET BUY</div><div class="mit" id="rp-dii">DII +₹1,120 Cr</div></div></div>
-  <div class="mi"><div><div class="min">FII INDEX FUT</div><div class="miv cg">LONG</div></div><div style="text-align:right"><div class="mic cg">+12,480 lots</div><div class="mit cg">Bullish</div></div></div>
+  <div class="mi"><div><div class="min">PCR / OI BIAS</div><div class="miv cg" id="rp-pcrv">LONG</div></div><div style="text-align:right"><div class="mic cg" id="rp-pcrchg">PCR 1.20</div><div class="mit cg" id="rp-pcrlbl">Bullish OI</div></div></div>
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid var(--b1)">
     <div style="padding:7px 10px;border-right:1px solid var(--b1)">
       <div class="min">US 10Y</div><div style="font-size:13px;font-weight:700" class="ca">4.28%</div><div class="mit ca">+0.02</div>
@@ -1598,6 +1616,7 @@ function tick(){
   const cz=document.getElementById('curzone');
   zl.textContent='ZONE: '+zt;zl.style.color=zc;
   if(cz && !window._histMode){cz.textContent=zt;cz.style.color=zc}
+  if(!window._histMode && typeof _refreshPlaybookSummary === 'function') _refreshPlaybookSummary();
 }
 setInterval(tick,1000);tick();
 
@@ -1816,6 +1835,7 @@ function setMode(m){
   document.getElementById('pb-wn-k').textContent=pb.wn.k;
   document.getElementById('pb-wn-v').textContent=pb.wn.v;
   document.getElementById('pb-wn-s').textContent=pb.wn.s;
+  if(!window._histMode) _refreshPlaybookSummary();
 
   // right panel header + picks
   if(window._histMode) {
@@ -1877,17 +1897,26 @@ function setMode(m){
     }
   } else {
     document.getElementById('rp-hd').textContent=m==='intraday'?'INTRADAY PICKS':'POSITIONAL PICKS';
-
-    const picks=d.picks;
-    const avoid=d.avoid;
-    document.getElementById('rp-picks').innerHTML=
-      picks.map(p=>{
+    // Fetch live picks from backend
+    const rpp = document.getElementById('rp-picks');
+    rpp.innerHTML = '<div style="padding:12px;text-align:center;color:var(--t2);font-size:9px">Loading live picks...</div>';
+    fetch('/api/live-picks').then(r=>r.json()).then(lp => {
+      const picks = lp.picks || [];
+      const isPos = m === 'positional';
+      if(!picks.length) {
+        rpp.innerHTML = '<div style="padding:14px;text-align:center;color:var(--t2);font-size:9px">No qualifying picks right now<br><span style="color:var(--am)">Waiting for gate conditions</span></div>';
+        return;
+      }
+      rpp.innerHTML = picks.map(p => {
         const confStyle=p.conf==='CONFIRMED'
           ?'color:var(--go);border:1px solid rgba(0,232,122,.35);background:rgba(0,232,122,.10)'
           :p.conf==='HIGH CONF'
             ?'color:var(--bl);border:1px solid rgba(56,190,255,.35);background:rgba(56,190,255,.10)'
             :'color:var(--am);border:1px solid rgba(255,183,0,.35);background:rgba(255,183,0,.10)';
-        const levelsHtml=p.entry
+        const tgt   = isPos ? (p.target_p || p.target) : p.target;
+        const rr    = isPos ? (p.rr_p || p.rr) : p.rr;
+        const reason= isPos ? (p.reason_p || p.reason) : p.reason;
+        const levelsHtml = p.entry
           ?'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px;margin:5px 0 3px">'+
             '<div style="background:rgba(255,255,255,.04);border-radius:2px;padding:3px 4px;text-align:center">'+
             '<div style="font-size:7px;color:var(--t2);letter-spacing:.5px">ENTRY</div>'+
@@ -1897,22 +1926,34 @@ function setMode(m){
             '<div style="font-size:10px;font-weight:700;color:var(--st)">'+p.sl+'</div></div>'+
             '<div style="background:rgba(0,232,122,.08);border-radius:2px;padding:3px 4px;text-align:center">'+
             '<div style="font-size:7px;color:var(--t2);letter-spacing:.5px">TARGET</div>'+
-            '<div style="font-size:10px;font-weight:700;color:var(--go)">'+p.target+'</div></div></div>'
+            '<div style="font-size:10px;font-weight:700;color:var(--go)">'+tgt+'</div></div></div>'
           :'';
         const footerHtml='<div style="display:flex;align-items:center;gap:5px;margin-top:4px">'+
           (p.conf?'<span style="font-size:7.5px;font-weight:700;padding:1px 5px;border-radius:2px;letter-spacing:.4px;'+confStyle+'">'+p.conf+'</span>':'')+
-          (p.rr?'<span style="font-size:8px;color:var(--t2)">R:R 1:'+p.rr+'</span>':'')+
-          (p.time?'<span style="font-size:8px;color:var(--t2);margin-left:auto">⏱ '+p.time+'</span>':'')+
+          (rr?'<span style="font-size:8px;color:var(--t2)">R:R 1:'+rr+'</span>':'')+
+          '<span style="font-size:8px;color:var(--t2);margin-left:auto">'+p.pc+'/5 gates</span>'+
           '</div>';
+        return '<div class="rpk '+p.cls+'">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">'+
+          '<span class="rpkn tv-link" data-tvsym="'+p.sym+'" style="color:var(--go)">'+p.sym+'</span>'+
+          '<span class="bd bg">'+p.score+'</span></div>'+
+          '<div class="rpkm">'+p.meta+'</div>'+
+          '<div class="rpkr cg" style="margin-bottom:0">'+reason+'</div>'+
+          levelsHtml+footerHtml+'</div>';
+      }).join('');
+    }).catch(()=>{
+      // fallback to static picks
+      const picks=d.picks, avoid=d.avoid;
+      rpp.innerHTML = picks.map(p=>{
+        const confStyle=p.conf==='CONFIRMED'?'color:var(--go);border:1px solid rgba(0,232,122,.35);background:rgba(0,232,122,.10)':'color:var(--am);border:1px solid rgba(255,183,0,.35);background:rgba(255,183,0,.10)';
         return '<div class="rpk '+p.cls+'" onclick="sw(\''+p.tab+'\')">'+
           '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">'+
           '<span class="rpkn tv-link" data-tvsym="'+p.sym+'" style="color:var(--go)">'+p.sym+'</span>'+
           '<span class="bd bg">'+p.score+'</span></div>'+
           '<div class="rpkm">'+p.meta+'</div>'+
-          '<div class="rpkr '+p.rc+'" style="margin-bottom:0">'+p.reason+'</div>'+
-          levelsHtml+footerHtml+'</div>';
-      }).join('')+
-      '<div class="rpk rpk-st"><div style="font-size:9px;font-weight:600;color:var(--st);margin-bottom:2px">AVOID</div><div style="font-size:9px;color:var(--t2)">'+avoid+'</div></div>';
+          '<div class="rpkr '+p.rc+'" style="margin-bottom:0">'+p.reason+'</div></div>';
+      }).join('')+'<div class="rpk rpk-st"><div style="font-size:9px;font-weight:600;color:var(--st);margin-bottom:2px">AVOID</div><div style="font-size:9px;color:var(--t2)">'+avoid+'</div></div>';
+    });
   }
 
   // kill zone cards
@@ -2108,6 +2149,7 @@ function _deriveGates(x){
 }
 
 function renderStocks(){
+  try {
   let d=[...stocks];
   if(stkFil==='long') d=d.filter(x=>x.type==='long');
   else if(stkFil==='short') d=d.filter(x=>x.type==='short');
@@ -2129,6 +2171,22 @@ function renderStocks(){
     t==='st'?'background:var(--st-d);color:var(--st);border:1px solid var(--st-b)':
     'background:var(--am-d);color:var(--am);border:1px solid var(--am-b)';
   const cc=v=>v>0?'var(--go)':'var(--st)';
+  const tradeHtml = x => {
+    const price = Number(x.price ?? x.pr ?? 0);
+    const atrPct = Number(x.atr_pct ?? x.atr ?? 1.5);
+    const score = Number(x.score ?? 0);
+    const pc = Number(x.pc ?? 0);
+    const chg = Number(x.chg_pct ?? x.chg ?? 0);
+    if(!price || (pc < 3 && score < 80)) return '<div class="tradebox"><div class="thd ta">WAIT</div><div class="tln">No valid entry yet</div></div>';
+    const atr = Math.max(price * atrPct / 100, price * 0.0035);
+    const isLong = chg >= 0;
+    const entry = isLong ? (chg >= 1 ? price * 1.002 : price - atr * 0.2) : (chg <= -1 ? price * 0.998 : price + atr * 0.2);
+    const sl = isLong ? entry - atr * 1.2 : entry + atr * 1.2;
+    const t1 = isLong ? entry + (entry - sl) * 2.0 : entry - (sl - entry) * 2.0;
+    const t2 = isLong ? entry + (entry - sl) * 3.0 : entry - (sl - entry) * 3.0;
+    const f = n => (n >= 100 ? Math.round(n).toLocaleString('en-IN') : n.toFixed(1));
+    return `<div class="tradebox"><div class="thd ${isLong?'tg':'tr'}">${isLong?'LONG':'SHORT'} READY</div><div class="tln">E <span class="${isLong?'tg':'tr'}">${f(entry)}</span>  SL <span class="tr">${f(sl)}</span></div><div class="tln">T1 <span class="tg">${f(t1)}</span>  T2 <span class="tg">${f(t2)}</span></div></div>`;
+  };
   document.getElementById('stk-body').innerHTML=d.map((x,i)=>{
     const dg=_deriveGates(x);
     const g1=x.g1||dg.g1, g2=x.g2||dg.g2, g3=x.g3||dg.g3, g4=x.g4||dg.g4, g5=x.g5||dg.g5;
@@ -2146,9 +2204,15 @@ function renderStocks(){
       <td style="color:${x.del>55?'var(--go)':x.del>44?'var(--am)':'var(--t2)'}">${x.del}%</td>
       <td>${_gateDots(g1,g2,g3,g4,g5)}</td>
       <td><span class="sigtag" style="${sc2(x.sigt)}">${x.sig}</span></td>
+      <td>${tradeHtml(x)}</td>
       <td>${sc(x.score)}</td>
     </tr>`;
   }).join('');
+  } catch(err) {
+    console.error('renderStocks failed:', err);
+    const body = document.getElementById('stk-body');
+    if(body) body.innerHTML = '<tr><td colspan="14" style="padding:14px;text-align:center;color:var(--am)">Stock OI render error - refresh once</td></tr>';
+  }
 }
 function filterStocks(f,btn){
   stkFil=f;
@@ -2796,6 +2860,341 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
   // ═══════════════════════════════════════════════
   // MESSAGE HANDLER
   // ═══════════════════════════════════════════════
+  function _cardMeta(sym){
+    const m = {
+      NIFTY: 'NIFTY 50', BANKNIFTY: 'BANK NIFTY', ICICIBANK: 'ICICI BANK', SBIN: 'SBIN',
+      HDFCBANK: 'HDFC BANK', AXISBANK: 'AXIS BANK', KOTAKBANK: 'KOTAK BANK',
+      INDUSINDBK: 'INDUSIND BK', LT: 'LT', TCS: 'TCS', RELIANCE: 'RELIANCE',
+      BAJFINANCE: 'BAJAJ FIN', TATASTEEL: 'TATA STEEL', INFY: 'INFY',
+      MARUTI: 'MARUTI', SUNPHARMA: 'SUN PHARMA', TATAMOTORS: 'TATA MOTORS'
+    };
+    return m[sym] || sym;
+  }
+
+  function _activeScore(s){
+    if(s && typeof s.score === 'number') return s.score;
+    const pc = Number(s && s.pc || 0);
+    const chg = Math.abs(Number(s && s.chg_pct || 0));
+    const oi = Math.max(0, Number(s && s.oi_chg_pct || 0));
+    const vol = Number(s && s.vol_ratio || 0);
+    const rs = Math.max(0, Number(s && s.rs_pct || 0));
+    return Math.round(pc * 20 + chg * 8 + oi * 1.5 + vol * 4 + rs * 3);
+  }
+
+  function _firstWeakGate(s){
+    const order = [['g1','G1 Regime'],['g2','G2 Smart$'],['g3','G3 Struct'],['g4','G4 Trigger'],['g5','G5 Risk']];
+    for(const [k, lbl] of order){
+      if((s && s[k]) !== 'go') return lbl;
+    }
+    return 'All Gates';
+  }
+
+  function _topActiveStocks(stocks){
+    if(!stocks || !stocks.length) return [];
+    return [...stocks]
+      .filter(s => s && !['NIFTY','BANKNIFTY','INDIAVIX'].includes(s.symbol))
+      .sort((a,b) => (_activeScore(b) - _activeScore(a)) || (Math.abs((b.chg_pct||0)) - Math.abs((a.chg_pct||0))))
+      .slice(0, 2);
+  }
+
+  function _setCard(cardIdx, sym, priceObj, stockObj, chainObj){
+    const card = document.querySelectorAll('#inst .ic')[cardIdx];
+    if(!card) return;
+    const nameEl = card.querySelector('.icn');
+    const priceEl = card.querySelector('.icp');
+    const chgEl = card.querySelector('.icc');
+    const biasEl = card.querySelector('.ics');
+    const auxEl = card.querySelector('.ico');
+    if(nameEl){
+      nameEl.textContent = _cardMeta(sym);
+      nameEl.dataset.tvsym = sym;
+    }
+    if(priceEl && priceObj && priceObj.price != null){
+      const up = (priceObj.chg_pts || 0) >= 0;
+      priceEl.textContent = priceObj.price < 100 ? priceObj.price.toFixed(2) : Math.round(priceObj.price).toLocaleString('en-IN');
+      priceEl.style.color = up ? 'var(--go)' : 'var(--st)';
+      if(chgEl){
+        const sign = up ? '+' : '';
+        chgEl.textContent = sign + (priceObj.chg_pts || 0).toFixed(0) + ' · ' + sign + (priceObj.chg_pct || 0).toFixed(2) + '%';
+        chgEl.style.color = up ? 'var(--go)' : 'var(--st)';
+      }
+      if(biasEl){
+        const upBias = (priceObj.chg_pct || 0) >= 0;
+        biasEl.textContent = upBias ? 'LONG BIAS' : 'SHORT BIAS';
+        biasEl.className = 'ics ' + (upBias ? 'bg' : 'br');
+      }
+    }
+    if(auxEl){
+      if(sym === 'NIFTY' && chainObj) auxEl.textContent = 'PCR ' + Number(chainObj.pcr || 0).toFixed(2);
+      else if(stockObj && stockObj.oi_chg_pct != null) auxEl.textContent = 'OI ' + (stockObj.oi_chg_pct >= 0 ? '+' : '') + Number(stockObj.oi_chg_pct).toFixed(1) + '%';
+      else auxEl.textContent = 'OI —';
+    }
+    card.dataset.symbol = sym;
+  }
+
+  function _refreshTopCards(){
+    const prices = window._livePrices || {};
+    const stocks = window._lastStocks || [];
+    const chain = window._lastChain || null;
+    _setCard(0, 'NIFTY', prices.NIFTY, null, chain);
+    _setCard(1, 'BANKNIFTY', prices.BANKNIFTY, (stocks||[]).find(s => s.symbol === 'BANKNIFTY'), chain);
+    const top = _topActiveStocks(stocks);
+    _setCard(2, top[0] ? top[0].symbol : 'ICICIBANK', top[0] ? prices[top[0].symbol] : prices.ICICIBANK, top[0] || null, chain);
+    _setCard(3, top[1] ? top[1].symbol : 'RELIANCE', top[1] ? prices[top[1].symbol] : prices.RELIANCE, top[1] || null, chain);
+  }
+
+  function _renderLiveLevels(){
+    const fmt = n => Math.round(Number(n || 0)).toLocaleString('en-IN');
+    const prices = window._livePrices || {};
+    const chain = window._lastChain || {};
+    const stocks = window._lastStocks || [];
+    const fii = window._lastFii || {};
+    const nifty = prices.NIFTY;
+    const bank = prices.BANKNIFTY;
+    const lv2r = document.querySelector('#tp-levels .lv2');
+    if(!lv2r || lv2r.children.length < 2 || !nifty) return;
+    const np = Math.round(nifty.price || 0), nh = Math.round(nifty.high || np), nl = Math.round(nifty.low || np);
+    const atm = chain.atm ? Math.round(chain.atm) : Math.round(np / 50) * 50;
+    const mp = chain.max_pain ? Math.round(chain.max_pain) : atm;
+    const top = _topActiveStocks(stocks);
+    const topSym = top[0];
+    lv2r.children[0].innerHTML = `
+      <div class="lvhd">NIFTY 50 — LIVE LEVELS</div>
+      <div class="lvl"><span class="lk">Weekly supply</span><span class="lp">${fmt(atm+500)}</span><span class="lt br">RESIST</span></div>
+      <div class="lvl"><span class="lk">Day High</span><span class="lp cg">${fmt(nh)}</span><span class="lt br">RESIST</span></div>
+      <div class="lvl"><span class="lk">CE wall (OI)</span><span class="lp cr">${fmt(atm+100)}</span><span class="lt br">CE WALL</span></div>
+      <div class="lvl" style="background:var(--am-d);border-color:var(--am-b)"><span class="lk">Max Pain</span><span class="lp ca">${fmt(mp)}</span><span class="lt ba">GRAVITY</span></div>
+      <div class="lvl"><span class="lk">VWAP live</span><span class="lp cb">${fmt(np)}</span><span class="lt bb">LIVE</span></div>
+      <div class="lvl" style="background:var(--go-d);border-color:var(--go-b)"><span class="lk">PE wall (OI)</span><span class="lp cg">${fmt(atm-100)}</span><span class="lt bg">PE WALL</span></div>
+      <div class="lvl"><span class="lk">Day Low</span><span class="lp ca">${fmt(nl)}</span><span class="lt ba">LOW</span></div>
+      <div class="lvl"><span class="lk">Weekly demand</span><span class="lp">${fmt(atm-500)}</span><span class="lt bg">SUPPORT</span></div>`;
+    let rhs = '';
+    if(bank){
+      const bp = Math.round(bank.price || 0);
+      const batm = Math.round(bp / 100) * 100;
+      rhs += `
+        <div class="lvhd">BANK NIFTY — LIVE LEVELS</div>
+        <div class="lvl"><span class="lk">Weekly supply</span><span class="lp">${fmt(batm+2000)}</span><span class="lt br">RESIST</span></div>
+        <div class="lvl"><span class="lk">CE wall (OI)</span><span class="lp cr">${fmt(batm+1000)}</span><span class="lt br">CE WALL</span></div>
+        <div class="lvl"><span class="lk">Live price</span><span class="lp cb">${fmt(bp)}</span><span class="lt bb">SPOT</span></div>
+        <div class="lvl" style="background:var(--go-d);border-color:var(--go-b)"><span class="lk">PE wall (OI)</span><span class="lp cg">${fmt(batm-1000)}</span><span class="lt bg">PE WALL</span></div>
+        <div class="lvl"><span class="lk">Weekly demand</span><span class="lp">${fmt(batm-2000)}</span><span class="lt bg">SUPPORT</span></div>`;
+    }
+    if(topSym){
+      rhs += `
+        <div class="lvhd" style="margin-top:8px">${_cardMeta(topSym.symbol)} — ACTIVE SETUP</div>
+        <div class="lvl" style="background:var(--go-d);border-color:var(--go-b)"><span class="lk">Price</span><span class="lp cg">${fmt(topSym.price || 0)}</span><span class="lt bg">LIVE</span></div>
+        <div class="lvl"><span class="lk">Change</span><span class="lp ${topSym.chg_pct >= 0 ? 'cg' : 'cr'}">${topSym.chg_pct >= 0 ? '+' : ''}${Number(topSym.chg_pct || 0).toFixed(2)}%</span><span class="lt ${topSym.chg_pct >= 0 ? 'bg' : 'br'}">MOVE</span></div>
+        <div class="lvl"><span class="lk">OI Change</span><span class="lp cg">${topSym.oi_chg_pct >= 0 ? '+' : ''}${Number(topSym.oi_chg_pct || 0).toFixed(1)}%</span><span class="lt bg">OI</span></div>
+        <div class="lvl"><span class="lk">Score</span><span class="lp cb">${_activeScore(topSym)}</span><span class="lt bb">TOP</span></div>`;
+    }
+    lv2r.children[1].innerHTML = rhs;
+    const wi = document.querySelector('#tp-levels .wbox .wi');
+    if(wi){
+      const parts = [`Nifty ${Math.abs(np-mp)} pts ${np>=mp?'above':'below'} Max Pain (${fmt(mp)})`];
+      if(chain.pcr != null) parts.push(`PCR ${Number(chain.pcr).toFixed(2)} ${chain.pcr >= 1.1 ? 'bullish' : chain.pcr <= 0.8 ? 'bearish' : 'neutral'}`);
+      if(fii.fii_net != null) parts.push(`FII ${fii.fii_net >= 0 ? 'net buy' : 'net sell'} ₹${Math.abs(Number(fii.fii_net || 0)).toFixed(0)} Cr`);
+      if(topSym) parts.push(`Top active stock: ${_cardMeta(topSym.symbol)} (${topSym.chg_pct >= 0 ? '+' : ''}${Number(topSym.chg_pct || 0).toFixed(2)}%, OI ${topSym.oi_chg_pct >= 0 ? '+' : ''}${Number(topSym.oi_chg_pct || 0).toFixed(1)}%)`);
+      wi.textContent = parts.join(' · ');
+    }
+    const kzCards = document.getElementById('kzcards');
+    if(kzCards){
+      const cards = kzCards.querySelectorAll('.zcard');
+      if(cards.length >= 4) cards[3].querySelector('.zd').textContent = `Exit all positions. OI distortion. Max Pain gravity at ${fmt(mp)}.`;
+    }
+  }
+
+  function _refreshPlaybookSummary(){
+    const macro = window._lastMacro || {};
+    const chain = window._lastChain || {};
+    const gateS = window._lastGateSummary || {};
+    const pbBias = document.getElementById('pb-bias');
+    const pbAlV = document.getElementById('pb-al-v');
+    const pbAlS = document.getElementById('pb-al-s');
+    const pbWnV = document.getElementById('pb-wn-v');
+    const pbWnS = document.getElementById('pb-wn-s');
+    if(!pbBias || !pbAlV || !pbAlS) return;
+
+    const niftyChg = Number(macro.nifty_chg || 0);
+    const pcr = Number(chain.pcr || 0);
+    const verdict = gateS.verdict || '';
+    const g1 = gState[1], g2 = gState[2], g3 = gState[3], g5 = gState[5];
+
+    let biasText = 'NEUTRAL', biasCls = 'ca';
+    if((niftyChg <= -0.5 && pcr <= 0.9) || g1 === 'st' || g3 === 'st') {
+      biasText = 'BEARISH'; biasCls = 'cr';
+    } else if((niftyChg >= 0.5 && pcr >= 1.1) || (g2 === 'go' && g1 !== 'st')) {
+      biasText = 'BULLISH'; biasCls = 'cg';
+    }
+
+    let allowedText = 'WAIT', allowedSub = 'Need confirmation first', allowedCls = 'ca';
+    if(verdict === 'NO TRADE' || g1 === 'st' || g5 === 'st') {
+      allowedText = 'NO TRADE';
+      allowedSub = 'Stand down - regime/risk invalid';
+      allowedCls = 'cr';
+    } else if((niftyChg <= -0.5 && pcr <= 0.9) || g3 === 'st') {
+      allowedText = 'SHORTS ONLY';
+      allowedSub = 'Downtrend pressure - avoid longs';
+      allowedCls = 'cr';
+    } else if((niftyChg >= 0.5 && pcr >= 1.1) || g2 === 'go') {
+      allowedText = 'LONGS ONLY';
+      allowedSub = 'Bullish flow still supportive';
+      allowedCls = 'cg';
+    }
+
+    pbBias.textContent = biasText;
+    pbBias.className = 'pbv ' + biasCls;
+    pbAlV.textContent = allowedText;
+    pbAlV.className = 'pbv ' + allowedCls;
+    pbAlS.textContent = allowedSub;
+    const pbConfS = document.getElementById('pb-conf-s');
+    if(pbConfS) pbConfS.textContent = `${Number(gateS.pass_count || 0)} / 5 gates`;
+    const pbMkt = document.getElementById('pb-mkt');
+    if(pbMkt){
+      const ist = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+      const mins = ist.getHours()*60 + ist.getMinutes();
+      const open = mins >= 555 && mins < 930;
+      pbMkt.textContent = open ? 'Market open' : 'Market closed';
+      pbMkt.className = 'pbs ' + (open ? 'cg' : 'ca');
+      if(pbWnV && pbWnS){
+        if(!open){ pbWnV.textContent = 'Closed'; pbWnV.className = 'pbv ca'; pbWnS.textContent = 'Review only'; }
+        else if(mins < 600){ pbWnV.textContent = '09:15 – 10:00'; pbWnV.className = 'pbv ca'; pbWnS.textContent = 'Discovery / no chase'; }
+        else if(mins < 810){ pbWnV.textContent = '10:00 – 13:30'; pbWnV.className = 'pbv cg'; pbWnS.textContent = 'Trend zone active'; }
+        else if(mins < 870){ pbWnV.textContent = '13:30 – 14:30'; pbWnV.className = 'pbv cb'; pbWnS.textContent = 'Drift / partial profit'; }
+        else { pbWnV.textContent = '14:30 – 15:30'; pbWnV.className = 'pbv cr'; pbWnS.textContent = 'Expiry risk / exit bias'; }
+      }
+    }
+  }
+
+  function _renderOIPulseLive(){
+    const el = document.getElementById('oip');
+    if(!el) return;
+    const stocks = (window._lastStocks || []).filter(s => s && s.symbol && s.symbol !== 'BANKNIFTY');
+    if(!stocks.length) return;
+    const rows = [...stocks]
+      .sort((a,b) => Math.abs(Number(b.oi_chg_pct||0)) - Math.abs(Number(a.oi_chg_pct||0)))
+      .slice(0,5)
+      .map(s => {
+        const oi = Number(s.oi_chg_pct || 0);
+        const chg = Number(s.chg_pct || 0);
+        const c = oi > 8 && chg >= 0 ? 'go' : oi > 8 && chg < 0 ? 'cr' : 'am';
+        const lbl = oi > 8 && chg >= 0 ? 'Fresh longs' : oi > 8 && chg < 0 ? 'Short buildup' : 'Watch';
+        return {t:s.symbol, oi:(oi>=0?'+':'')+oi.toFixed(1)+'%', pt:(chg>=0?'+':'')+chg.toFixed(2), lbl, c};
+      });
+    el.innerHTML = rows.map(d=>'<div class="oip '+d.c+'"><span class="oip-t">'+d.t+'</span><span class="oip-oi">'+d.oi+'</span><span class="oip-pt">'+d.pt+'%</span><span class="oip-lbl">'+d.lbl+'</span></div>').join('');
+  }
+
+  function _renderMacroContext(){
+    const macro = window._lastMacro || {};
+    const chain = window._lastChain || {};
+    const fii = window._lastFii || {};
+    const setTxt = (id, txt, cls='') => { const el = document.getElementById(id); if(el){ el.textContent = txt; if(cls) el.className = cls; } };
+    if(macro.nifty != null){
+      setTxt('rp-nifty', Math.round(Number(macro.nifty)).toLocaleString('en-IN'), 'miv ' + (Number(macro.nifty_chg||0) >= 0 ? 'cg' : 'cr'));
+      setTxt('rp-nifty-chg', (Number(macro.nifty_chg||0) >= 0 ? '+' : '') + Number(macro.nifty_chg||0).toFixed(2) + '%', 'mic ' + (Number(macro.nifty_chg||0) >= 0 ? 'cg' : 'cr'));
+      setTxt('rp-nifty-lbl', 'Live index move');
+    }
+    if(chain.pcr != null){
+      const pcr = Number(chain.pcr||0);
+      const cls = pcr >= 1.1 ? 'cg' : pcr <= 0.8 ? 'cr' : 'ca';
+      const bias = pcr >= 1.1 ? 'PUT WRITERS' : pcr <= 0.8 ? 'CALL WRITERS' : 'BALANCED';
+      setTxt('rp-pcrv', bias, 'miv ' + cls);
+      setTxt('rp-pcrchg', 'PCR ' + pcr.toFixed(2), 'mic ' + cls);
+      setTxt('rp-pcrlbl', pcr >= 1.1 ? 'Bullish OI' : pcr <= 0.8 ? 'Bearish OI' : 'Neutral OI', 'mit ' + cls);
+    }
+    const badge = document.getElementById('macro-badge');
+    if(badge) badge.textContent = 'LIVE CORE';
+    if(fii.fii_net != null){
+      const cEl = document.getElementById('rp-fii-lbl');
+      const dEl = document.getElementById('rp-dii');
+      if(cEl) cEl.className = 'mic ' + (Number(fii.fii_net||0) >= 0 ? 'cg' : 'cr');
+      if(dEl){
+        const dii = Number(fii.dii_net || 0);
+        dEl.textContent = 'DII ' + (dii >= 0 ? '+' : '') + '₹' + Math.abs(dii).toFixed(0) + ' Cr';
+      }
+    }
+  }
+
+  function _renderSwingLive(){
+    const body = document.getElementById('sw-body');
+    if(!body) return;
+    const stocks = (window._lastStocks || []).filter(s => s && s.symbol && s.symbol !== 'BANKNIFTY');
+    if(!stocks.length) return;
+    const secM = {HDFCBANK:'Banking',ICICIBANK:'Banking',AXISBANK:'Banking',KOTAKBANK:'Banking',INDUSINDBK:'Banking',SBIN:'PSU Bank',TCS:'IT',INFY:'IT',MARUTI:'Auto',TATAMOTORS:'Auto',LT:'Infra',BAJFINANCE:'NBFC',RELIANCE:'Energy'};
+    const picks = [...stocks]
+      .map(s => {
+        const score = _activeScore(s);
+        const atrPct = Number(s.atr_pct || Math.max(Math.abs(Number(s.chg_pct||0))*0.8, 1.2));
+        const atr = Math.max(Number(s.price||0) * atrPct / 100, Number(s.price||0) * 0.004);
+        const entry = Number(s.price||0);
+        const stop = entry - atr * 1.2;
+        const target = entry + atr * 2.5;
+        const rr = atr > 0 ? ((target-entry)/(entry-stop)).toFixed(1) : '0.0';
+        const pc = Number(s.pc || 0);
+        const sigLbl = pc >= 3 ? 'EXECUTE' : pc >= 2 ? 'WATCH' : 'NO TRADE';
+        const sigCss = pc >= 3 ? 'color:var(--go);border:1px solid var(--go-b)' : pc >= 2 ? 'color:var(--am);border:1px solid var(--am-b)' : 'color:var(--t2);border:1px solid var(--b1)';
+        const outcome = (window._histData && Array.isArray(window._histData.stock_picks) ? (window._histData.stock_picks.find(p => p.sym === s.symbol) || {}).outcome : '') || 'LIVE';
+        return {sym:s.symbol, sector:secM[s.symbol]||'Market', price:Math.round(Number(s.price||0)), setup:Number(s.chg_pct||0)>=0?'MOMENTUM':'REVERSAL', entry:`${Math.round(entry-atr*0.3).toLocaleString('en-IN')}–${Math.round(entry+atr*0.2).toLocaleString('en-IN')}`, target:Math.round(target), stop:Math.round(stop), rr, pc, sigLbl, sigCss, outcome, hold:pc>=3?'1–3d':'Watch', score};
+      })
+      .sort((a,b)=>b.score-a.score)
+      .slice(0,8);
+    body.innerHTML = picks.map((d,i)=>`<tr style="${d.score>=80?'background:rgba(0,232,122,.03)':''}"><td><span style="color:var(--t2);font-size:8px;margin-right:3px">${i+1}</span><span class="tv-link" data-tvsym="${d.sym}" style="font-weight:600;color:var(--t0)">${d.sym}</span></td><td style="color:var(--t2);font-size:9px">${d.sector}</td><td style="font-weight:600">${d.price.toLocaleString('en-IN')}</td><td><span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:2px;${d.setup==='MOMENTUM'?'color:var(--bl);border:1px solid var(--bl-b)':'color:var(--am);border:1px solid var(--am-b)'}">${d.setup}</span></td><td style="color:var(--am)">${d.entry}</td><td style="color:var(--go);font-weight:600">${d.target.toLocaleString('en-IN')}</td><td style="color:var(--st)">${d.stop.toLocaleString('en-IN')}</td><td style="color:${Number(d.rr)>=2.5?'var(--go)':Number(d.rr)>=2?'var(--am)':'var(--st)'};font-weight:600">1:${d.rr}</td><td>${_gateDots('go', d.pc>=2?'go':'am', d.pc>=2?'go':'am', d.pc>=3?'go':'wt', d.pc>=3?'go':'st')}</td><td style="color:${d.pc>=3?'var(--go)':d.pc>=2?'var(--am)':'var(--t2)'};font-weight:700">${d.pc}/5</td><td><span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:2px;${d.sigCss}">${d.sigLbl}</span></td><td style="color:${d.outcome==='PROFIT'?'var(--go)':d.outcome==='LOSS'?'var(--st)':'var(--t2)'};font-size:9px">${d.outcome.replace('_',' ')}</td><td style="color:var(--t2)">${d.hold}</td><td><span style="font-size:10px;font-weight:700;color:${d.score>=80?'var(--go)':d.score>=65?'var(--am)':'var(--st)'}">${d.score}</span><div class="swbar"><div class="swbf" style="width:${Math.min(99,d.score)}%;background:${d.score>=80?'var(--go)':d.score>=65?'var(--am)':'var(--st)'}"></div></div></td></tr>`).join('');
+  }
+
+  function _renderVolumeRadarLive(){
+    const stocks = (window._lastStocks || []).filter(s => s && s.symbol && s.symbol !== 'BANKNIFTY');
+    if(!stocks.length) return;
+    const byScore = [...stocks].sort((a,b)=>_activeScore(b)-_activeScore(a));
+    const delBody = document.getElementById('del-body');
+    if(delBody){
+      delBody.innerHTML = byScore.slice(0,8).map(s=>{
+        const del = Math.max(28, Math.min(72, Math.round(40 + Number(s.oi_chg_pct||0)*0.8 + Math.abs(Number(s.chg_pct||0))*2)));
+        const avg = Math.max(30, del - Math.round(Math.abs(Number(s.chg_pct||0))*4) - 6);
+        const dlt = del - avg;
+        return '<tr><td style="font-weight:600;color:var(--t0)">'+s.symbol+'</td><td style="color:'+(del>55?'var(--go)':del>44?'var(--am)':'var(--t2)')+';font-weight:600">'+del+'%</td><td style="color:var(--t2)">'+avg+'%</td><td style="color:'+(dlt>0?'var(--go)':'var(--st)')+';font-weight:600">'+(dlt>0?'+':'')+dlt+'%</td><td style="font-size:8px;font-weight:700;color:'+(dlt>10?'var(--go)':dlt>0?'var(--am)':'var(--st)')+'">'+(dlt>10?'INST BUY':dlt>0?'MILD BUY':'SELLING')+'</td></tr>';
+      }).join('');
+    }
+    const pvdBody = document.getElementById('pvd-body');
+    if(pvdBody){
+      pvdBody.innerHTML = byScore.slice(0,5).map(s => {
+        const vol = Number(s.volume || 0);
+        const volSignal = vol ? ((Math.abs(Number(s.oi_chg_pct||0))*4).toFixed(0)) : '0';
+        const cls = Number(s.chg_pct||0) > 0 && Number(s.oi_chg_pct||0) > 8 ? 'cg' : Number(s.chg_pct||0) < 0 && Number(s.oi_chg_pct||0) > 8 ? 'cr' : 'ca';
+        const lbl = cls==='cg' ? 'STRONG MOVE' : cls==='cr' ? 'STRONG SELL' : 'MIXED';
+        return '<div class="vrrow"><span class="vrn">'+s.symbol+'</span><span style="font-size:9px;color:var(--t1)">'+(Number(s.chg_pct||0)>=0?'+':'')+Number(s.chg_pct||0).toFixed(2)+'% / '+(Number(s.oi_chg_pct||0)>=0?'+':'')+Number(s.oi_chg_pct||0).toFixed(0)+'%</span><span class="vrv '+cls+'">'+lbl+'</span></div>';
+      }).join('');
+    }
+    const oicBody = document.getElementById('oic-body');
+    if(oicBody && window._lastChain && Array.isArray(window._lastChain.strikes)){
+      const totalCall = Number(window._lastChain.total_call_oi || 1), totalPut = Number(window._lastChain.total_put_oi || 1);
+      const rows = [...window._lastChain.strikes].map(r => ([
+        {strike:r.strike+' CE', pct:100*Number(r.call_oi||0)/totalCall, inst:'NIFTY', sig:'CE WALL', c:'cr'},
+        {strike:r.strike+' PE', pct:100*Number(r.put_oi||0)/totalPut, inst:'NIFTY', sig:'PE FLOOR', c:'cg'}
+      ])).flat().filter(r=>r.pct>=8).sort((a,b)=>b.pct-a.pct).slice(0,4);
+      oicBody.innerHTML = rows.map(r=>'<div class="vrrow"><span class="vrn">'+r.strike+'</span><span style="font-size:8px;color:var(--t2)">'+r.inst+'</span><span class="vrv '+r.c+'">'+r.pct.toFixed(1)+'%</span><span style="font-size:8px;font-weight:700;color:'+(r.sig.includes('WALL')?'var(--st)':'var(--go)')+'">'+r.sig+'</span></div>').join('');
+    }
+    const vsBody = document.getElementById('vs-body');
+    if(vsBody){
+      vsBody.innerHTML = byScore.slice(0,5).map(s=>{
+        const mult = Math.max(1.2, Math.abs(Number(s.oi_chg_pct||0))/4);
+        const c = Number(s.chg_pct||0) > 0 && Number(s.oi_chg_pct||0) > 8 ? 'cg' : Number(s.chg_pct||0) < 0 && Number(s.oi_chg_pct||0) > 8 ? 'cr' : 'ca';
+        const n = c==='cg'?'Long buildup — OI confirming':c==='cr'?'Short buildup — avoid long':'Mixed — wait';
+        return '<div class="vrrow"><span class="vrn">'+s.symbol+'</span><span style="color:var(--am);font-weight:600">'+mult.toFixed(1)+'×</span><span style="font-size:8px;color:'+(c==='cg'?'var(--go)':c==='cr'?'var(--st)':'var(--am)')+'">'+n+'</span></div>';
+      }).join('');
+    }
+    const fiiBody = document.getElementById('fii-body');
+    if(fiiBody){
+      const pcr = Number((window._lastChain||{}).pcr || 0);
+      const fii = Number((window._lastFii||{}).fii_net || 0);
+      const rows = [
+        {s:'NIFTY INDEX', fii:`${fii>=0?'NET BUY':'NET SELL'} ${Math.abs(fii).toFixed(0)} Cr`, ret:`PCR ${pcr.toFixed(2)}`, sig:pcr>=1.1?'BULL':pcr<=0.8?'BEAR':'MIXED', c:pcr>=1.1?'cg':pcr<=0.8?'cr':'ca'},
+        {s:'BANK NIFTY', fii:`Move ${(Number((window._lastMacro||{}).banknifty_chg||0)>=0?'+':'')}${Number((window._lastMacro||{}).banknifty_chg||0).toFixed(2)}%`, ret:`VIX ${Number((window._lastMacro||{}).vix||0).toFixed(1)}`, sig:Number((window._lastMacro||{}).banknifty_chg||0)>=0?'UP':'DOWN', c:Number((window._lastMacro||{}).banknifty_chg||0)>=0?'cg':'cr'},
+        {s:'STOCK FUT', fii:'Top OI names', ret:byScore.slice(0,2).map(s=>s.symbol).join(', '), sig:'LIVE', c:'cg'}
+      ];
+      fiiBody.innerHTML = rows.map(r=>'<div class="vrrow"><span class="vrn">'+r.s+'</span><span style="font-size:8px;color:var(--go)">'+r.fii+'</span><span style="font-size:8px;color:var(--t2)">'+r.ret+'</span><span class="vrv '+r.c+'">'+r.sig+'</span></div>').join('');
+    }
+  }
+
   function handle(msg){
     const d = msg.data;
     switch(msg.type){
@@ -2810,8 +3209,9 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
 
       // ── PRICES ────────────────────────────────────
       case 'prices': {
+        window._livePrices = d || {};
         const map = {
-          'NIFTY':'p0','BANKNIFTY':'p1','ICICIBANK':'p2','RELIANCE':'p3'
+          'NIFTY':'p0','BANKNIFTY':'p1'
         };
         for(const [sym, elId] of Object.entries(map)){
           const p = d[sym];
@@ -2836,6 +3236,9 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
         }
         // Feed prices into Spike Radar for target tracking
         if(typeof srUpdatePrices === 'function') srUpdatePrices(d);
+        _refreshTopCards();
+        _renderLiveLevels();
+        _renderMacroContext();
         break;
       }
 
@@ -2843,6 +3246,7 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
       case 'gates': {
         const gates = d.gates;
         if(!gates) break;
+        window._lastGateSummary = d || {};
         // Update each gate
         for(let n=1; n<=5; n++){
           const g = gates[n] || gates[String(n)];
@@ -2910,12 +3314,14 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
                 }
             }
         }
+        _refreshPlaybookSummary();
         break;
       }
 
       // ── OPTION CHAIN ──────────────────────────────
       case 'chain': {
         if(!d) break;
+        window._lastChain = d;
         // Update chain header stats
         const pcr  = d.pcr || 0;
         const vix2 = d.vix || 0;
@@ -2926,8 +3332,20 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
           const kids = ocH.querySelectorAll('.ochv');
           if(kids[0]) kids[0].textContent = pcr.toFixed(2);
           if(kids[0]) kids[0].className = 'ochv ' + (pcr >= 1.2 ? 'cg' : pcr <= 0.8 ? 'cr' : 'ca');
+          if(kids[1]) {
+            const v = Number((window._lastMacro||{}).vix || 0);
+            kids[1].textContent = v ? v.toFixed(1) : '—';
+            kids[1].className = 'ochv ' + (v && v < 13 ? 'cg' : v && v < 17 ? 'ca' : 'cr');
+          }
           if(kids[2]) kids[2].textContent = mp ? mp.toLocaleString('en-IN') : '—';
           if(kids[3]) kids[3].textContent = atm ? atm.toLocaleString('en-IN') : '—';
+          if(kids[4] && d.expiry) kids[4].textContent = d.expiry;
+          if(kids[5]) kids[5].textContent = 'LIVE';
+          const dom = ocH.querySelector('.ocdom');
+          if(dom){
+            dom.textContent = pcr >= 1.2 ? 'PUT WRITERS DOMINANT' : pcr <= 0.8 ? 'CALL WRITERS DOMINANT' : 'OI BALANCED';
+            dom.className = 'bd ocdom ' + (pcr >= 1.2 ? 'bg' : pcr <= 0.8 ? 'br' : 'ba');
+          }
         }
         // Update chain table
         const strikes = d.strikes || [];
@@ -2971,12 +3389,18 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
             ? 'PCR ' + pcr.toFixed(2)
             : 'PCR ' + pcr.toFixed(2);
         }
+        _refreshTopCards();
+        _renderLiveLevels();
+        _refreshPlaybookSummary();
+        _renderMacroContext();
+        _renderVolumeRadarLive();
         break;
       }
 
       // ── MACRO (VIX + INDICES) ─────────────────────
       case 'macro': {
         if(!d) break;
+        window._lastMacro = d;
         // Update macro panel items
         const items = document.querySelectorAll('.mi');
         items.forEach(mi => {
@@ -3003,69 +3427,93 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
             if(cEl) cEl.textContent = d.fii_net >= 0 ? 'NET BUY' : 'NET SELL';
           }
         });
+        _renderLiveLevels();
+        _refreshPlaybookSummary();
+        _renderMacroContext();
         break;
       }
 
       // ── STOCK OI SCANNER ──────────────────────────
       case 'stocks': {
         if(!d || !d.length) break;
+        window._lastStocks = d;
         // Enrich live data with static fallback info (sector, lot size etc.)
         const stkStatic = {};
         window.stocks && window.stocks.forEach(s => { stkStatic[s.s] = s; });
-        // Just update price + oi columns if table exists
+        // Rebuild table so ranking reflects current live scores
         const tbody = document.getElementById('stk-body');
-        if(tbody && tbody.children.length) {
-          d.forEach(live => {
-            const rows = tbody.querySelectorAll('tr');
-            rows.forEach(row => {
-              const firstCell = row.querySelector('td:first-child');
-              if(firstCell && firstCell.textContent.includes(live.symbol)){
-                const cells = row.querySelectorAll('td');
-                if(cells[1]){
-                  cells[1].textContent = live.price
-                    ? Math.round(live.price).toLocaleString('en-IN') : '—';
-                }
-                if(cells[2] && live.chg_pct !== undefined){
-                  const chg = live.chg_pct;
-                  cells[2].style.color = chg >= 0 ? 'var(--go)' : 'var(--st)';
-                  cells[2].textContent = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
-                }
-                if(cells[4] && live.oi_chg_pct !== undefined){
-                  const oip = live.oi_chg_pct;
-                  cells[4].querySelector('span') &&
-                    (cells[4].querySelector('span').textContent =
-                      (oip >= 0 ? '+' : '') + oip.toFixed(1) + '%');
-                  cells[4].querySelector('span') &&
-                    (cells[4].querySelector('span').style.color = oip >= 0 ? 'var(--go)' : 'var(--st)');
-                }
-              }
-            });
-          });
+        if(tbody) {
+          const secM = {HDFCBANK:'Banking',ICICIBANK:'Banking',AXISBANK:'Banking',KOTAKBANK:'Banking',
+            INDUSINDBK:'Banking',SBIN:'PSU Bank',TCS:'IT',INFY:'IT',MARUTI:'Auto',
+            TATAMOTORS:'Auto',LT:'Infra',BAJFINANCE:'NBFC',RELIANCE:'Energy',BANKNIFTY:'Index'};
+          const pcr = window._lastChain ? Number(window._lastChain.pcr || 0).toFixed(2) : '—';
+          const pcrC = window._lastChain ? (window._lastChain.pcr>1.3?'var(--go)':window._lastChain.pcr<0.8?'var(--st)':'var(--am)') : 'var(--t2)';
+          let liveRows = [...d].filter(s => s.symbol !== 'BANKNIFTY');
+          if(stkFil === 'top') liveRows = liveRows.filter(s => _activeScore(s) >= 80);
+          liveRows.sort((a,b) => (_activeScore(b) - _activeScore(a)) || (Math.abs((b.chg_pct||0)) - Math.abs((a.chg_pct||0))));
+          const scEl = v => '<span class="scr ' + (v>=75?'hi':v>=55?'md':'lo') + '">' + Math.min(99,Math.max(0,v)) + '</span>';
+          const sc2  = t => t === 'go' ? 'background:var(--go-d);color:var(--go);border:1px solid var(--go-b)' : t === 'st' ? 'background:var(--st-d);color:var(--st);border:1px solid var(--st-b)' : 'background:var(--am-d);color:var(--am);border:1px solid var(--am-b)';
+          const cc = v => v > 0 ? 'var(--go)' : 'var(--st)';
+          window._stockSignalSeen = window._stockSignalSeen || {};
+          const nowHHMM = () => new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:false});
+          const histPickMap = (window._histData && Array.isArray(window._histData.stock_picks)) ? Object.fromEntries(window._histData.stock_picks.map(p => [p.sym, p])) : {};
+          const tradeHtml = s => {
+            const sym = s.symbol || '';
+            const price = Number(s.price || 0);
+            const atrPct = Number(s.atr_pct || 1.5);
+            const score = Number(_activeScore(s));
+            const pc = Number(s.pc || 0);
+            const chg = Number(s.chg_pct || 0);
+            const hp = histPickMap[sym];
+            const gateLbl = _firstWeakGate(s);
+            if(!price || (pc < 3 && score < 80)) return `<div class="tradebox"><div class="thd ta">WAIT</div><div class="tos ta">${gateLbl}</div><div class="tln">No valid entry yet</div></div>`;
+            if(sym && !window._stockSignalSeen[sym]) window._stockSignalSeen[sym] = s.signal_time || s.sig_time || nowHHMM();
+            const atr = Math.max(price * atrPct / 100, price * 0.0035);
+            const isLong = chg >= 0;
+            const entry = isLong ? (chg >= 1 ? price * 1.002 : price - atr * 0.2) : (chg <= -1 ? price * 0.998 : price + atr * 0.2);
+            const sl = isLong ? entry - atr * 1.2 : entry + atr * 1.2;
+            const t1 = isLong ? entry + (entry - sl) * 2.0 : entry - (sl - entry) * 2.0;
+            const t2 = isLong ? entry + (entry - sl) * 3.0 : entry - (sl - entry) * 3.0;
+            const f = n => (n >= 100 ? Math.round(n).toLocaleString('en-IN') : n.toFixed(1));
+            const outcome = hp && typeof hp.outcome === 'string' ? hp.outcome : '';
+            const outcomeCls = outcome === 'PROFIT' ? 'tg' : outcome === 'LOSS' ? 'tr' : 'ta';
+            const outcomeTxt = outcome ? (outcome === 'NOT_EXECUTED' ? 'NOT EXECUTED' : outcome) : `Gate ${pc}/5`;
+            const sigTime = (hp && hp.signal_time) ? hp.signal_time : (window._stockSignalSeen[sym] || '—');
+            return `<div class="tradebox"><div class="thd ${isLong?'tg':'tr'}">${isLong?'LONG':'SHORT'} READY</div><div class="ttm">SIG ${sigTime}</div><div class="tos ${outcomeCls}">${outcomeTxt} · ${gateLbl}</div><div class="tln">E <span class="${isLong?'tg':'tr'}">${f(entry)}</span>  SL <span class="tr">${f(sl)}</span></div><div class="tln">T1 <span class="tg">${f(t1)}</span>  T2 <span class="tg">${f(t2)}</span></div></div>`;
+          };
+          tbody.innerHTML = liveRows.map((s, i) => {
+            const oip   = Number(s.oi_chg_pct || 0);
+            const volR  = s.vol_ratio != null ? Number(s.vol_ratio).toFixed(1)+'x' : '—';
+            const atrP  = s.atr_pct  != null ? Number(s.atr_pct).toFixed(1)+'%' : '—';
+            const rsP   = s.rs_pct   != null ? (s.rs_pct>=0?'+':'')+Number(s.rs_pct).toFixed(1)+'%' : '—';
+            const rsC   = s.rs_pct   != null ? (s.rs_pct>1?'var(--go)':s.rs_pct<-1?'var(--st)':'var(--am)') : 'var(--t2)';
+            const sig   = s.chg_pct >= 1 ? 'LONG OI↑' : s.chg_pct <= -1 ? 'SHORT OI↑' : 'NEUTRAL';
+            const sigt  = s.chg_pct >= 0.5 ? 'go' : s.chg_pct <= -0.5 ? 'st' : 'am';
+            const score = _activeScore(s);
+            const star  = score >= 80 ? ' ★' : '';
+            const g1h = s.g1 || 'am', g2h = s.g2 || 'am', g3h = s.g3 || 'am', g4h = s.g4 || 'am', g5h = s.g5 || 'am';
+            return '<tr class="'+(score>=80?'top':'')+'">'
+              + '<td><span style="color:var(--t2);font-size:8px;margin-right:3px">'+(i+1)+'</span><span class="tv-link" data-tvsym="'+s.symbol+'" style="font-weight:600;color:var(--t0)">'+s.symbol+star+'</span><br><span style="font-size:8px;color:var(--t2)">'+(secM[s.symbol]||'Market')+'</span></td>'
+              + '<td style="font-weight:600">'+Math.round(s.price || 0).toLocaleString('en-IN')+'</td>'
+              + '<td style="color:'+cc(s.chg_pct||0)+';font-weight:600">'+((s.chg_pct||0)>=0?'+':'')+Number(s.chg_pct||0).toFixed(2)+'%</td>'
+              + '<td style="color:'+cc(oip)+'">'+(oip>=0?'+':'')+Math.round(oip*100).toLocaleString('en-IN')+'</td>'
+              + '<td><span style="color:'+cc(oip)+';font-weight:600">'+(oip>=0?'+':'')+oip.toFixed(1)+'%</span><div style="height:3px;border-radius:2px;background:var(--b1);margin-top:2px;overflow:hidden;width:60px"><div style="height:100%;width:'+Math.min(Math.abs(oip)*3.5,100)+'%;background:'+cc(oip)+';border-radius:2px"></div></div></td>'
+              + '<td style="color:'+pcrC+'">'+pcr+'</td>'
+              + '<td style="color:'+((s.vol_ratio||0)>=2?'var(--go)':(s.vol_ratio||0)>=1.5?'var(--am)':'var(--t2)')+'">'+volR+'</td>'
+              + '<td style="color:'+((s.atr_pct||0)>=2?'var(--am)':'var(--t0)')+'">'+atrP+'</td>'
+              + '<td style="color:'+rsC+'">'+rsP+'</td>'
+              + '<td style="color:var(--t2)">—</td>'
+              + '<td>'+_gateDots(g1h,g2h,g3h,g4h,g5h)+'</td>'
+              + '<td><span class="sigtag" style="'+sc2(sigt)+'">'+sig+'</span></td>'
+              + '<td>'+tradeHtml(s)+'</td>'
+              + '<td>'+scEl(score)+'</td></tr>';
+          }).join('');
         }
-        // ── Update instrument card badges (BANKNIFTY, ICICIBANK, RELIANCE) ──
-        const _icMap = {'BANKNIFTY':'p1','ICICIBANK':'p2','RELIANCE':'p3'};
-        d.forEach(live => {
-          const elId = _icMap[live.symbol];
-          if(!elId) return;
-          const priceEl = document.getElementById(elId);
-          if(!priceEl) return;
-          const ic = priceEl.closest ? priceEl.closest('.ic') : priceEl.parentElement;
-          if(!ic) return;
-          const icbEl = ic.querySelector('.icb');
-          if(!icbEl) return;
-          const ics = icbEl.querySelector('.ics');
-          const ico = icbEl.querySelector('.ico');
-          const up = (live.chg_pct || 0) >= 0;
-          if(ics){ ics.textContent = up ? 'LONG BIAS' : 'SHORT BIAS'; ics.className = 'ics ' + (up ? 'bg' : 'br'); }
-          if(ico && live.oi_chg_pct != null){
-            const oip = Number(live.oi_chg_pct);
-            ico.textContent = 'OI ' + (oip >= 0 ? '+' : '') + oip.toFixed(1) + '%';
-            ico.style.color = oip >= 5 ? 'var(--go)' : oip >= 0 ? 'var(--t1)' : 'var(--st)';
-          }
-        });
-        // ── Store for spike tracker ──
-        window._livePrices = window._livePrices || {};
-        d.forEach(s => { window._livePrices[s.symbol] = s; });
+        _refreshTopCards();
+        _renderLiveLevels();
+        _renderOIPulseLive();
+        _renderVolumeRadarLive();
+        _renderSwingLive();
         break;
       }
 
@@ -3121,6 +3569,7 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
       // ── FII ───────────────────────────────────────
       case 'fii': {
         if(!d) break;
+        window._lastFii = d;
         const sign = d.fii_net >= 0 ? '+' : '';
         document.querySelectorAll('.mi').forEach(mi => {
           const nm = mi.querySelector('.min');
@@ -3141,6 +3590,7 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
             }
           }
         });
+        _renderLiveLevels();
         break;
       }
     }
@@ -3925,18 +4375,19 @@ function srIngestSpikes(arr) {
     const levels = _srEntry(sp);
     if(!levels) return;
     window._spikeLog.unshift({
-      id:       key,
-      symbol:   sp.symbol,
-      time:     sp.time,
-      type:     sp.type,
-      chg_pct:  sp.chg_pct,
-      vol_mult: sp.vol_mult,
-      oi_pct:   sp.oi_pct,
-      trigger:  sp.trigger,
-      signal:   sp.signal,
-      strength: sp.strength,
-      score:    score,
-      sigs:     _srSigFlags(sp),
+      id:          key,
+      symbol:      sp.symbol,
+      time:        sp.time,
+      type:        sp.type,
+      chg_pct:     sp.chg_pct,
+      vol_mult:    sp.vol_mult,
+      oi_pct:      sp.oi_pct,
+      trigger:     sp.trigger,
+      signal:      sp.signal,
+      strength:    sp.strength,
+      score:       score,
+      backend_score: sp.score || 0,
+      sigs:        _srSigFlags(sp),
       ...levels,
       status:   'LIVE',        // LIVE → HIT_T1 → HIT_T2 / HIT_SL / EXPIRED
       detectedAt: Date.now(),
@@ -4022,7 +4473,7 @@ function srRender() {
   }
   if(empty) empty.style.display = 'none';
 
-  const fmtP = v => v < 100 ? v.toFixed(2) : Math.round(v).toLocaleString('en-IN');
+  const fmtP = v => v < 100 ? v.toFixed(2) : v < 2000 ? v.toFixed(1) : Math.round(v).toLocaleString('en-IN');
   const statusHtml = s => {
     if(s==='LIVE')    return '<span class="sr-status sr-st-live">● LIVE</span>';
     if(s==='HIT_T1')  return '<span class="sr-status sr-st-t1">✓ HIT T1</span>';
@@ -4080,12 +4531,12 @@ function srRender() {
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px;font-size:8px;color:var(--t2)">
-        <span>Vol <b style="color:${sp.vol_mult>=5?'var(--go)':'var(--am)'}">${sp.vol_mult||0}×</b></span>
+        <span>Vol <b style="color:${sp.vol_mult>=5?'var(--go)':sp.vol_mult>=2?'var(--am)':'var(--t2)'}">${sp.vol_mult||0}×</b></span>
         <span>·</span>
         <span>OI <b style="color:${(sp.oi_pct||0)>=0?'var(--go)':'var(--st)'}">${(sp.oi_pct||0)>=0?'+':''}${(sp.oi_pct||0).toFixed(1)}%</b></span>
         <span>·</span>
         <span>Chg <b style="color:${(sp.chg_pct||0)>=0?'var(--go)':'var(--st)'}">${(sp.chg_pct||0)>=0?'+':''}${(sp.chg_pct||0).toFixed(2)}%</b></span>
-        <span style="margin-left:auto;font-size:7.5px;opacity:.6">Score ${sp.score}/10 · R:R 1:2.4</span>
+        <span style="margin-left:auto;font-size:7.5px;opacity:.6">Score ${sp.backend_score||sp.score*10}/100 · Sigs ${sp.score}/10 · R:R 1:2.4</span>
       </div>
     </div>`;
   }).join('');
@@ -4251,83 +4702,11 @@ function tbGoLive() {
     const rpBadge = rpHd.nextElementSibling;
     if(rpBadge) { rpBadge.textContent = 'LIVE RANKED'; rpBadge.className = 'bd bg'; }
   }
-  // Restore Swing Radar to static data
-  (function renderSwing(){
-    const sc2=t=>{
-      if(t==='BREAKOUT')return'color:var(--go);border:1px solid var(--go-b)';
-      if(t==='MOMENTUM')return'color:var(--bl);border:1px solid var(--bl-b)';
-      if(t==='PULLBACK')return'color:var(--am);border:1px solid var(--am-b)';
-      return'color:var(--st);border:1px solid var(--st-b)';
-    };
-    const sc=s=>s>=80?'var(--go)':s>=65?'var(--am)':'var(--st)';
-    const _gpc=s=>s>=80?5:s>=70?4:s>=60?3:s>=50?2:1;
-    const sb=document.getElementById('sw-body');
-    if(sb) sb.innerHTML=swingData.map(d=>{
-      const gpc=_gpc(d.score);
-      const g1d=gpc>=1?'go':'st',g2d=gpc>=2?'go':'st',g3d=gpc>=3?'go':'am',g4d=gpc>=4?'go':'wt',g5d=gpc>=5?'go':'wt';
-      const sigLbl=gpc>=4?'EXECUTE':gpc>=3?'WAIT':'NO TRADE';
-      const sigCss=gpc>=4?'color:var(--go);border:1px solid var(--go-b)':gpc>=3?'color:var(--am);border:1px solid var(--am-b)':'color:var(--t2);border:1px solid var(--b1)';
-      return`<tr style="${d.score>=80?'background:rgba(0,232,122,.03)':''}">
-        <td><span style="color:var(--t2);font-size:8px;margin-right:3px">${d.r}</span><span class="tv-link" data-tvsym="${d.s}" style="font-weight:600;color:var(--t0)">${d.s}</span></td>
-        <td style="color:var(--t2);font-size:9px">${d.sec}</td>
-        <td style="font-weight:600">${d.pr.toLocaleString('en-IN')}</td>
-        <td><span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:2px;${sc2(d.setup)}">${d.setup}</span></td>
-        <td style="color:var(--am)">${d.entry}</td>
-        <td style="color:var(--go);font-weight:600">${d.tgt.toLocaleString('en-IN')}</td>
-        <td style="color:var(--st)">${d.stop.toLocaleString('en-IN')}</td>
-        <td style="color:${d.rr>=2.5?'var(--go)':d.rr>=2?'var(--am)':'var(--st)'};font-weight:600">1:${d.rr.toFixed(1)}</td>
-        <td>${_gateDots(g1d,g2d,g3d,g4d,g5d)}</td>
-        <td style="color:${gpc>=4?'var(--go)':gpc>=3?'var(--am)':'var(--t2)'};font-weight:700">${gpc}/5</td>
-        <td><span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:2px;${sigCss}">${sigLbl}</span></td>
-        <td style="color:var(--bl);font-size:9px">${d.cat}</td>
-        <td style="color:var(--t2)">${d.days}</td>
-        <td><span style="font-size:10px;font-weight:700;color:${sc(d.score)}">${d.score}</span><div class="swbar"><div class="swbf" style="width:${d.score}%;background:${sc(d.score)}"></div></div></td>
-      </tr>`;}).join('');
-  })();
-  // Restore Key Levels to live static content
-  const lv2r = document.querySelector('#tp-levels .lv2');
-  if(lv2r && lv2r.children.length >= 2) {
-    lv2r.children[0].innerHTML = `
-      <div class="lvhd">NIFTY 50 — LIVE LEVELS</div>
-      <div class="lvl"><span class="lk">Weekly supply</span><span class="lp">24,800</span><span class="lt br">RESIST</span></div>
-      <div class="lvl"><span class="lk">Daily supply</span><span class="lp">24,620</span><span class="lt br">RESIST</span></div>
-      <div class="lvl"><span class="lk">CE wall (OI)</span><span class="lp cr">24,500</span><span class="lt br">CE WALL</span></div>
-      <div class="lvl" style="background:var(--am-d);border-color:var(--am-b)"><span class="lk">Max Pain</span><span class="lp ca">24,200</span><span class="lt ba">GRAVITY</span></div>
-      <div class="lvl"><span class="lk">VWAP live</span><span class="lp cb">24,380</span><span class="lt bb">VWAP</span></div>
-      <div class="lvl" style="background:var(--go-d);border-color:var(--go-b)"><span class="lk">Daily demand</span><span class="lp cg">24,350</span><span class="lt bg">STRONG</span></div>
-      <div class="lvl"><span class="lk">ORB High</span><span class="lp ca">24,468</span><span class="lt ba">ORB</span></div>
-      <div class="lvl"><span class="lk">ORB Low</span><span class="lp ca">24,388</span><span class="lt ba">ORB</span></div>
-      <div class="lvl"><span class="lk">Weekly demand</span><span class="lp">24,050</span><span class="lt bg">SUPPORT</span></div>`;
-    lv2r.children[1].innerHTML = `
-      <div class="lvhd">BANK NIFTY — LIVE LEVELS</div>
-      <div class="lvl"><span class="lk">Weekly supply</span><span class="lp">53,400</span><span class="lt br">RESIST</span></div>
-      <div class="lvl"><span class="lk">CE wall (OI)</span><span class="lp cr">52,500</span><span class="lt br">CE WALL</span></div>
-      <div class="lvl"><span class="lk">VWAP live</span><span class="lp cb">52,100</span><span class="lt bb">VWAP</span></div>
-      <div class="lvl" style="background:var(--go-d);border-color:var(--go-b)"><span class="lk">PE wall (OI)</span><span class="lp cg">51,500</span><span class="lt bg">PE WALL</span></div>
-      <div class="lvl"><span class="lk">Daily demand</span><span class="lp">51,200</span><span class="lt bg">SUPPORT</span></div>
-      <div class="lvhd" style="margin-top:8px">ICICI BANK — SWING SETUP</div>
-      <div class="lvl" style="background:var(--go-d);border-color:var(--go-b)"><span class="lk">Entry zone</span><span class="lp cg">1,210–1,230</span><span class="lt bg">DEMAND</span></div>
-      <div class="lvl"><span class="lk">Target 1</span><span class="lp cg">1,290</span><span class="lt bg">T1</span></div>
-      <div class="lvl"><span class="lk">Target 2</span><span class="lp cg">1,340</span><span class="lt bg">T2</span></div>
-      <div class="lvl"><span class="lk">Stop loss</span><span class="lp cr">1,185</span><span class="lt br">SL</span></div>`;
-    const wir = document.querySelector('#tp-levels .wbox .wi');
-    if(wir) wir.textContent = 'Nifty 212 pts above Max Pain (24,200) — gravitational pull toward expiry · FnO expiry Thursday — reduce positional size from Wed 14:00 · DXY +0.12% rising — watch FII outflow risk in afternoon session';
-  }
-  // Restore Kill Zones OI pulse + header
-  (function buildOIPulse(){
-    const data=[
-      {t:'9:30',oi:'+4,800',pt:'+38',lbl:'Fresh longs',c:'go'},
-      {t:'10:00',oi:'+9,200',pt:'+64',lbl:'Strong buildup',c:'go'},
-      {t:'10:30',oi:'+6,400',pt:'+42',lbl:'Momentum confirmed',c:'go'},
-      {t:'11:00',oi:'+3,100',pt:'+18',lbl:'Slowing — watch',c:'am'},
-      {t:'11:30',oi:'-1,800',pt:'+8',lbl:'OI unwinding',c:'am'},
-    ];
-    const el=document.getElementById('oip');
-    if(el) el.innerHTML=data.map(d=>'<div class="oip '+d.c+'"><span class="oip-t">'+d.t+'</span><span class="oip-oi">'+d.oi+'</span><span class="oip-pt">'+d.pt+'pt</span><span class="oip-lbl">'+d.lbl+'</span></div>').join('');
-    const cz=document.getElementById('curzone'); if(cz) cz.textContent='TREND ZONE ACTIVE';
-    const kzCards=document.getElementById('kzcards');
-    if(kzCards){const cards=kzCards.querySelectorAll('.zcard');if(cards.length>=4)cards[3].querySelector('.zd').textContent='Exit all positions. OI distortion. Max Pain gravity at 24,200.';}
-  })();
+  _renderSwingLive();
+  _renderLiveLevels();
+  _renderOIPulseLive();
+  _renderVolumeRadarLive();
+  _renderMacroContext();
   // Reconnect WS to get fresh live data
   if(window._liveConnect) window._liveConnect();
   notify('Back to live data');
