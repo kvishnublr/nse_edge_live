@@ -8,10 +8,13 @@ import logging
 import statistics
 from typing import Optional, List
 from collections import deque
+from datetime import datetime
 import requests as _requests
+import pytz
 from config import GATE as TH, LOT_SIZES
 
 logger = logging.getLogger("signals")
+_IST = pytz.timezone("Asia/Kolkata")
 
 # ─── TELEGRAM ALERT ───────────────────────────────────────────────────────────
 _last_telegram_verdict = None   # debounce — only alert on verdict change
@@ -548,6 +551,36 @@ def detect_spikes(stocks: list, prev: dict) -> list:
     return spikes[:15]
 
 
+def _annotate_live_stocks(stocks: list, gates_dict: dict, verdict: str) -> list:
+    """Attach live gate context and backend-owned scores to stock rows."""
+    now_hm = datetime.now(_IST).strftime("%H:%M")
+    g1 = (gates_dict.get(1) or {}).get("state", "wt")
+    g2 = (gates_dict.get(2) or {}).get("state", "wt")
+    for s in stocks:
+        chg = float(s.get("chg_pct", 0) or 0)
+        oi_pct = float(s.get("oi_chg_pct", 0) or 0)
+        vol_r = float(s.get("vol_ratio", 0) or 0)
+        atr_pct = float(s.get("atr_pct", 0) or 0)
+        g3 = "go" if abs(chg) >= 0.8 and abs(oi_pct) >= 4 else "am" if abs(chg) >= 0.35 else "st"
+        g4 = "go" if vol_r >= 1.5 and abs(chg) >= 0.6 else "wt" if vol_r >= 1.1 or abs(chg) >= 0.4 else "st"
+        g5 = "go" if atr_pct > 0 and abs(chg) >= max(0.6, atr_pct * 0.35) else "am" if abs(chg) >= 0.35 else "st"
+        pc = [g1, g2, g3, g4, g5].count("go")
+        base_score = float(s.get("score", 40) or 40)
+        score = int(min(99, max(base_score, 35 + pc * 10 + (8 if vol_r >= 1.5 else 0))))
+        s.update({
+            "g1": g1,
+            "g2": g2,
+            "g3": g3,
+            "g4": g4,
+            "g5": g5,
+            "pc": pc,
+            "score": score,
+            "signal_time": now_hm if pc >= 3 else "",
+            "verdict": "EXECUTE" if pc >= 3 and verdict != "NO TRADE" else "WATCH" if pc >= 2 else "WAIT",
+        })
+    return stocks
+
+
 # ─── MASTER RUN ───────────────────────────────────────────────────────────────
 def run_signal_engine(indices: dict, chain: dict, fii: dict,
                       stocks: list, mode: str = "intraday"):
@@ -591,6 +624,7 @@ def run_signal_engine(indices: dict, chain: dict, fii: dict,
             ticker.append(f"{sp['symbol']} SPIKE — <em>{sp['signal']}</em> — {sp['trigger']}")
 
     gates_dict = {i + 1: g for i, g in enumerate(gates)}
+    stocks = _annotate_live_stocks(stocks, gates_dict, verdict)
 
     # ── Confidence score (0-10) using gate weights from backtest analysis ──
     try:

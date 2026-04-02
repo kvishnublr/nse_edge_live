@@ -5,9 +5,11 @@ All jobs call Kite APIs or read from the Kite price cache.
 
 import logging
 import time
+from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.events import EVENT_JOB_ERROR
 from config import is_market_open
+from fetcher import IST
 
 logger = logging.getLogger("scheduler")
 
@@ -33,6 +35,12 @@ def set_dependencies(kite_instance, fetcher_mod, signals_mod, broadcast_fn):
 
 def set_mode(mode: str):
     _cache["mode"] = mode
+
+
+def set_initial_stocks(stocks: list):
+    """Seed scheduler cache with initial stocks from startup fetch."""
+    if stocks:
+        _cache["stocks"] = stocks
 
 
 def _check_circuit(job_name: str) -> bool:
@@ -137,16 +145,40 @@ def job_chain():
 
 # ─── JOB: F&O STOCKS (every 30 seconds) ──────────────────────────────────────
 def job_stocks():
-    """Fetch F&O stock OI (market hours only)."""
+    """Fetch F&O stock OI."""
     if not _check_circuit("job_stocks"):
-        return
-
-    if not is_market_open():
         return
 
     try:
         stocks = _fetcher.fetch_fno_stocks(_kite)
         if stocks:
+            gates = _signals.state.get("gates", {}) or {}
+            pass_count = int(_signals.state.get("pass_count", 0) or 0)
+            verdict = _signals.state.get("verdict", "WAIT")
+            now_hm = datetime.now(IST).strftime("%H:%M")
+            g1 = (gates.get(1) or gates.get("1") or {}).get("state", "wt")
+            g2 = (gates.get(2) or gates.get("2") or {}).get("state", "wt")
+            for s in stocks:
+                chg = float(s.get("chg_pct", 0) or 0)
+                oi_pct = float(s.get("oi_chg_pct", 0) or 0)
+                vol_r = float(s.get("vol_ratio", 0) or 0)
+                atr_pct = float(s.get("atr_pct", 0) or 0)
+                g3 = "go" if abs(chg) >= 0.8 and abs(oi_pct) >= 4 else "am" if abs(chg) >= 0.35 else "st"
+                g4 = "go" if vol_r >= 1.5 and abs(chg) >= 0.6 else "wt" if vol_r >= 1.1 or abs(chg) >= 0.4 else "st"
+                g5 = "go" if atr_pct > 0 and abs(chg) >= max(0.6, atr_pct * 0.35) else "am" if abs(chg) >= 0.35 else "st"
+                stock_pc = [g1, g2, g3, g4, g5].count("go")
+                stock_score = int(min(99, max(float(s.get("score", 40) or 40), 35 + stock_pc * 10 + (8 if vol_r >= 1.5 else 0))))
+                s.update({
+                    "g1": g1,
+                    "g2": g2,
+                    "g3": g3,
+                    "g4": g4,
+                    "g5": g5,
+                    "pc": stock_pc,
+                    "score": stock_score,
+                    "signal_time": now_hm if stock_pc >= 3 else "",
+                    "verdict": "EXECUTE" if stock_pc >= 3 and verdict != "NO TRADE" else "WATCH" if stock_pc >= 2 else "WAIT",
+                })
             _cache["stocks"] = stocks
             if _ws:
                 _ws({"type": "stocks", "data": stocks, "timestamp": time.time()})

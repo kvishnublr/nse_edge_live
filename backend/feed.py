@@ -227,7 +227,12 @@ class FeedManager:
             profile = kite.profile()
             logger.info(f"Kite auth OK — logged in as: {profile.get('user_name', 'unknown')}")
         except Exception as e:
-            raise RuntimeError(f"Kite auth failed: {e}\nCheck your API key and access token in .env")
+            logger.warning(f"Kite auth failed: {e}")
+            logger.warning("Using DEMO mode with yfinance data (no live trading)")
+            self._demo_mode = True
+            # Seed with demo data from yfinance
+            self._fetch_demo_data()
+            return
 
         # Do one REST fetch immediately so cache is populated on startup
         logger.info("Initial REST quote fetch...")
@@ -249,6 +254,113 @@ class FeedManager:
         # reconnect_max_tries=50 handles network drops
         _ticker.connect(threaded=True)
         logger.info("KiteTicker started — waiting for ticks")
+
+    def _fetch_demo_data(self):
+        """Fetch demo data from yfinance when Kite auth fails."""
+        try:
+            import yfinance as yf
+            logger.info("Fetching demo data from yfinance...")
+            
+            # Fetch Nifty data
+            nifty = yf.Ticker("^NSEI")
+            nifty_info = nifty.info
+            nifty_price = nifty_info.get('regularMarketPrice', 22500)
+            nifty_prev = nifty_info.get('previousClose', nifty_price)
+            nifty_chg = ((nifty_price - nifty_prev) / nifty_prev * 100) if nifty_prev else 0
+            
+            _update("NIFTY", {
+                "price": nifty_price,
+                "prev": nifty_prev,
+                "chg_pct": nifty_chg,
+                "chg_pts": nifty_price - nifty_prev,
+                "high": nifty_info.get('regularMarketDayHigh', nifty_price),
+                "low": nifty_info.get('regularMarketDayLow', nifty_price),
+                "volume": nifty_info.get('regularMarketVolume', 0),
+                "source": "yfinance"
+            })
+            
+            # Fetch BankNifty
+            banknifty = yf.Ticker("^NSEBANK")
+            bn_info = banknifty.info
+            bn_price = bn_info.get('regularMarketPrice', 48000)
+            bn_prev = bn_info.get('previousClose', bn_price)
+            bn_chg = ((bn_price - bn_prev) / bn_prev * 100) if bn_prev else 0
+            
+            _update("BANKNIFTY", {
+                "price": bn_price,
+                "prev": bn_prev,
+                "chg_pct": bn_chg,
+                "chg_pts": bn_price - bn_prev,
+                "high": bn_info.get('regularMarketDayHigh', bn_price),
+                "low": bn_info.get('regularMarketDayLow', bn_price),
+                "volume": bn_info.get('regularMarketVolume', 0),
+                "source": "yfinance"
+            })
+            
+            # Fetch India VIX (approximate using ^INDIAVIX or ^VIX)
+            try:
+                vix = yf.Ticker("^INDIAVIX")
+                vix_info = vix.info
+                vix_price = vix_info.get('regularMarketPrice', 15)
+                vix_prev = vix_info.get('previousClose', vix_price)
+                vix_chg = ((vix_price - vix_prev) / vix_prev * 100) if vix_prev else 0
+            except:
+                vix_price = 15
+                vix_chg = 0
+            
+            _update("INDIAVIX", {
+                "price": vix_price,
+                "prev": vix_price / (1 + vix_chg/100) if vix_chg else vix_price,
+                "chg_pct": vix_chg,
+                "chg_pts": 0,
+                "source": "yfinance"
+            })
+            
+            logger.info(f"Demo data: Nifty {nifty_price} ({nifty_chg:+.2f}%), BankNifty {bn_price} ({bn_chg:+.2f}%)")
+            
+            # Start polling loop for demo mode
+            threading.Thread(target=self._demo_poll_loop, daemon=True).start()
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch demo data: {e}")
+    
+    def _demo_poll_loop(self):
+        """Poll yfinance every 60 seconds in demo mode."""
+        import yfinance as yf
+        logger.info("Demo mode: polling yfinance every 60s")
+        while self._running and getattr(self, '_demo_mode', False):
+            time.sleep(60)
+            try:
+                nifty = yf.Ticker("^NSEI")
+                nifty_info = nifty.info
+                nifty_price = nifty_info.get('regularMarketPrice')
+                nifty_prev = nifty_info.get('previousClose')
+                if nifty_price and nifty_prev:
+                    nifty_chg = (nifty_price - nifty_prev) / nifty_prev * 100
+                    _update("NIFTY", {
+                        "price": nifty_price,
+                        "prev": nifty_prev,
+                        "chg_pct": nifty_chg,
+                        "chg_pts": nifty_price - nifty_prev,
+                        "source": "yfinance"
+                    })
+                    
+                    banknifty = yf.Ticker("^NSEBANK")
+                    bn_info = banknifty.info
+                    bn_price = bn_info.get('regularMarketPrice')
+                    bn_prev = bn_info.get('previousClose')
+                    if bn_price and bn_prev:
+                        bn_chg = (bn_price - bn_prev) / bn_prev * 100
+                        _update("BANKNIFTY", {
+                            "price": bn_price,
+                            "prev": bn_prev,
+                            "chg_pct": bn_chg,
+                            "chg_pts": bn_price - bn_prev,
+                            "source": "yfinance"
+                        })
+                    logger.info(f"Demo update: Nifty {nifty_chg:+.2f}%, BankNifty {bn_chg:+.2f}%")
+            except Exception as e:
+                logger.warning(f"Demo poll failed: {e}")
 
     def stop(self):
         self._running = False

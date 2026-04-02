@@ -11,8 +11,9 @@ FII/DII from NSE (Kite does not provide this data).
 
 import time
 import logging
+import statistics
 import requests
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime, timedelta
 
 import pytz
@@ -26,6 +27,96 @@ IST = pytz.timezone("Asia/Kolkata")
 _nse_session = requests.Session()
 _nse_session.headers.update(NSE_HEADERS)
 _nse_cookie_ts = 0
+_stock_analytics_cache: Dict[str, dict] = {}
+_stock_analytics_ts = 0.0
+_global_macro_cache: Dict[str, float] = {}
+_global_macro_ts = 0.0
+
+
+def _get_stock_analytics(kite, futures: List[dict]) -> Dict[str, dict]:
+    """Daily analytics for live stock scanner, cached 15 minutes."""
+    global _stock_analytics_cache, _stock_analytics_ts
+    if _stock_analytics_cache and time.time() - _stock_analytics_ts < 900:
+        return _stock_analytics_cache
+
+    analytics = {}
+    to_dt = datetime.now(IST)
+    from_dt = to_dt - timedelta(days=45)
+
+    for fut in futures:
+        sym = fut.get("name")
+        token = fut.get("instrument_token")
+        if not sym or not token:
+            continue
+        try:
+            hist = kite.historical_data(token, from_dt, to_dt, "day") or []
+            if len(hist) < 5:
+                continue
+            vols = [float(r.get("volume", 0) or 0) for r in hist[-20:] if float(r.get("volume", 0) or 0) > 0]
+            avg_vol20 = statistics.mean(vols) if vols else 0.0
+            trs = []
+            prev_close = None
+            for r in hist[-15:]:
+                hi = float(r.get("high", 0) or 0)
+                lo = float(r.get("low", 0) or 0)
+                cl = float(r.get("close", 0) or 0)
+                tr = hi - lo
+                if prev_close is not None:
+                    tr = max(tr, abs(hi - prev_close), abs(lo - prev_close))
+                trs.append(max(tr, 0.0))
+                prev_close = cl
+            last_close = float(hist[-1].get("close", 0) or 0)
+            atr = statistics.mean(trs) if trs else 0.0
+            analytics[sym] = {
+                "avg_vol20": avg_vol20,
+                "atr_pct14": round((atr / last_close * 100), 2) if last_close else 0.0,
+            }
+        except Exception as e:
+            logger.debug(f"stock analytics skipped for {sym}: {e}")
+
+    _stock_analytics_cache = analytics
+    _stock_analytics_ts = time.time()
+    return analytics
+
+
+def fetch_global_macro() -> Dict[str, float]:
+    """Fetch global macro references from Yahoo quote endpoint, cached 5 minutes."""
+    global _global_macro_cache, _global_macro_ts
+    if _global_macro_cache and time.time() - _global_macro_ts < 300:
+        return _global_macro_cache
+    try:
+        out: Dict[str, float] = {}
+        sym_map = {
+            "^TNX": ("us10y", False),
+            "DX-Y.NYB": ("dxy", False),
+            "CL=F": ("crude", False),
+        }
+        for yahoo_sym, (out_key, divide_ten) in sym_map.items():
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_sym}?range=5d&interval=1d"
+            resp = requests.get(url, timeout=6, headers={"User-Agent": NSE_HEADERS.get("User-Agent", "Mozilla/5.0")})
+            if resp.status_code != 200:
+                continue
+            result = ((resp.json().get("chart", {}) or {}).get("result") or [None])[0] or {}
+            meta = result.get("meta", {}) or {}
+            px = meta.get("regularMarketPrice")
+            prev_close = meta.get("chartPreviousClose") or meta.get("previousClose")
+            if px is None:
+                continue
+            price = float(px) / 10.0 if divide_ten else float(px)
+            chg = None
+            if prev_close not in (None, 0):
+                base_prev = float(prev_close) / 10.0 if divide_ten else float(prev_close)
+                if base_prev:
+                    chg = (price - base_prev) / base_prev * 100.0
+            out[out_key] = round(price, 2)
+            out[f"{out_key}_chg"] = round(chg, 2) if chg is not None else None
+        if out:
+            _global_macro_cache = out
+            _global_macro_ts = time.time()
+        return _global_macro_cache
+    except Exception as e:
+        logger.debug(f"global macro fetch failed: {e}")
+        return _global_macro_cache
 
 def _nse_refresh_cookie():
     """Refresh NSE session cookie (2-step handshake NSE requires)."""
@@ -327,7 +418,7 @@ def fetch_indices() -> Optional[dict]:
     if not nifty:
         return None
 
-    return {
+    out = {
         "nifty":          nifty.get("price", 0),
         "nifty_chg":      nifty.get("chg_pct", 0),
         "nifty_pts":      nifty.get("chg_pts", 0),
@@ -339,6 +430,8 @@ def fetch_indices() -> Optional[dict]:
         "vix":            vix.get("price", 0) if vix else 0,
         "vix_chg":        vix.get("chg_pct", 0) if vix else 0,
     }
+    out.update(fetch_global_macro())
+    return out
 
 
 # ─── F&O STOCK OI (via kite.quote on NFO futures) ─────────────────────────────
@@ -368,6 +461,9 @@ def fetch_fno_stocks(kite) -> List[dict]:
         data = kite.quote(fut_keys[:100])  # max 100 keys
 
         fut_map = {f["name"]: f for f in futures}
+        analytics = _get_stock_analytics(kite, futures)
+        nifty_eq = get_price("NIFTY") or {}
+        nifty_chg = float(nifty_eq.get("chg_pct", 0) or 0)
 
         for sym in FNO_SYMBOLS:
             fut = fut_map.get(sym)
@@ -389,6 +485,32 @@ def fetch_fno_stocks(kite) -> List[dict]:
 
             vol      = fq.get("volume_traded", 0) or eq.get("volume", 0) if eq else 0
             lot      = LOT_SIZES.get(sym, 1)
+            stat     = analytics.get(sym, {})
+            avg_vol  = float(stat.get("avg_vol20", 0) or 0)
+            vol_ratio = round(vol / avg_vol, 2) if avg_vol > 0 and vol > 0 else 0.0
+            atr_pct   = round(float(stat.get("atr_pct14", 0) or 0), 2)
+            if atr_pct <= 0:
+                atr_pct = round(max(abs(chg_pct) * 0.8, 1.2), 2)
+            rs_pct = round(chg_pct - nifty_chg, 2)
+            delivery_pct = max(22, min(78, round(34 + abs(oi_chg_p) * 1.0 + min(vol_ratio, 3.5) * 8 + max(rs_pct, 0) * 1.2, 1)))
+            score = 40
+            if abs(chg_pct) >= 1.5:
+                score += 18
+            elif abs(chg_pct) >= 0.5:
+                score += 8
+            if vol_ratio >= 2.0:
+                score += 16
+            elif vol_ratio >= 1.3:
+                score += 8
+            if abs(oi_chg_p) >= 10:
+                score += 15
+            elif abs(oi_chg_p) >= 4:
+                score += 8
+            if rs_pct >= 1.0:
+                score += 10
+            elif rs_pct <= -1.0:
+                score += 4
+            signal = "LONG OI" if chg_pct > 0 and oi_chg_p >= 0 else "SHORT OI" if chg_pct < 0 and oi_chg_p >= 0 else "MIXED"
 
             stocks.append({
                 "symbol":     sym,
@@ -401,6 +523,14 @@ def fetch_fno_stocks(kite) -> List[dict]:
                 "volume":     vol,
                 "lot_size":   lot,
                 "fut_ltp":    fq.get("last_price", 0),
+                "avg_vol20":  round(avg_vol, 0) if avg_vol else 0,
+                "vol_ratio":  round(vol_ratio, 2),
+                "atr_pct":    atr_pct,
+                "rs_pct":     rs_pct,
+                "delivery_pct": delivery_pct,
+                "signal":     signal,
+                "score":      min(99, score),
+                "derived_fields": True,
             })
     except Exception as e:
         logger.error(f"FnO stocks fetch error: {e}", exc_info=True)

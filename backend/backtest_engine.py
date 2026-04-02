@@ -146,9 +146,9 @@ def _verdict(gates: list):
     states   = [g["state"] for g in gates]
     pass_cnt = states.count("go")
     has_fail = "st" in states
-    if pass_cnt == 5:
+    if pass_cnt >= 3:
         return "EXECUTE", pass_cnt
-    elif has_fail or pass_cnt < 3:
+    elif has_fail or pass_cnt < 2:
         return "NO TRADE", pass_cnt
     else:
         return "WAIT", pass_cnt

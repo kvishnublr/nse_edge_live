@@ -100,10 +100,15 @@ async def lifespan(app: FastAPI):
 
     # Start Kite feed (validates creds, starts KiteTicker)
     feed_manager.start()
-
-    # Get authenticated Kite instance
-    from feed import get_kite
-    kite = get_kite()
+    
+    demo_mode = getattr(feed_manager, '_demo_mode', False)
+    if demo_mode:
+        logger.info("Running in DEMO MODE (no live trading)")
+        kite = None
+    else:
+        # Get authenticated Kite instance
+        from feed import get_kite
+        kite = get_kite()
 
     # Wire scheduler
     sched.set_dependencies(kite, fetcher, signals, broadcast)
@@ -113,8 +118,14 @@ async def lifespan(app: FastAPI):
     try:
         indices = fetcher.fetch_indices()
         fii     = fetcher.fetch_fii_dii()
-        chain   = fetcher.fetch_option_chain(kite, "NIFTY")
-        stocks  = fetcher.fetch_fno_stocks(kite)
+        
+        if kite:
+            chain   = fetcher.fetch_option_chain(kite, "NIFTY")
+            stocks  = fetcher.fetch_fno_stocks(kite)
+        else:
+            chain = None
+            stocks = []
+            logger.info("  Skipping chain/stocks (Kite not available in demo mode)")
 
         if indices:
             logger.info(f"  Nifty={indices.get('nifty',0):.0f} "
@@ -129,6 +140,7 @@ async def lifespan(app: FastAPI):
                         f"DII={fii.get('dii_net',0):.0f}Cr")
         if stocks:
             logger.info(f"  {len(stocks)} F&O stocks loaded")
+            sched.set_initial_stocks(stocks)  # seed scheduler cache
 
         signals.run_signal_engine(indices, chain, fii, stocks or [], "intraday")
     except Exception as e:
@@ -178,7 +190,11 @@ _FRONTEND = os.path.join(os.path.dirname(__file__), "..", "frontend", "index.htm
 
 @app.get("/")
 async def serve_frontend():
-    return FileResponse(os.path.abspath(_FRONTEND))
+    resp = FileResponse(os.path.abspath(_FRONTEND))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 # ─── WEBSOCKET ────────────────────────────────────────────────────────────────
 @app.websocket("/ws")
@@ -308,6 +324,116 @@ async def get_state():
         "position_size_lots": signals.state.get("position_size_lots", 0),
         "position_size_rupees": signals.state.get("position_size_rupees", 0),
     })
+
+
+@app.get("/api/live-picks")
+async def get_live_picks():
+    """Compute live stock picks from current stocks cache."""
+    stocks  = signals.state.get("last_stocks", [])
+    indices = signals.state.get("last_macro", {}) or {}
+    chain   = signals.state.get("last_chain", {}) or {}
+    pcr     = chain.get("pcr", 1.0)
+    vix     = indices.get("vix", 15.0)
+    g_pass  = signals.state.get("pass_count", 0)   # global gate pass count
+    global_verdict = signals.state.get("verdict", "WAIT")
+
+    picks = []
+    for s in stocks:
+        sym    = s.get("symbol", "")
+        price  = s.get("price", 0) or 0
+        if not price or sym in ("NIFTY", "BANKNIFTY", "INDIAVIX"):
+            continue
+        chg    = s.get("chg_pct", 0) or 0
+        vol_r  = s.get("vol_ratio", 1.0) or 1.0
+        oi_pct = s.get("oi_chg_pct", 0) or 0
+        # Score stock-level quality
+        stock_score = 0
+        if abs(chg) >= 1.5: stock_score += 3
+        elif abs(chg) >= 0.5: stock_score += 1
+        if vol_r >= 2.0: stock_score += 2
+        elif vol_r >= 1.3: stock_score += 1
+        if abs(oi_pct) >= 5: stock_score += 2
+        elif abs(oi_pct) >= 2: stock_score += 1
+        if stock_score < 1:
+            continue  # skip flat/no-activity stocks
+
+        # Simple ATR proxy: 1.5% of price
+        atr    = price * 0.015
+        if chg >= 1.5:
+            setup    = "Breakout"
+            entry_p  = price * 1.002
+        elif chg > 0:
+            setup    = "Pullback"
+            entry_p  = price - 0.2 * atr
+        elif chg > -0.5:
+            setup    = "Recovery"
+            entry_p  = price + 0.1 * atr
+        else:
+            setup    = "Momentum"
+            entry_p  = price
+
+        sl_p   = entry_p - 1.5 * atr
+        tgt_p  = entry_p + 2.5 * (entry_p - sl_p)
+        tgt_pp = entry_p + 4.0 * (entry_p - sl_p)
+        rr     = round((tgt_p - entry_p) / max(entry_p - sl_p, 1), 1)
+        rr_p   = round((tgt_pp - entry_p) / max(entry_p - sl_p, 1), 1)
+        score  = min(99, round(40 + g_pass * 8 + stock_score * 4 + (5 if vol_r >= 1.5 else 0)))
+        pc     = int(s.get("pc", g_pass) or g_pass)
+        stock_verdict = str(s.get("verdict", global_verdict or "WAIT"))
+        signal_label = str(s.get("signal", "WATCH")).upper()
+        if global_verdict == "NO TRADE" or s.get("g1") == "st" or s.get("g5") == "st":
+            conf = "BLOCKED"
+            cls = "rpk-st"
+            stock_verdict = "NO TRADE"
+        elif stock_verdict == "EXECUTE" and pc >= 5:
+            conf = "CONFIRMED"
+            cls = "rpk-go"
+        elif stock_verdict == "WATCH" or pc >= 3:
+            conf = "HIGH CONF"
+            cls = "rpk-am"
+        else:
+            conf = "BLOCKED"
+            cls = "rpk-st"
+
+        sec_map = {
+            "HDFCBANK":"Banking","ICICIBANK":"Banking","AXISBANK":"Banking",
+            "KOTAKBANK":"Banking","INDUSINDBK":"Banking","SBIN":"PSU Bank",
+            "BANKNIFTY":"Index","TCS":"IT","INFY":"IT","MARUTI":"Auto",
+            "TATAMOTORS":"Auto","LT":"Infra","BAJFINANCE":"NBFC","RELIANCE":"Energy",
+            "TATASTEEL":"Steel","SUNPHARMA":"Pharma","BAJFINANCE":"NBFC",
+        }
+        sector = sec_map.get(sym, "Market")
+        oi_pct = s.get("oi_chg_pct", 0) or 0
+
+        def _pf(p):
+            return str(round(p, 1)) if p < 2000 else str(int(round(p)))
+
+        picks.append({
+            "sym":      sym,
+            "score":    score,
+            "pc":       pc,
+            "conf":     conf,
+            "cls":      cls,
+            "setup":    setup,
+            "close":    price,
+            "chg_pct":  round(chg, 2),
+            "vol_ratio":round(vol_r, 1),
+            "oi_chg_pct": round(oi_pct, 1),
+            "entry":    _pf(entry_p),
+            "sl":       _pf(sl_p),
+            "target":   _pf(tgt_p),
+            "target_p": _pf(tgt_pp),
+            "rr":       rr,
+            "rr_p":     rr_p,
+            "meta":     f"{setup} · {sector} · Vol {vol_r:.1f}x · OI {oi_pct:+.1f}% · VIX {vix:.1f}",
+            "reason":   f"{stock_verdict} · {pc}/5 gates · {signal_label} · R:R 1:{rr}",
+            "reason_p": f"{stock_verdict} · {pc}/5 gates · Swing target · R:R 1:{rr_p}",
+            "g1": s.get("g1","wt"), "g2": s.get("g2","wt"),
+            "g3": s.get("g3","wt"), "g4": s.get("g4","wt"), "g5": s.get("g5","wt"),
+        })
+
+    picks.sort(key=lambda x: (-x["pc"], -x["score"]))
+    return JSONResponse({"picks": picks[:8], "count": len(picks)})
 
 
 @app.get("/api/chain/{symbol}")
@@ -755,6 +881,8 @@ async def dayview_full(date: str):
 
         stock_picks = []
         stocks_msg  = []
+        # Process all stocks first to calculate scores
+        stock_data = []
         for sym in ["BANKNIFTY", "ICICIBANK", "RELIANCE", "INDUSINDBK", "SBIN", "HDFCBANK", "AXISBANK", "BAJFINANCE", "LT", "TCS", "TATAMOTORS", "INFY", "MARUTI", "KOTAKBANK"]:
             token = KITE_TOKENS.get(sym)
             if not token: continue
@@ -802,6 +930,7 @@ async def dayview_full(date: str):
                     "g1": g1i["state"], "g2": g2i["state"],
                     "g3": g3s["state"], "g4": g4s["state"], "g5": g5s["state"],
                     "pc": pc_s,
+                    "score":    score  # Store score for sorting
                 })
 
                 # Build pick entry for right panel (only strong signals)
@@ -971,7 +1100,7 @@ async def dayview_full(date: str):
             "macro":  {"vix": vix, "vix_chg": vix_chg, "fii_net": fii_net},
             "fii":    {"fii_net": fii_net, "dii_net": dii_net},
             "chain":  chain_msg,
-            "stocks": stocks_msg,
+            "stocks": sorted([s for s in stocks_msg if s["score"] >= 60], key=lambda x: (-x["score"], -abs(x["chg_pct"]))),  # Only stocks with score >= 60 (min 2 gates), high score first
             "spikes": [],
             "stock_picks": stock_picks[:8],
             "nifty_ohlc": {"o": nifty_row[0], "h": nifty_row[1], "l": nifty_row[2], "c": nifty_row[3]},
