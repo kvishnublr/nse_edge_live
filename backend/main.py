@@ -463,19 +463,19 @@ async def get_live_picks():
         pc     = int(s.get("pc", g_pass) or g_pass)
         stock_verdict = str(s.get("verdict", global_verdict or "WAIT"))
         signal_label = str(s.get("signal", "WATCH")).upper()
-        if global_verdict == "NO TRADE" or s.get("g1") == "st" or s.get("g5") == "st":
-            conf = "BLOCKED"
-            cls = "rpk-st"
-            stock_verdict = "NO TRADE"
-        elif stock_verdict == "EXECUTE" and pc >= 5:
+        if stock_verdict == "EXECUTE" and pc >= 5:
             conf = "CONFIRMED"
             cls = "rpk-go"
-        elif stock_verdict == "WATCH" or pc >= 3:
-            conf = "HIGH CONF"
-            cls = "rpk-am"
-        else:
-            conf = "BLOCKED"
+        elif stock_verdict in ("EXECUTE", "WATCH") or pc >= 3:
+            conf = "HIGH CONF" if pc >= 4 else "WATCH"
+            cls = "rpk-go" if pc >= 4 else "rpk-am"
+        elif global_verdict == "NO TRADE" or s.get("g1") == "st" or s.get("g5") == "st":
+            conf = "NO TRADE"
             cls = "rpk-st"
+            stock_verdict = "NO TRADE"
+        else:
+            conf = "WATCH"
+            cls = "rpk-am"
 
         sec_map = {
             "HDFCBANK":"Banking","ICICIBANK":"Banking","AXISBANK":"Banking",
@@ -1036,6 +1036,10 @@ async def dayview_full(date: str):
 
                 prices[sym] = {"price": dc, "chg_pts": round(dc-pv,2), "chg_pct": dp}
 
+                # Build score before using it anywhere
+                score = round(40 + pc_s*10 + (10 if dp>1 else 5 if dp>0.5 else 0) + (5 if vol_r>=1.5 else 0))
+                score = min(99, score)
+
                 # Stock scanner message (all stocks, for the OI table)
                 stocks_msg.append({
                     "symbol":     sym,
@@ -1054,13 +1058,9 @@ async def dayview_full(date: str):
                     "g1": g1i["state"], "g2": g2i["state"],
                     "g3": g3s["state"], "g4": g4s["state"], "g5": g5s["state"],
                     "pc": pc_s,
-                    "score":    score  # Store score for sorting
+                    "score":    score,
                 })
-
-                # Build pick entry for right panel (only strong signals)
-                score = round(40 + pc_s*10 + (10 if dp>1 else 5 if dp>0.5 else 0) + (5 if vol_r>=1.5 else 0))
-                score = min(99, score)
-                if pc_s >= 3:
+                if pc_s >= 2:
                     # ── Entry / SL / Target from ATR and recent 5-day swings ──
                     recent_lows  = [d["low"]  for d in prior[-5:]] if len(prior) >= 5 else [dr["low"]]
                     recent_highs = [d["high"] for d in prior[-5:]] if len(prior) >= 5 else [dr["high"]]
@@ -1108,8 +1108,8 @@ async def dayview_full(date: str):
                         "sym":         sym,
                         "score":       score,
                         "pc":          pc_s,
-                        "verdict":     "EXECUTE" if pc_s>=3 else "WATCH" if pc_s==2 else "WAIT",
-                        "conf":        "CONFIRMED" if pc_s==5 else "HIGH CONF" if pc_s==4 else "50:50",
+                        "verdict":     "EXECUTE" if pc_s>=3 else "WATCH",
+                        "conf":        "CONFIRMED" if pc_s==5 else "HIGH CONF" if pc_s>=4 else "WATCH" if pc_s==3 else "MONITOR",
                         "signal_time": _sig_time,
                         "close":       dc,
                         "chg_pct":     dp,
