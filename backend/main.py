@@ -14,7 +14,7 @@ from typing import Set
 
 import pytz
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -1853,6 +1853,58 @@ async def whatsapp_test():
         return JSONResponse({"ok": False, "error": f"CallMeBot returned HTTP {resp.status_code}"}, status_code=502)
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=502)
+
+
+# ─── CLOUD PUSH ENDPOINT ─────────────────────────────────────────────────────
+# Your local PC (with valid Kite token) pushes live state here every 30s.
+# Protected by a shared secret set via PUSH_SECRET env var.
+_PUSH_SECRET = os.getenv("PUSH_SECRET", "")
+
+@app.post("/api/push-state")
+async def push_state(request: Request):
+    """Receive live state pushed from local Kite-connected server."""
+    auth = request.headers.get("X-Push-Secret", "")
+    if _PUSH_SECRET and auth != _PUSH_SECRET:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    # Inject into signals state so all existing endpoints work
+    if "prices" in payload:
+        try:
+            from feed import price_cache
+            price_cache.update(payload["prices"])
+        except Exception:
+            pass
+    if "gates" in payload:
+        g = payload["gates"]
+        signals.state["gates"]      = g.get("gates", signals.state.get("gates", {}))
+        signals.state["verdict"]    = g.get("verdict", signals.state.get("verdict", "WAIT"))
+        signals.state["verdict_sub"]= g.get("verdict_sub", "")
+        signals.state["pass_count"] = g.get("pass_count", 0)
+    if "spikes" in payload:
+        signals.state["spikes"] = payload["spikes"]
+    if "stocks" in payload:
+        signals.state["last_stocks"] = payload["stocks"]
+    if "chain" in payload:
+        signals.state["last_chain"] = payload["chain"]
+    if "macro" in payload:
+        signals.state["last_macro"] = payload["macro"]
+    if "fii" in payload:
+        signals.state["last_fii"] = payload["fii"]
+
+    # Broadcast to any connected browser clients
+    if "prices" in payload: broadcast({"type": "prices", "data": payload["prices"], "ts": time.time()})
+    if "gates"  in payload: broadcast({"type": "gates",  "data": payload["gates"],  "timestamp": time.time()})
+    if "spikes" in payload: broadcast({"type": "spikes", "data": payload["spikes"], "ts": time.time()})
+    if "stocks" in payload: broadcast({"type": "stocks", "data": payload["stocks"], "timestamp": time.time()})
+    if "chain"  in payload: broadcast({"type": "chain",  "data": payload["chain"],  "timestamp": time.time()})
+    if "macro"  in payload: broadcast({"type": "macro",  "data": payload["macro"],  "timestamp": time.time()})
+    if "fii"    in payload: broadcast({"type": "fii",    "data": payload["fii"],    "timestamp": time.time()})
+
+    return JSONResponse({"ok": True, "ts": time.time()})
 
 
 if __name__ == "__main__":

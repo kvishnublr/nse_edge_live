@@ -1,9 +1,7 @@
-app = "nse-edge-backend"
-primary_region = "sin"  # Singapore — closest to NSE
+app = "nse-edge-live"
+primary_region = "sin"
 
 [build]
-  [build.args]
-    PYTHON_VERSION = "3.11"
 
 [env]
   HOST = "0.0.0.0"
@@ -18,10 +16,14 @@ primary_region = "sin"  # Singapore — closest to NSE
 
   [http_service.concurrency]
     type = "connections"
-    hard_limit = 50
-    soft_limit = 25
+    hard_limit = 100
+    soft_limit = 50
 
 [[vm]]
-  memory = "256mb"
+  memory = "512mb"
   cpu_kind = "shared"
   cpus = 1
+
+[mounts]
+  source = "nse_edge_data"
+  destination = "/app/backend/data"
