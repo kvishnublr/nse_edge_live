@@ -754,6 +754,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <div class="tab" onclick="sw('stats',this)">STATS</div>
     <div class="tab analytics-tab" onclick="sw('analytics',this)">EDGE ANALYTICS</div>
     <div class="tab" style="color:var(--bl)" onclick="sw('backtest',this)">BACKTEST</div>
+    <div class="tab" style="color:#a78bfa" onclick="sw('learnbt',this)">📚 BACKTEST GUIDE</div>
     <div class="tab" style="color:var(--am)" onclick="sw('pnl',this)">P&amp;L TRACKER</div>
     <div class="tab" onclick="sw('heatmap',this)">HEATMAP</div>
     <div class="tab" style="color:var(--t2)" onclick="sw('calendar',this)">CALENDAR</div>
@@ -971,9 +972,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <!-- Cards list -->
     <div style="overflow-y:auto;flex:1;min-height:0;padding:8px 8px 0" id="sr-list">
       <div style="text-align:center;padding:40px 16px;color:var(--t2);font-size:9px;line-height:1.8" id="sr-empty">
-        <div style="font-size:22px;margin-bottom:8px;opacity:.3">⚡</div>
-        Waiting for spike signals...<br>
-        <span style="color:var(--t3)">Signals fire when Price ≥1.5% + Vol ≥2.5× avg · or OI spike ≥12%</span>
+        <div style="font-size:22px;margin-bottom:8px;opacity:.3" id="sr-empty-icon">⚡</div>
+        <span id="sr-empty-msg">Waiting for spike signals...</span><br>
+        <span style="color:var(--t3)">Signals fire when Price ≥0.2% + Vol ≥1.5× avg · or OI spike ≥12%</span>
       </div>
     </div>
 
@@ -1120,6 +1121,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   <div class="tp" id="tp-analytics">
     <div class="anav">
       <button class="abtn on" onclick="anSw('spike',this)">SPIKE RADAR</button>
+      <button class="abtn" onclick="anSw('history',this)">SIGNAL HISTORY</button>
       <button class="abtn" onclick="anSw('sizer',this)">POSITION SIZER</button>
       <button class="abtn" onclick="anSw('backtest',this)">SIGNAL BACKTEST</button>
       <button class="abtn" onclick="anSw('volradar',this)">VOLUME RADAR</button>
@@ -1128,7 +1130,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <!-- SPIKE RADAR -->
     <div class="asec on" id="an-spike">
       <div class="ahdrow">
-        <div><div class="atitle">INTRADAY SPIKE DETECTOR</div><div class="asub">Sudden price · volume · OI anomalies — threshold: price >1.5% or vol >2.5× or OI >12%</div></div>
+        <div><div class="atitle">INTRADAY SPIKE DETECTOR</div><div class="asub">Sudden price · volume · OI anomalies — threshold: price >0.2% + vol >1.5× avg · or OI spike >12%</div></div>
         <div style="display:flex;gap:8px;align-items:center">
           <span style="display:flex;align-items:center;gap:4px;font-size:8px;color:var(--t2)"><span style="width:7px;height:7px;border-radius:50%;background:var(--go);display:inline-block"></span>Buy</span>
           <span style="display:flex;align-items:center;gap:4px;font-size:8px;color:var(--t2)"><span style="width:7px;height:7px;border-radius:50%;background:var(--st);display:inline-block"></span>Sell</span>
@@ -1149,8 +1151,38 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       <div class="afoot">
         <div style="display:flex;gap:5px;align-items:center"><span class="afk">Window</span><span class="afv cm">15-min rolling</span></div>
         <div style="display:flex;gap:5px;align-items:center"><span class="afk">High strength</span><span class="afv" id="spike-hi" style="color:var(--go)">—</span></div>
-        <div style="display:flex;gap:5px;align-items:center"><span class="afk">False rate</span><span class="afv cm">12% (30 sessions)</span></div>
+        <div style="display:flex;gap:5px;align-items:center"><span class="afk">Hit Target</span><span class="afv" id="spike-hit-count" style="color:var(--go)">—</span></div>
+        <div style="display:flex;gap:5px;align-items:center"><span class="afk">Hit SL</span><span class="afv" id="spike-sl-count" style="color:var(--st)">—</span></div>
+        <div style="display:flex;gap:5px;align-items:center"><span class="afk">Accuracy</span><span class="afv" id="spike-acc" style="color:var(--am)">—</span></div>
         <div style="display:flex;gap:5px;align-items:center"><span class="afk">Updated</span><span class="afv" id="spike-ts2" style="color:var(--bl)">—</span></div>
+      </div>
+    </div>
+
+    <!-- SIGNAL HISTORY -->
+    <div class="asec" id="an-history">
+      <div class="ahdrow">
+        <div><div class="atitle">LIVE SIGNAL HISTORY</div><div class="asub">Stored signal time, entry, SL, target, exit and result for recent spike signals</div></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="sig-hist-filter" class="pssel" style="width:130px" onchange="loadSignalHistory()">
+            <option value="ALL">ALL</option>
+            <option value="OPEN">OPEN</option>
+            <option value="CLOSED">CLOSED</option>
+            <option value="TARGET HIT">TARGET HIT</option>
+            <option value="SL HIT">SL HIT</option>
+            <option value="EXPIRED">EXPIRED</option>
+            <option value="BACKFILLED">BACKFILLED</option>
+          </select>
+          <button class="btpre" onclick="exportSignalHistory()">EXPORT CSV</button>
+          <span class="bd bb" id="sig-hist-count">0 rows</span>
+        </div>
+      </div>
+      <div style="overflow:auto;flex:1;min-height:0">
+        <table class="atbl">
+          <thead><tr>
+            <th>DATE</th><th>TIME</th><th>STOCK</th><th>SIGNAL</th><th>TRIGGER</th><th>ENTRY</th><th>SL</th><th>TARGET</th><th>EXIT</th><th>OUTCOME</th><th>P&amp;L</th><th>HOLD</th><th>GATES</th>
+          </tr></thead>
+          <tbody id="sig-hist-body"><tr><td colspan="13" style="text-align:center;color:var(--t2);padding:18px">Loading signal history...</td></tr></tbody>
+        </table>
       </div>
     </div>
 
@@ -1481,6 +1513,235 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
     </div><!-- /scroll -->
   </div><!-- /tp-backtest -->
+
+  <!-- TAB: BACKTEST GUIDE -->
+  <div class="tp" id="tp-learnbt" style="overflow-y:auto;padding:16px;gap:0">
+
+    <!-- Hero banner -->
+    <div style="background:linear-gradient(135deg,#1a0a2e 0%,#16213e 50%,#0f3460 100%);border:1px solid #a78bfa44;border-radius:8px;padding:20px 24px;margin-bottom:16px">
+      <div style="font-family:var(--fh);font-size:16px;font-weight:900;letter-spacing:3px;color:#a78bfa;margin-bottom:4px">📚 OPTIONS BACKTEST GUIDE</div>
+      <div style="font-size:9px;color:var(--t2);letter-spacing:1px">How to build, test, and validate intraday options strategies · Python + Real Data</div>
+    </div>
+
+    <!-- Dataset section -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+
+      <!-- Underlying CSV -->
+      <div style="background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:14px">
+        <div style="font-size:8px;font-weight:700;letter-spacing:2px;color:var(--go);margin-bottom:8px">📊 UNDERLYING DATA (NIFTY)</div>
+        <div style="font-size:7.5px;color:var(--t2);margin-bottom:6px">underlying.csv</div>
+        <pre style="font-size:7px;color:#a3e635;background:var(--s3);border-radius:4px;padding:8px;overflow-x:auto;margin:0;line-height:1.7">timestamp,open,high,low,close,volume,vwap
+2024-01-01 09:15,22000,22040,21980,22030,150000,22020
+2024-01-01 09:16,22030,22080,22020,22070,180000,22035
+2024-01-01 09:17,22070,22120,22060,22110,210000,22060
+2024-01-01 09:18,22110,22180,22100,22160,250000,22095
+2024-01-01 09:19,22160,22220,22150,22200,300000,22130
+2024-01-01 09:20,22200,22280,22190,22260,350000,22180
+2024-01-01 09:21,22260,22320,22250,22300,380000,22230</pre>
+      </div>
+
+      <!-- Options CSV -->
+      <div style="background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:14px">
+        <div style="font-size:8px;font-weight:700;letter-spacing:2px;color:var(--bl);margin-bottom:8px">📈 OPTIONS DATA</div>
+        <div style="font-size:7.5px;color:var(--t2);margin-bottom:6px">options.csv</div>
+        <pre style="font-size:7px;color:#7dd3fc;background:var(--s3);border-radius:4px;padding:8px;overflow-x:auto;margin:0;line-height:1.7">timestamp,strike,type,price,volume,oi
+2024-01-01 09:15,22100,CE,120,5000,150000
+2024-01-01 09:15,22200,CE,80,4000,120000
+2024-01-01 09:15,22000,PE,140,6000,170000
+2024-01-01 09:16,22100,CE,140,7000,160000
+2024-01-01 09:16,22200,CE,95,6000,130000
+2024-01-01 09:16,22000,PE,120,5000,165000
+2024-01-01 09:17,22100,CE,170,9000,175000
+2024-01-01 09:18,22100,CE,210,12000,200000
+2024-01-01 09:19,22100,CE,260,15000,230000
+2024-01-01 09:20,22100,CE,320,18000,260000
+2024-01-01 09:21,22100,CE,380,20000,300000</pre>
+      </div>
+    </div>
+
+    <!-- Trade example callout -->
+    <div style="background:linear-gradient(90deg,rgba(0,232,122,.08),rgba(0,232,122,.02));border-left:3px solid var(--go);border-radius:0 6px 6px 0;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:20px">
+      <div>
+        <div style="font-size:8px;font-weight:700;letter-spacing:2px;color:var(--go);margin-bottom:4px">💥 EXAMPLE TRADE — 171% RETURN</div>
+        <div style="font-size:8px;color:var(--t1)">Entry: 22100 CE at 09:16 → <b style="color:var(--t0)">₹140</b> &nbsp;|&nbsp; Exit: 09:21 → <b style="color:var(--go)">₹380</b></div>
+        <div style="font-size:7.5px;color:var(--t2);margin-top:3px">Return = (380 − 140) / 140 = <b style="color:var(--go)">171%</b> &nbsp;·&nbsp; This is a 100–200% move in 5 minutes</div>
+      </div>
+      <div style="text-align:center;background:rgba(0,232,122,.1);border:1px solid rgba(0,232,122,.3);border-radius:6px;padding:10px 18px;flex-shrink:0">
+        <div style="font-size:18px;font-weight:900;color:var(--go)">+171%</div>
+        <div style="font-size:7px;color:var(--t2);letter-spacing:1px">IN 5 MIN</div>
+      </div>
+    </div>
+
+    <!-- 3 test strategies -->
+    <div style="font-size:8px;font-weight:700;letter-spacing:2px;color:var(--t0);margin-bottom:10px">🧠 WHAT TO TEST WITH THIS DATASET</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+      <div style="background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:12px">
+        <div style="font-size:8px;font-weight:700;color:#a78bfa;margin-bottom:6px">TEST 1 — VWAP Breakout</div>
+        <div style="font-size:7.5px;color:var(--t2);line-height:1.8">Entry when:<br><b style="color:var(--t0)">close &gt; VWAP</b><br>+ price makes new high<br><br>Pick OTM CE strike<br>Track next 5 candles</div>
+      </div>
+      <div style="background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:12px">
+        <div style="font-size:8px;font-weight:700;color:var(--bl);margin-bottom:6px">TEST 2 — Volume Spike</div>
+        <div style="font-size:7.5px;color:var(--t2);line-height:1.8">Entry when:<br><b style="color:var(--t0)">volume &gt; 2× avg</b><br>+ price move &gt; 0.3%<br><br>Filter false breakouts<br>Compare accuracy</div>
+      </div>
+      <div style="background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:12px">
+        <div style="font-size:8px;font-weight:700;color:var(--go);margin-bottom:6px">TEST 3 — OI Confirmation</div>
+        <div style="font-size:7.5px;color:var(--t2);line-height:1.8">Entry when:<br><b style="color:var(--t0)">OI rising + price up</b><br>+ CE premium surging<br><br>Best edge condition<br>Fewer but cleaner trades</div>
+      </div>
+    </div>
+
+    <!-- Python backtester -->
+    <div style="background:var(--s2);border:1px solid #a78bfa44;border-radius:6px;padding:14px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:8px;font-weight:700;letter-spacing:2px;color:#a78bfa">🐍 PYTHON BACKTESTER — PLUG &amp; PLAY</div>
+        <button onclick="document.getElementById('lbt-code').select();document.execCommand('copy');this.textContent='✓ COPIED';setTimeout(()=>this.textContent='COPY',1500)" style="font-family:var(--fn);font-size:7px;font-weight:700;letter-spacing:1px;padding:3px 10px;background:rgba(167,139,250,.15);border:1px solid #a78bfa55;color:#a78bfa;border-radius:3px;cursor:pointer">COPY</button>
+      </div>
+      <textarea id="lbt-code" readonly style="width:100%;height:420px;background:var(--s3);border:none;color:#e2e8f0;font-family:'Courier New',monospace;font-size:7.5px;line-height:1.7;padding:10px;border-radius:4px;resize:vertical;outline:none">import pandas as pd
+import numpy as np
+
+# ── Load Data ──────────────────────────────────────────
+underlying = pd.read_csv('underlying.csv', parse_dates=['timestamp'])
+options    = pd.read_csv('options.csv',    parse_dates=['timestamp'])
+
+underlying = underlying.sort_values('timestamp').reset_index(drop=True)
+options    = options.sort_values('timestamp').reset_index(drop=True)
+
+# ── Parameters ─────────────────────────────────────────
+VOL_MULT_THRESH = 2.0      # volume must be 2× rolling average
+PRICE_MOVE_PCT  = 0.3      # price move > 0.3% from prev close
+OI_INCREASE     = True     # require OI increasing on CE
+HOLD_CANDLES    = 5        # hold for 5 candles after entry
+STRIKE_OFFSET   = 100      # OTM: buy CE strike = ATM + 100
+
+# ── Helper: rolling average volume ─────────────────────
+underlying['avg_vol'] = underlying['volume'].rolling(3, min_periods=1).mean().shift(1)
+underlying['vol_mult'] = underlying['volume'] / underlying['avg_vol'].clip(lower=1)
+underlying['chg_pct']  = underlying['close'].pct_change() * 100
+
+trades = []
+
+for i in range(1, len(underlying) - HOLD_CANDLES):
+    row    = underlying.iloc[i]
+    ts     = row['timestamp']
+    price  = row['close']
+    vwap   = row['vwap']
+    vm     = row['vol_mult']
+    chg    = row['chg_pct']
+
+    # ── Signal Conditions ──────────────────────────────
+    cond_vwap   = price > vwap                   # above VWAP
+    cond_vol    = vm >= VOL_MULT_THRESH           # volume surge
+    cond_price  = chg >= PRICE_MOVE_PCT           # bullish candle
+
+    # OI condition: CE OI increasing at this timestamp
+    ce_now  = options[(options['timestamp'] == ts) & (options['type'] == 'CE')]
+    cond_oi = True
+    if OI_INCREASE and not ce_now.empty:
+        prev_ts = underlying.iloc[i - 1]['timestamp']
+        ce_prev = options[(options['timestamp'] == prev_ts) & (options['type'] == 'CE')]
+        if not ce_prev.empty:
+            cond_oi = ce_now['oi'].sum() > ce_prev['oi'].sum()
+
+    if not (cond_vwap and cond_vol and cond_price and cond_oi):
+        continue
+
+    # ── Select Strike ──────────────────────────────────
+    atm     = round(price / 100) * 100
+    strike  = atm + STRIKE_OFFSET
+
+    opt_row = options[(options['timestamp'] == ts) &
+                      (options['strike'] == strike) &
+                      (options['type'] == 'CE')]
+    if opt_row.empty:
+        continue
+
+    entry_price = opt_row.iloc[0]['price']
+
+    # ── Track Exit (hold N candles) ────────────────────
+    exit_prices = []
+    for k in range(1, HOLD_CANDLES + 1):
+        fut_ts = underlying.iloc[i + k]['timestamp']
+        fut_opt = options[(options['timestamp'] == fut_ts) &
+                          (options['strike'] == strike) &
+                          (options['type'] == 'CE')]
+        if not fut_opt.empty:
+            exit_prices.append(fut_opt.iloc[0]['price'])
+
+    if not exit_prices:
+        continue
+
+    max_price  = max(exit_prices)
+    exit_price = exit_prices[-1]
+    ret_pct    = (exit_price - entry_price) / entry_price * 100
+    max_ret    = (max_price  - entry_price) / entry_price * 100
+
+    trades.append({
+        'entry_time':   ts,
+        'strike':       strike,
+        'type':         'CE',
+        'entry_price':  entry_price,
+        'exit_price':   exit_price,
+        'max_price':    max_price,
+        'return_pct':   round(ret_pct, 1),
+        'max_return':   round(max_ret, 1),
+        'vol_mult':     round(vm, 1),
+        'above_vwap':   cond_vwap,
+    })
+
+# ── Results ────────────────────────────────────────────
+df = pd.DataFrame(trades)
+if df.empty:
+    print("No trades generated — relax filters")
+else:
+    winners  = df[df['return_pct'] > 0]
+    losers   = df[df['return_pct'] <= 0]
+    big_wins = df[df['return_pct'] >= 100]
+    print(f"\n{'='*50}")
+    print(f"  BACKTEST RESULTS")
+    print(f"{'='*50}")
+    print(f"  Total trades  : {len(df)}")
+    print(f"  Winners       : {len(winners)} ({len(winners)/len(df)*100:.0f}%)")
+    print(f"  Losers        : {len(losers)}")
+    print(f"  100%+ trades  : {len(big_wins)}")
+    print(f"  Avg return    : {df['return_pct'].mean():.1f}%")
+    print(f"  Max return    : {df['max_return'].max():.1f}%")
+    print(f"{'='*50}")
+    print(df[['entry_time','strike','entry_price','exit_price','return_pct','max_return']].to_string(index=False))
+</textarea>
+    </div>
+
+    <!-- Trade output example -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+      <div style="background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:14px">
+        <div style="font-size:8px;font-weight:700;letter-spacing:2px;color:var(--am);margin-bottom:8px">📉 SAMPLE TRADE OUTPUT</div>
+        <pre style="font-size:7px;color:#fbbf24;background:var(--s3);border-radius:4px;padding:8px;overflow-x:auto;margin:0;line-height:1.7">trades.csv
+
+entry_time    strike  type  entry  max   exit  return%
+09:16         22100   CE    140    380   350   +150%</pre>
+      </div>
+      <div style="background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:14px">
+        <div style="font-size:8px;font-weight:700;letter-spacing:2px;color:var(--go);margin-bottom:8px">⚙️ HOW TO USE</div>
+        <div style="font-size:7.5px;color:var(--t2);line-height:2">
+          1. Save the CSVs above as files<br>
+          2. Install: <b style="color:var(--t0)">pip install pandas numpy</b><br>
+          3. Run: <b style="color:var(--t0)">python backtest.py</b><br>
+          4. Tweak <b style="color:#a78bfa">VOL_MULT_THRESH</b> / <b style="color:#a78bfa">HOLD_CANDLES</b><br>
+          5. Compare accuracy across Test 1/2/3
+        </div>
+      </div>
+    </div>
+
+    <!-- Next level CTA -->
+    <div style="background:linear-gradient(135deg,rgba(167,139,250,.12),rgba(59,130,246,.08));border:1px solid #a78bfa55;border-radius:8px;padding:16px;text-align:center">
+      <div style="font-size:9px;font-weight:700;letter-spacing:2px;color:#a78bfa;margin-bottom:6px">🚀 NEXT LEVEL</div>
+      <div style="font-size:8px;color:var(--t2);margin-bottom:10px">Ask Claude to generate for you:</div>
+      <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
+        <span style="background:rgba(167,139,250,.15);border:1px solid #a78bfa44;color:#a78bfa;padding:5px 14px;border-radius:4px;font-size:7.5px;font-weight:700">"Give multi-day dataset (300+ rows)"</span>
+        <span style="background:rgba(59,130,246,.15);border:1px solid #3b82f644;color:#7dd3fc;padding:5px 14px;border-radius:4px;font-size:7.5px;font-weight:700">"Add stop-loss to backtester"</span>
+        <span style="background:rgba(0,232,122,.1);border:1px solid rgba(0,232,122,.3);color:var(--go);padding:5px 14px;border-radius:4px;font-size:7.5px;font-weight:700">"Test PE side (bearish entries)"</span>
+      </div>
+    </div>
+
+  </div><!-- /tp-learnbt -->
 
   <!-- TAB: P&L TRACKER -->
   <div class="tp" id="tp-pnl" style="overflow-y:auto">
@@ -2328,12 +2589,82 @@ function anSw(name,btn){
   document.querySelectorAll('.asec').forEach(s=>s.classList.remove('on'));
   btn.classList.add('on');
   document.getElementById('an-'+name).classList.add('on');
+  if(name==='history') loadSignalHistory();
 }
 
 // ═══════════════════════════════════════════════
 // SPIKE RADAR
 // ═══════════════════════════════════════════════
 const spikeData=[];
+window._signalHistoryRows = [];
+
+function exportSignalHistory(){
+  const rows = window._signalHistoryRows || [];
+  if(!rows.length){ notify('No signal history to export'); return; }
+  const cols = ['trade_date','signal_time','symbol','signal_type','trigger','entry_price','stop_loss','target_price','exit_price','exit_time','status','outcome','pnl_pts','pnl_pct','hold_minutes','gate_pass_count','verdict'];
+  const esc = v => '"' + String(v == null ? '' : v).replace(/"/g,'""') + '"';
+  const csv = [cols.join(',')].concat(rows.map(r => cols.map(c => esc(r[c])).join(','))).join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'signal_history.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function loadSignalHistory(){
+  const body = document.getElementById('sig-hist-body');
+  const count = document.getElementById('sig-hist-count');
+  const filter = document.getElementById('sig-hist-filter');
+  if(!body || !count) return;
+  const status = filter ? filter.value : 'ALL';
+  try {
+    const r = await fetch((window._backendBase || '') + `/api/signals/history?limit=80&status=${encodeURIComponent(status)}`);
+    const d = await r.json();
+    const rows = d.rows || [];
+    window._signalHistoryRows = rows;
+    count.textContent = `${rows.length} rows`;
+    if(!rows.length){
+      if(!window._sigHistBackfillTried){
+        window._sigHistBackfillTried = true;
+      body.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--t2);padding:18px">Backfilling recent signal history...</td></tr>';
+        try {
+          await fetch((window._backendBase || '') + '/api/signals/history/backfill?days=7', {method:'POST'});
+          return loadSignalHistory();
+        } catch(e) {}
+      }
+      body.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--t2);padding:18px">No signals stored yet</td></tr>';
+      return;
+    }
+    body.innerHTML = rows.map(r => {
+      const outcomeCls = r.outcome === 'TARGET HIT' ? 'cg' : r.outcome === 'SL HIT' ? 'cr' : r.outcome === 'OPEN' ? 'ca' : 'cb';
+      const pnl = Number(r.pnl_pts || 0);
+      const pnlCls = pnl > 0 ? 'cg' : pnl < 0 ? 'cr' : 'ca';
+      const exitTxt = r.exit_price != null ? `${Number(r.exit_price).toFixed(1)}${r.exit_time ? ' · ' + r.exit_time : ''}` : '—';
+      const trig = r.trigger || '—';
+      return '<tr>'+
+        `<td>${r.trade_date||'—'}</td>`+
+        `<td style="color:var(--bl)">${r.signal_time||'—'}</td>`+
+        `<td style="font-weight:600;color:var(--t0)">${r.symbol||'—'}</td>`+
+        `<td style="color:${r.signal_type==='SHORT'?'var(--st)':'var(--go)'};font-weight:700">${r.signal_type||'—'}</td>`+
+        `<td style="text-align:left;color:var(--t2);font-size:8px">${trig}</td>`+
+        `<td>${r.entry_price != null ? Number(r.entry_price).toFixed(1) : '—'}</td>`+
+        `<td style="color:var(--st)">${r.stop_loss != null ? Number(r.stop_loss).toFixed(1) : '—'}</td>`+
+        `<td style="color:var(--go)">${r.target_price != null ? Number(r.target_price).toFixed(1) : '—'}</td>`+
+        `<td>${exitTxt}</td>`+
+        `<td style="color:var(--t0)"><span class="sigtag" style="border:1px solid var(--b1);color:var(--t0)"></span><span class="${outcomeCls}">${r.outcome||r.status||'—'}</span></td>`+
+        `<td style="color:var(--t0)" class="${pnlCls}">${r.pnl_pts != null ? (pnl>0?'+':'') + pnl.toFixed(1)+' pts' : '—'}</td>`+
+        `<td>${r.hold_minutes != null ? r.hold_minutes + 'm' : '—'}</td>`+
+        `<td>${r.gate_pass_count != null ? r.gate_pass_count + '/5' : '—'}</td>`+
+      '</tr>';
+    }).join('');
+  } catch(e) {
+    body.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--st);padding:18px">Failed to load signal history</td></tr>';
+  }
+}
 
 (function buildSpike(){
   const sc=s=>'<span class="strpill '+(s==='hi'?'strhi':s==='md'?'strmd':'strlo')+'">'+(s==='hi'?'HIGH':s==='md'?'MED':'LOW')+'</span>';
@@ -3232,6 +3563,7 @@ function _topActiveStocks(stocks){
         _refreshTopCards();
         _renderLiveLevels();
         _renderMacroContext();
+        if(document.getElementById('an-history') && document.getElementById('an-history').classList.contains('on')) loadSignalHistory();
         break;
       }
 
@@ -3530,6 +3862,13 @@ function _topActiveStocks(stocks){
         const sc = s => '<span class="strpill ' +
           (s === 'hi' ? 'strhi' : s === 'md' ? 'strmd' : 'strlo') + '">' +
           (s === 'hi' ? 'HIGH' : s === 'md' ? 'MED' : 'LOW') + '</span>';
+        const outcomeHtml = o => {
+          if(!o) return '<span style="color:var(--t2);font-size:8px">LIVE</span>';
+          if(o === 'HIT T1' || o === 'TARGET HIT') return '<span style="color:var(--go);font-weight:700;font-size:8px">✓ HIT</span>';
+          if(o === 'HIT SL' || o === 'SL HIT')     return '<span style="color:var(--st);font-weight:700;font-size:8px">✗ LOSS</span>';
+          if(o === 'EXPIRED')  return '<span style="color:var(--t3);font-size:8px">EXP</span>';
+          return '<span style="color:var(--t2);font-size:8px">' + o + '</span>';
+        };
         tbody2.innerHTML = d.map(sp =>
           '<tr class="' + (sp.type === 'buy' ? 'sbuy' : sp.type === 'sell' ? 'ssell' : 'soi') + '">' +
           '<td><span class="tv-link" data-tvsym="' + sp.symbol + '" style="font-weight:600;color:var(--t0)">' + sp.symbol + '</span></td>' +
@@ -3543,18 +3882,45 @@ function _topActiveStocks(stocks){
           '<td style="color:var(--t2);font-size:9px">' + (sp.trigger || '—') + '</td>' +
           '<td style="color:' + (sp.type === 'buy' ? 'var(--go)' : sp.type === 'sell' ? 'var(--st)' : 'var(--am)') + ';font-weight:700">' + (sp.signal || '—') + '</td>' +
           '<td>' + sc(sp.strength || 'lo') + '</td>' +
-          '<td style="text-align:center">' + (sp.type === 'buy' ? '<span style="color:var(--go)">▲</span>' : sp.type === 'sell' ? '<span style="color:var(--st)">▼</span>' : '<span style="color:var(--am)">●</span>') + '</td>' +
+          '<td style="text-align:center">' + outcomeHtml(sp.outcome) + '</td>' +
           '</tr>'
-        ).join('') || '<tr><td colspan="10" style="text-align:center;color:var(--t2);padding:16px">No spikes detected</td></tr>';
+        ).join('') || (function(){
+          const istMin = new Date().getUTCHours()*60 + new Date().getUTCMinutes() + 330;
+          const msg = (istMin < 570 || istMin > 840)
+            ? 'Market closed (9:30–14:00 IST) — no live spikes'
+            : 'No spikes detected — watching for price \u22650.2% + vol \u22651.5\u00d7';
+          return '<tr><td colspan="10" style="text-align:center;color:var(--t2);padding:20px;font-size:9px">' + msg + '</td></tr>';
+        }());
 
+        // Update footer counters
         const hiEl = document.getElementById('spike-hi');
         if(hiEl){
           const hi = d.filter(x => x.strength === 'hi').length;
           hiEl.textContent = hi + ' high strength';
           hiEl.style.color = hi > 0 ? 'var(--go)' : 'var(--t2)';
         }
+        const resolved = d.filter(x => x.outcome && x.outcome !== 'LIVE');
+        const hits = d.filter(x => x.outcome === 'HIT T1' || x.outcome === 'TARGET HIT').length;
+        const losses = d.filter(x => x.outcome === 'HIT SL' || x.outcome === 'SL HIT').length;
+        const hitEl = document.getElementById('spike-hit-count');
+        const slEl  = document.getElementById('spike-sl-count');
+        const accEl = document.getElementById('spike-acc');
+        if(hitEl) { hitEl.textContent = hits + ' hit'; hitEl.style.color = hits > 0 ? 'var(--go)' : 'var(--t2)'; }
+        if(slEl)  { slEl.textContent  = losses + ' loss'; slEl.style.color = losses > 0 ? 'var(--st)' : 'var(--t2)'; }
+        if(accEl) {
+          const total = hits + losses;
+          if(total > 0) {
+            const acc = Math.round(hits / total * 100);
+            accEl.textContent = acc + '% (' + total + ' resolved)';
+            accEl.style.color = acc >= 50 ? 'var(--go)' : acc >= 35 ? 'var(--am)' : 'var(--st)';
+          } else {
+            accEl.textContent = '— (no resolved)';
+            accEl.style.color = 'var(--t2)';
+          }
+        }
         // Feed into Spike Radar tracker
         if(typeof srIngestSpikes === 'function') srIngestSpikes(d);
+        if(document.getElementById('an-history') && document.getElementById('an-history').classList.contains('on')) loadSignalHistory();
         break;
       }
 
@@ -3887,6 +4253,15 @@ async function bt2Optimize() {
 // TOPBAR DATE VIEW — injects historical data into live UI
 // ═══════════════════════════════════════════════
 const _todayStr = () => new Date().toISOString().split('T')[0];
+
+// Returns top 2 stocks by score from stocks/picks arrays (used by day-view topbar)
+function _topSymbolsFromData(stocks, picks) {
+  const all = [...(stocks || []), ...(picks || [])];
+  const seen = new Set();
+  const unique = all.filter(s => s && s.symbol && !seen.has(s.symbol) && seen.add(s.symbol));
+  unique.sort((a, b) => (Number(b.score||0) - Number(a.score||0)));
+  return unique.slice(0, 2);
+}
 
 async function tbDateChange(val) {
   if(!val || val === _todayStr()) { tbGoLive(); return; }
@@ -4337,24 +4712,24 @@ window._srPrevKeys = new Set(); // deduplicate re-broadcasts
 
 function _srScore(sp) {
   let s = 0;
-  // Signal 1 — strength (absorption proxy): +3 hi, +1 md
+  // Signal 1 — strength: +3 hi, +2 md (backend already unified this)
   if(sp.strength === 'hi') s += 3;
-  else if(sp.strength === 'md') s += 1;
-  // Signal 2 — volume acceleration: +2 if >=8x, +1 if >=5x
+  else if(sp.strength === 'md') s += 2;
+  // Signal 2 — volume acceleration: +2 if >=5×, +1 if >=2.5×
   const vm = sp.vol_mult || 0;
-  if(vm >= 8) s += 2; else if(vm >= 5) s += 1;
-  // Signal 3 — price spike: +2 if >=2%, +1 if >=1.5%
+  if(vm >= 5) s += 2; else if(vm >= 2.5) s += 1;
+  // Signal 3 — price spike: +2 if >=1%, +1 if >=0.5%
   const cp = Math.abs(sp.chg_pct || 0);
-  if(cp >= 2) s += 2; else if(cp >= 1.5) s += 1;
+  if(cp >= 1) s += 2; else if(cp >= 0.5) s += 1;
   // Signal 4 — OI buildup: +2 if >=20%, +1 if >=12%
   const oi = Math.abs(sp.oi_pct || 0);
   if(oi >= 20) s += 2; else if(oi >= 12) s += 1;
-  // Signal 5 — VWAP alignment (from signals state if available)
+  // Signal 5 — VWAP alignment
   if(typeof window._lastVwapAbove !== 'undefined') {
     if(sp.type === 'buy' && window._lastVwapAbove) s += 1;
     if(sp.type === 'sell' && !window._lastVwapAbove) s += 1;
   }
-  // Signal 6 — buy flow (type buy = aggressive buyers confirmed)
+  // Signal 6 — directional flow confirmed
   if(sp.type === 'buy' || sp.type === 'sell') s += 1;
   return Math.min(s, 10);
 }
@@ -4364,8 +4739,8 @@ function _srSigFlags(sp) {
   const cp = Math.abs(sp.chg_pct || 0);
   const oi = Math.abs(sp.oi_pct || 0);
   return {
-    price:    cp >= 1.5,
-    vol:      vm >= 2.5,
+    price:    cp >= 0.5,    // matches backend price_th (0.2% min, 0.5% meaningful)
+    vol:      vm >= 2.5,    // 2.5× is a real vol surge
     oi:       oi >= 12,
     strength: sp.strength === 'hi' || sp.strength === 'md',
     vwap:     typeof window._lastVwapAbove !== 'undefined'
@@ -4380,9 +4755,9 @@ function _srEntry(sp) {
   if(!p) return null;
   const isBuy = sp.type !== 'sell';
   const entry = isBuy ? +(p * 1.0005).toFixed(2) : +(p * 0.9995).toFixed(2);
-  const sl    = isBuy ? +(entry * 0.9975).toFixed(2) : +(entry * 1.0025).toFixed(2);
-  const t1    = isBuy ? +(entry * 1.003).toFixed(2)  : +(entry * 0.997).toFixed(2);
-  const t2    = isBuy ? +(entry * 1.006).toFixed(2)  : +(entry * 0.994).toFixed(2);
+  const sl    = isBuy ? +(entry * 0.995).toFixed(2)  : +(entry * 1.005).toFixed(2);  // 0.5% SL (data: 50% acc vs 39%)
+  const t1    = isBuy ? +(entry * 1.005).toFixed(2)  : +(entry * 0.995).toFixed(2);  // 0.5% T1 → R:R 1:1
+  const t2    = isBuy ? +(entry * 1.010).toFixed(2)  : +(entry * 0.990).toFixed(2);  // 1.0% T2 → R:R 1:2
   return {entry, sl, t1, t2, isBuy};
 }
 
@@ -4394,7 +4769,7 @@ function srIngestSpikes(arr) {
     if(window._srPrevKeys.has(key)) return;
     window._srPrevKeys.add(key);
     const score  = _srScore(sp);
-    if(score < 3) return; // skip very weak signals
+    if(score < 2) return; // skip only truly noise-level signals
     const levels = _srEntry(sp);
     if(!levels) return;
     window._spikeLog.unshift({
@@ -4489,8 +4864,23 @@ function srRender() {
   });
 
   if(!visible.length) {
-    if(empty) empty.style.display = 'block';
-    // Remove existing cards
+    if(empty) {
+      empty.style.display = 'block';
+      // Show market-closed message outside 9:30–14:00 IST
+      const now = new Date();
+      const istMin = now.getUTCHours() * 60 + now.getUTCMinutes() + 330; // UTC + 5:30
+      const msgEl = document.getElementById('sr-empty-msg');
+      const iconEl = document.getElementById('sr-empty-icon');
+      if(msgEl) {
+        if(istMin < 570 || istMin > 840) {
+          msgEl.textContent = 'Market closed — no spikes outside 9:30–14:00 IST';
+          if(iconEl) { iconEl.textContent = '🕐'; iconEl.style.opacity = '.2'; }
+        } else {
+          msgEl.textContent = 'Waiting for spike signals...';
+          if(iconEl) { iconEl.textContent = '⚡'; iconEl.style.opacity = '.3'; }
+        }
+      }
+    }
     list.querySelectorAll('.sr-card').forEach(c => c.remove());
     return;
   }
@@ -4545,11 +4935,11 @@ function srRender() {
           <div class="sr-lvl-v" style="color:var(--st)">${fmtP(sp.sl)}</div>
         </div>
         <div class="sr-lvl-box" style="background:rgba(0,140,255,.08)">
-          <div class="sr-lvl-k">T1 +0.3%</div>
+          <div class="sr-lvl-k">T1 ${sp.entry?((Math.abs(sp.t1-sp.entry)/sp.entry)*100).toFixed(2)+'%':'+0.3%'}</div>
           <div class="sr-lvl-v" style="color:var(--bl)">${fmtP(sp.t1)}</div>
         </div>
         <div class="sr-lvl-box" style="background:rgba(0,232,122,.08)">
-          <div class="sr-lvl-k">T2 +0.6%</div>
+          <div class="sr-lvl-k">T2 ${sp.entry?((Math.abs(sp.t2-sp.entry)/sp.entry)*100).toFixed(2)+'%':'+0.6%'}</div>
           <div class="sr-lvl-v" style="color:var(--go)">${fmtP(sp.t2)}</div>
         </div>
       </div>
@@ -4559,7 +4949,7 @@ function srRender() {
         <span>OI <b style="color:${(sp.oi_pct||0)>=0?'var(--go)':'var(--st)'}">${(sp.oi_pct||0)>=0?'+':''}${(sp.oi_pct||0).toFixed(1)}%</b></span>
         <span>·</span>
         <span>Chg <b style="color:${(sp.chg_pct||0)>=0?'var(--go)':'var(--st)'}">${(sp.chg_pct||0)>=0?'+':''}${(sp.chg_pct||0).toFixed(2)}%</b></span>
-        <span style="margin-left:auto;font-size:7.5px;opacity:.6">Score ${sp.backend_score||sp.score*10}/100 · Sigs ${sp.score}/10 · R:R 1:2.4</span>
+        <span style="margin-left:auto;font-size:7.5px;opacity:.6">Score ${sp.backend_score||sp.score*10}/100 · Sigs ${sp.score}/10 · R:R 1:${sp.entry&&sp.sl&&sp.t2?Math.abs((sp.t2-sp.entry)/(sp.entry-sp.sl)).toFixed(1):'2.4'} (T1 1:${sp.entry&&sp.sl&&sp.t1?Math.abs((sp.t1-sp.entry)/(sp.entry-sp.sl)).toFixed(1):'1.2'})</span>
       </div>
     </div>`;
   }).join('');

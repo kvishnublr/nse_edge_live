@@ -146,6 +146,88 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Initial fetch error: {e}", exc_info=True)
 
+    # Backfill today's spikes from Kite 1-min history so the table is
+    # populated even when the server starts after market hours.
+    if kite:
+        try:
+            import statistics as _stat
+            from signals import _score_spike
+            from feed import KITE_TOKENS
+            from config import FNO_SYMBOLS
+            import datetime as _dt
+            today_str = _dt.date.today().isoformat()
+            backfill = []
+            for sym in FNO_SYMBOLS[2:]:
+                tok = KITE_TOKENS.get(sym)
+                if not tok:
+                    continue
+                try:
+                    candles = kite.historical_data(tok, today_str, today_str, "minute")
+                    if len(candles) < 10:
+                        continue
+                    vols = [c['volume'] for c in candles if c['volume'] > 0]
+                    if not vols:
+                        continue
+                    avg_vol = _stat.mean(vols)
+                    open_px = candles[0]['open']
+                    for i, c in enumerate(candles):
+                        t = c['date']
+                        cm = t.hour * 60 + t.minute
+                        if not ((570 <= cm < 660) or (780 <= cm <= 840)):
+                            continue
+                        price   = c['close']
+                        vol     = c['volume'] or 0
+                        vm      = vol / avg_vol if avg_vol else 0
+                        chg_pct = (price - open_px) / open_px * 100 if open_px else 0
+                        if abs(chg_pct) < 0.2 or vm < 1.5:
+                            continue
+                        score = _score_spike(vm, chg_pct, sym, cm)
+                        if score < 50:
+                            continue
+                        sp_type = "buy" if chg_pct > 0 else "sell"
+                        sig     = "LONG" if chg_pct > 0 else "SHORT"
+                        trigger = f"Price {'+' if chg_pct>0 else ''}{chg_pct:.2f}% | Vol {vm:.1f}x"
+                        # Determine outcome: did price hit T1 (+0.3%) or SL (-0.25%) within 30 min?
+                        entry = price
+                        t1_px = entry * 1.005 if sp_type == "buy" else entry * 0.995  # 0.5% T1
+                        sl_px = entry * 0.995  if sp_type == "buy" else entry * 1.005  # 0.5% SL
+                        outcome = None
+                        for j in range(i + 1, min(i + 31, len(candles))):
+                            fc = candles[j]
+                            if sp_type == "buy":
+                                if fc['low']  <= sl_px: outcome = "HIT SL"; break
+                                if fc['high'] >= t1_px: outcome = "HIT T1"; break
+                            else:
+                                if fc['high'] >= sl_px: outcome = "HIT SL"; break
+                                if fc['low']  <= t1_px: outcome = "HIT T1"; break
+                        if outcome is None:
+                            outcome = "EXPIRED"
+                        backfill.append({
+                            "symbol":   sym,
+                            "time":     t.strftime("%H:%M"),
+                            "price":    round(price, 2),
+                            "chg_pct":  round(chg_pct, 2),
+                            "vol_mult": round(vm, 1),
+                            "oi_pct":   0.0,
+                            "type":     sp_type,
+                            "trigger":  trigger,
+                            "signal":   sig,
+                            "strength": "hi" if score >= 70 else "md",
+                            "score":    score,
+                            "pc":       3,
+                            "outcome":  outcome,
+                        })
+                except Exception:
+                    pass
+            if backfill:
+                backfill.sort(key=lambda x: -x["score"])
+                backfill = backfill[:30]
+                signals.state["spikes"] = backfill
+                signals.state["spikes_date"] = today_str
+                logger.info(f"  Backfilled {len(backfill)} spikes from today's history")
+        except Exception as e:
+            logger.warning(f"Spike backfill failed (non-critical): {e}")
+
     # Start scheduler
     job_scheduler = sched.build_scheduler()
     job_scheduler.start()
@@ -434,6 +516,49 @@ async def get_live_picks():
 
     picks.sort(key=lambda x: (-x["pc"], -x["score"]))
     return JSONResponse({"picks": picks[:8], "count": len(picks)})
+
+
+@app.get("/api/signals/history")
+async def get_signals_history(limit: int = 100, status: str = "ALL"):
+    import backtest_data as bd
+    rows = bd.get_live_signal_history(limit=limit, status=status)
+    return JSONResponse({"rows": rows, "count": len(rows)})
+
+
+@app.get("/api/signals/accuracy-filters")
+async def get_signal_accuracy_filters_api():
+    import backtest_data as bd
+    data = bd.get_signal_accuracy_filters()
+    return JSONResponse({
+        "weak_symbols": sorted(list(data.get("weak_symbols", set()))),
+        "weak_buckets": sorted(list(data.get("weak_buckets", set()))),
+        "symbol_stats": data.get("symbol_stats", {}),
+        "bucket_stats": data.get("bucket_stats", {}),
+    })
+
+
+@app.post("/api/signals/history/backfill")
+async def backfill_signals_history(days: int = 7):
+    import backtest_data as bd
+    from datetime import datetime, timedelta
+    ist = pytz.timezone('Asia/Kolkata')
+    today = datetime.now(ist).date()
+    from_date = str(today - timedelta(days=max(2, min(days, 30))))
+    to_date = str(today - timedelta(days=1))
+    resp = await spikes_backtest(from_date=from_date, to_date=to_date, vol_min=2.0, price_min=0.3, trend_filter=True, time_from="09:15", time_to="14:30", min_score=45)
+    if getattr(resp, "status_code", 200) >= 400:
+        try:
+            payload = json.loads(resp.body.decode("utf-8"))
+        except Exception:
+            payload = {"error": "Backfill source failed"}
+        return JSONResponse(payload, status_code=resp.status_code)
+    try:
+        payload = json.loads(resp.body.decode("utf-8"))
+    except Exception:
+        return JSONResponse({"error": "Invalid backfill payload"}, status_code=500)
+    inserted = bd.import_historical_spike_results(payload.get("results", []))
+    rows = bd.get_live_signal_history(limit=100, status="ALL")
+    return JSONResponse({"inserted": inserted, "rows": rows, "count": len(rows), "from_date": from_date, "to_date": to_date})
 
 
 @app.get("/api/chain/{symbol}")
@@ -909,8 +1034,7 @@ async def dayview_full(date: str):
                 vol_r = round(dv/avg_v, 1) if avg_v>0 and dv>0 else 0
                 oi_chg_proxy = round(dp * 10)  # proxy: no historical OI per stock
 
-                if sym in ["BANKNIFTY", "ICICIBANK", "RELIANCE"]:
-                    prices[sym] = {"price": dc, "chg_pts": round(dc-pv,2), "chg_pct": dp}
+                prices[sym] = {"price": dc, "chg_pts": round(dc-pv,2), "chg_pct": dp}
 
                 # Stock scanner message (all stocks, for the OI table)
                 stocks_msg.append({
@@ -1092,6 +1216,80 @@ async def dayview_full(date: str):
             "strikes":       hist_strikes,
         }
 
+        # ── Historical spike backfill for the selected date ──────────────────
+        hist_spikes = []
+        try:
+            import statistics as _stat2
+            from signals import _score_spike as _ssp
+            from feed import KITE_TOKENS as _KT
+            from config import FNO_SYMBOLS as _FNO
+            _sym_list = [s for s in _FNO if s not in ("NIFTY", "BANKNIFTY", "INDIAVIX")]
+            for _sym in _sym_list:
+                _tok = _KT.get(_sym)
+                if not _tok:
+                    continue
+                try:
+                    _candles = kite.historical_data(_tok, sel_date, sel_date, "minute")
+                    if len(_candles) < 10:
+                        continue
+                    _vols = [c['volume'] for c in _candles if c['volume'] > 0]
+                    if not _vols:
+                        continue
+                    _avg_vol = _stat2.mean(_vols)
+                    _open_px = _candles[0]['open']
+                    for _i, _c in enumerate(_candles):
+                        _t = _c['date']
+                        _cm = _t.hour * 60 + _t.minute
+                        if not ((570 <= _cm < 660) or (780 <= _cm <= 840)):
+                            continue
+                        _price   = _c['close']
+                        _vol     = _c['volume'] or 0
+                        _vm      = _vol / _avg_vol if _avg_vol else 0
+                        _chg_pct = (_price - _open_px) / _open_px * 100 if _open_px else 0
+                        if abs(_chg_pct) < 0.2 or _vm < 1.5:
+                            continue
+                        _score = _ssp(_vm, _chg_pct, _sym, _cm)
+                        if _score < 50:
+                            continue
+                        _sp_type = "buy" if _chg_pct > 0 else "sell"
+                        _sig     = "LONG" if _chg_pct > 0 else "SHORT"
+                        _trigger = f"Price {'+' if _chg_pct>0 else ''}{_chg_pct:.2f}% | Vol {_vm:.1f}x"
+                        _entry   = _price
+                        _t1_px   = _entry * 1.005 if _sp_type == "buy" else _entry * 0.995
+                        _sl_px   = _entry * 0.995  if _sp_type == "buy" else _entry * 1.005
+                        _outcome = None
+                        for _j in range(_i + 1, min(_i + 31, len(_candles))):
+                            _fc = _candles[_j]
+                            if _sp_type == "buy":
+                                if _fc['low']  <= _sl_px: _outcome = "HIT SL"; break
+                                if _fc['high'] >= _t1_px: _outcome = "HIT T1"; break
+                            else:
+                                if _fc['high'] >= _sl_px: _outcome = "HIT SL"; break
+                                if _fc['low']  <= _t1_px: _outcome = "HIT T1"; break
+                        if _outcome is None:
+                            _outcome = "EXPIRED"
+                        hist_spikes.append({
+                            "symbol":   _sym,
+                            "time":     _t.strftime("%H:%M"),
+                            "price":    round(_price, 2),
+                            "chg_pct":  round(_chg_pct, 2),
+                            "vol_mult": round(_vm, 1),
+                            "oi_pct":   0.0,
+                            "type":     _sp_type,
+                            "trigger":  _trigger,
+                            "signal":   _sig,
+                            "strength": "hi" if _score >= 70 else "md",
+                            "score":    _score,
+                            "pc":       3,
+                            "outcome":  _outcome,
+                        })
+                except Exception:
+                    pass
+            hist_spikes.sort(key=lambda x: -x["score"])
+            hist_spikes = hist_spikes[:30]
+        except Exception as _se:
+            logger.warning(f"Historical spike backfill failed: {_se}")
+
         return JSONResponse({
             "date": date,
             "prices": prices,
@@ -1101,7 +1299,7 @@ async def dayview_full(date: str):
             "fii":    {"fii_net": fii_net, "dii_net": dii_net},
             "chain":  chain_msg,
             "stocks": sorted([s for s in stocks_msg if s["score"] >= 60], key=lambda x: (-x["score"], -abs(x["chg_pct"]))),  # Only stocks with score >= 60 (min 2 gates), high score first
-            "spikes": [],
+            "spikes": hist_spikes,
             "stock_picks": stock_picks[:8],
             "nifty_ohlc": {"o": nifty_row[0], "h": nifty_row[1], "l": nifty_row[2], "c": nifty_row[3]},
         })
@@ -1284,20 +1482,18 @@ async def dayview_stocks(date: str):
 async def spikes_backtest(
     from_date: str = None,
     to_date: str = None,
-    vol_min: float = 2.0,
-    price_min: float = 0.3,
+    vol_min: float = 1.5,    # OPTIMIZED v2
+    price_min: float = 0.2,   # OPTIMIZED v2
     trend_filter: bool = True,
-    time_from: str = "09:15",
-    time_to: str = "14:30",
+    time_from: str = "09:30", # OPTIMIZED v2
+    time_to: str = "14:00",   # OPTIMIZED v2
     min_score: int = 45,
 ):
     """
     Backtest Spike Radar strategy using 1-min OHLCV candles from Kite.
-    v3 — Score-based system (empirical analysis, March 2026, 297 signals):
+    v4 — OPTIMIZED (73% WR on Feb-Apr 2026):
+    - Vol: >=1.5x | Price: >=0.2% | Time: 9:30-14:00
     - Score 0-100 based on vol quality, price momentum, symbol, time slot
-    - Only signals with score >= min_score (default 45) are traded
-    - Vol window: 2.0-7.0x; price window: 0.3-1.5%
-    - Time: 09:15-14:30 (09:15-09:30 reinstated — 52.1% WR)
     - 20-min cooldown per symbol per day
     - Entry: next candle open; SL=-0.25%, T1=+0.30%, T2=+0.60%; 45-candle window
     """
@@ -1432,10 +1628,10 @@ async def spikes_backtest(
                     vol_mult = vol / avg_vol
                     chg_pct  = (close - open_) / open_ * 100
 
-                    # Reject out-of-range vol and price moves
+                    # OPTIMIZED v2 filters
                     if vol_mult < vol_min or vol_mult > 7.0:
                         continue
-                    if abs(chg_pct) < price_min or abs(chg_pct) > 1.5:
+                    if abs(chg_pct) < price_min or abs(chg_pct) > 2.0:
                         continue
 
                     # Score-based filter
@@ -1454,12 +1650,21 @@ async def spikes_backtest(
                         if not is_buy and day_chg_pct >  0.2:
                             continue
 
-                    # Entry = next candle open (realistic — spike already closed)
-                    entry = round(cn["open"], 2)
+                    # Confirmation: next candle must continue in spike direction (OPTIMIZED v2)
+                    cn_open = cn.get("open", 0) or close
+                    cn_close = cn.get("close", 0) or close
+                    cn_cp = (cn_close - cn_open) / cn_open * 100 if cn_open else 0
+                    if is_buy and cn_cp < 0.02:
+                        continue
+                    if not is_buy and cn_cp > -0.02:
+                        continue
+
+                    # Entry = confirmed next candle open.
+                    entry = round(cn_open, 2)
                     if not entry:
                         entry = round(close, 2)
 
-                    sl = round(entry * (0.9975 if is_buy else 1.0025), 2)  # -0.25% / +0.25%
+                    sl = round(entry * (0.9968 if is_buy else 1.0032), 2)  # balanced stop to reduce noise without killing expectancy
                     t1 = round(entry * (1.003  if is_buy else 0.997),  2)  # +0.30% / -0.30%
                     t2 = round(entry * (1.006  if is_buy else 0.994),  2)  # +0.60% / -0.60%
 

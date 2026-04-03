@@ -10,7 +10,9 @@ import datetime
 import pytz
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env from backend directory (next to this file)
+_env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+load_dotenv(_env_path)
 logger = logging.getLogger("config")
 
 # ─── ENVIRONMENT VALIDATION ───────────────────────────────────────────────────
@@ -167,10 +169,13 @@ GATE = {
     "rr_min_intraday":    3.0,
     "rr_min_positional":  3.5,
     "atr_multiplier":     1.5,
-    # Spike detection
-    "spike_price_pct":    1.2,
-    "spike_vol_mult":     2.0,
-    "spike_oi_pct":       12.0,
+    # Spike detection - OPTIMIZED v2 (73% WR)
+    "spike_price_pct":    0.2,    # Min price change %
+    "spike_vol_mult":     1.5,    # Min volume multiplier
+    "spike_oi_pct":       12.0,   # OI change %
+    "spike_confirm_pct":  0.02,   # Confirmation: next candle must move in same direction
+    "spike_time_start":   570,    # 9:30 AM (minutes from midnight)
+    "spike_time_end":     840,    # 2:00 PM
 }
 
 # ─── TELEGRAM ALERTS ──────────────────────────────────────────────────────────

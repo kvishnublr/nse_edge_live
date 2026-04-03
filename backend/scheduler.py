@@ -72,7 +72,10 @@ def job_prices():
     """Broadcast latest prices from Kite cache — KiteTicker keeps them fresh."""
     try:
         from feed import get_all_prices
+        import backtest_data as bd
         prices = get_all_prices()
+        if prices:
+            bd.update_live_signal_outcomes(prices)
         if prices and _ws:
             _ws({"type": "prices", "data": prices, "ts": time.time()})
     except Exception as e:

@@ -62,6 +62,33 @@ def init_db():
             gate INTEGER PRIMARY KEY,
             name TEXT, weight REAL, win_rate REAL, sample_size INTEGER
         );
+        CREATE TABLE IF NOT EXISTS live_signal_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            signal_key TEXT UNIQUE,
+            trade_date TEXT,
+            symbol TEXT,
+            signal_type TEXT,
+            trigger TEXT,
+            strength TEXT,
+            signal_time TEXT,
+            entry_price REAL,
+            stop_loss REAL,
+            target_price REAL,
+            exit_price REAL,
+            exit_time TEXT,
+            status TEXT,
+            outcome TEXT,
+            pnl_pts REAL,
+            pnl_pct REAL,
+            hold_minutes INTEGER,
+            gate_pass_count INTEGER,
+            gate_snapshot TEXT,
+            verdict TEXT,
+            vix REAL,
+            pcr REAL,
+            created_ts REAL,
+            updated_ts REAL
+        );
     """)
     conn.commit()
     conn.close()
@@ -460,3 +487,278 @@ def fill_outcomes():
     conn.commit()
     conn.close()
     return updated
+
+
+def _gate_snapshot_json(gates: dict) -> str:
+    try:
+        import json
+        snap = {}
+        for k, g in (gates or {}).items():
+            kk = str(k)
+            snap[kk] = {
+                "state": g.get("state", ""),
+                "score": g.get("score", 0),
+                "name": g.get("name", f"G{kk}"),
+            }
+        return json.dumps(snap)
+    except Exception:
+        return "{}"
+
+
+def log_live_spikes(spikes: list, gates: dict, verdict: str, pass_count: int, indices: dict, chain: dict):
+    """Persist new live spike events with entry/SL/target snapshot."""
+    if not spikes:
+        return 0
+    now = datetime.now(IST)
+    now_ts = time.time()
+    trade_date = now.strftime("%Y-%m-%d")
+    signal_time = now.strftime("%H:%M")
+    gate_json = _gate_snapshot_json(gates)
+    vix = float((indices or {}).get("vix", 0) or 0)
+    pcr = float((chain or {}).get("pcr", 0) or 0)
+    conn = get_conn()
+    inserted = 0
+    try:
+        for sp in spikes:
+            sym = str(sp.get("symbol", "") or "").upper()
+            sig = str(sp.get("signal", "") or "")
+            if not sym or not sig:
+                continue
+            price = float(sp.get("price", 0) or 0)
+            if price <= 0:
+                continue
+            direction = "LONG" if sig in ("LONG", "OI BUILD", "VOL SPIKE") or sp.get("type") == "buy" else "SHORT"
+            stop_loss = round(price * (0.994 if direction == "LONG" else 1.006), 2)
+            target = round(price * (1.012 if direction == "LONG" else 0.988), 2)
+            signal_key = f"{trade_date}|{sym}|{sig}|{sp.get('time') or signal_time}|{round(price,2)}"
+            exists = conn.execute("SELECT 1 FROM live_signal_history WHERE signal_key=?", (signal_key,)).fetchone()
+            if exists:
+                continue
+            conn.execute(
+                """
+                INSERT INTO live_signal_history
+                (signal_key, trade_date, symbol, signal_type, trigger, strength, signal_time,
+                 entry_price, stop_loss, target_price, status, outcome, pnl_pts, pnl_pct,
+                 hold_minutes, gate_pass_count, gate_snapshot, verdict, vix, pcr, created_ts, updated_ts)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    signal_key, trade_date, sym, direction, sp.get("trigger", ""), sp.get("strength", "lo"), sp.get("time") or signal_time,
+                    price, stop_loss, target, "OPEN", "OPEN", None, None,
+                    0, int(pass_count or 0), gate_json, verdict or "WAIT", vix, pcr, now_ts, now_ts,
+                )
+            )
+            inserted += 1
+        conn.commit()
+    finally:
+        conn.close()
+    return inserted
+
+
+def update_live_signal_outcomes(prices: dict, max_hold_minutes: int = 90):
+    """Update open spike signals against current market prices."""
+    if not prices:
+        return 0
+    conn = get_conn()
+    now = datetime.now(IST)
+    now_ts = time.time()
+    rows = conn.execute(
+        "SELECT id, symbol, signal_type, signal_time, entry_price, stop_loss, target_price FROM live_signal_history WHERE status='OPEN'"
+    ).fetchall()
+    updated = 0
+    for sig_id, symbol, signal_type, signal_time, entry_price, stop_loss, target_price in rows:
+        px = prices.get(symbol, {}) or {}
+        last_price = float(px.get("price", 0) or 0)
+        if last_price <= 0:
+            continue
+        direction = str(signal_type or "LONG").upper()
+        status = None
+        outcome = None
+        if direction == "SHORT":
+            if last_price <= float(target_price or 0):
+                status = "CLOSED"
+                outcome = "TARGET HIT"
+            elif last_price >= float(stop_loss or 0):
+                status = "CLOSED"
+                outcome = "SL HIT"
+        else:
+            if last_price >= float(target_price or 0):
+                status = "CLOSED"
+                outcome = "TARGET HIT"
+            elif last_price <= float(stop_loss or 0):
+                status = "CLOSED"
+                outcome = "SL HIT"
+
+        try:
+            sig_dt = datetime.strptime(f"{now.strftime('%Y-%m-%d')} {signal_time}", "%Y-%m-%d %H:%M")
+            hold_minutes = int(max((now - IST.localize(sig_dt)).total_seconds() / 60, 0))
+        except Exception:
+            hold_minutes = 0
+
+        if not status and hold_minutes >= max_hold_minutes:
+            status = "CLOSED"
+            outcome = "EXPIRED"
+
+        if not status:
+            continue
+
+        pnl_pts = round((entry_price - last_price), 2) if direction == "SHORT" else round((last_price - entry_price), 2)
+        pnl_pct = round((pnl_pts / entry_price) * 100, 2) if entry_price else 0
+        conn.execute(
+            "UPDATE live_signal_history SET exit_price=?, exit_time=?, status=?, outcome=?, pnl_pts=?, pnl_pct=?, hold_minutes=?, updated_ts=? WHERE id=?",
+            (last_price, now.strftime("%H:%M"), status, outcome, pnl_pts, pnl_pct, hold_minutes, now_ts, sig_id)
+        )
+        updated += 1
+    conn.commit()
+    conn.close()
+    return updated
+
+
+def _clean_signal_text(val):
+    if val is None:
+        return val
+    s = str(val)
+    for bad in ("A�", "Â·", "·", "•", "�"):
+        s = s.replace(bad, " | ")
+    while "  " in s:
+        s = s.replace("  ", " ")
+    return s.strip(" |")
+
+
+def get_live_signal_history(limit: int = 100, status: str | None = None):
+    conn = get_conn()
+    try:
+        sql = "SELECT id, trade_date, symbol, signal_type, trigger, strength, signal_time, entry_price, stop_loss, target_price, exit_price, exit_time, status, outcome, pnl_pts, pnl_pct, hold_minutes, gate_pass_count, verdict, vix, pcr FROM live_signal_history"
+        params = []
+        if status and status.upper() != "ALL":
+            f = status.upper()
+            if f in ("OPEN", "CLOSED"):
+                sql += " WHERE status=?"
+                params.append(f)
+            elif f in ("TARGET HIT", "SL HIT", "EXPIRED", "OPEN"):
+                sql += " WHERE outcome=?"
+                params.append(f)
+            elif f == "BACKFILLED":
+                sql += " WHERE verdict=?"
+                params.append(f)
+        sql += " ORDER BY created_ts DESC LIMIT ?"
+        params.append(int(limit))
+        rows = conn.execute(sql, params).fetchall()
+        cols = ["id","trade_date","symbol","signal_type","trigger","strength","signal_time","entry_price","stop_loss","target_price","exit_price","exit_time","status","outcome","pnl_pts","pnl_pct","hold_minutes","gate_pass_count","verdict","vix","pcr"]
+        out = []
+        for r in rows:
+            row = dict(zip(cols, r))
+            row["trigger"] = _clean_signal_text(row.get("trigger"))
+            row["outcome"] = _clean_signal_text(row.get("outcome"))
+            out.append(row)
+        return out
+    finally:
+        conn.close()
+
+
+def import_historical_spike_results(results: list):
+    """Backfill historical spike backtest results into live signal history."""
+    if not results:
+        return 0
+    conn = get_conn()
+    inserted = 0
+    try:
+        for r in results:
+            dt_raw = str(r.get("time", "") or "")
+            trade_date = dt_raw[:10] if len(dt_raw) >= 10 else datetime.now(IST).strftime("%Y-%m-%d")
+            signal_time = dt_raw[11:16] if len(dt_raw) >= 16 else "09:15"
+            symbol = str(r.get("symbol", "") or "").upper()
+            if not symbol:
+                continue
+            signal_type = "LONG" if str(r.get("type", "BUY")).upper() == "BUY" else "SHORT"
+            entry = float(r.get("entry", 0) or 0)
+            sl = float(r.get("sl", 0) or 0)
+            t1 = float(r.get("t1", 0) or 0)
+            t2 = float(r.get("t2", 0) or 0)
+            result = str(r.get("result", "EXPIRED") or "EXPIRED").upper()
+            outcome = {"HIT_T1": "TARGET HIT", "HIT_T2": "TARGET HIT", "HIT_SL": "SL HIT", "EXPIRED": "EXPIRED"}.get(result, result)
+            exit_price = t1 if result == "HIT_T1" else t2 if result == "HIT_T2" else sl if result == "HIT_SL" else None
+            pnl_pct = float(r.get("pnl_pct", 0) or 0)
+            pnl_pts = round(entry * pnl_pct / 100, 2) if entry and pnl_pct else None
+            signal_key = f"BACKFILL|{trade_date}|{symbol}|{signal_time}|{round(entry,2)}|{signal_type}"
+            exists = conn.execute("SELECT 1 FROM live_signal_history WHERE signal_key=?", (signal_key,)).fetchone()
+            if exists:
+                continue
+            now_ts = time.time()
+            conn.execute(
+                """
+                INSERT INTO live_signal_history
+                (signal_key, trade_date, symbol, signal_type, trigger, strength, signal_time,
+                 entry_price, stop_loss, target_price, exit_price, exit_time, status, outcome,
+                 pnl_pts, pnl_pct, hold_minutes, gate_pass_count, gate_snapshot, verdict,
+                 vix, pcr, created_ts, updated_ts)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    signal_key, trade_date, symbol, signal_type,
+                    f"Price {float(r.get('chg_pct', 0) or 0):+.2f}% · Vol {float(r.get('vol_mult', 0) or 0):.1f}x",
+                    "hi" if result == "HIT_T2" or float(r.get("score", 0) or 0) >= 70 else "md" if float(r.get("score", 0) or 0) >= 55 else "lo",
+                    signal_time, entry, sl, t2 or t1, exit_price,
+                    signal_time if exit_price is not None else None,
+                    "CLOSED", outcome, pnl_pts, pnl_pct, 45, None, "{}", "BACKFILLED",
+                    None, None, now_ts, now_ts,
+                )
+            )
+            inserted += 1
+        conn.commit()
+    finally:
+        conn.close()
+    return inserted
+
+
+def get_signal_accuracy_filters():
+    """Return weak symbols/time buckets derived from stored signal outcomes."""
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT symbol, signal_time, outcome FROM live_signal_history WHERE status='CLOSED' AND outcome IN ('TARGET HIT','SL HIT','EXPIRED')"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    symbol_stats = {}
+    bucket_stats = {}
+
+    def _bucket(hm: str):
+        try:
+            hh, mm = hm.split(':')
+            mins = int(hh) * 60 + int(mm)
+        except Exception:
+            return "unknown"
+        if mins < 570:
+            return "open_915_930"
+        if mins < 630:
+            return "morning_930_1030"
+        if mins < 780:
+            return "midday_1030_1300"
+        return "late_1300_plus"
+
+    for sym, sig_time, outcome in rows:
+        is_win = 1 if outcome == 'TARGET HIT' else 0
+        ss = symbol_stats.setdefault(sym, {"n": 0, "w": 0})
+        ss["n"] += 1
+        ss["w"] += is_win
+        bk = _bucket(sig_time or '')
+        bs = bucket_stats.setdefault(bk, {"n": 0, "w": 0})
+        bs["n"] += 1
+        bs["w"] += is_win
+
+    weak_symbols = {
+        sym for sym, st in symbol_stats.items()
+        if st["n"] >= 2 and (st["w"] / st["n"] * 100) <= 35
+    }
+    weak_buckets = {
+        bk for bk, st in bucket_stats.items()
+        if st["n"] >= 3 and (st["w"] / st["n"] * 100) <= 35
+    }
+    return {
+        "weak_symbols": weak_symbols,
+        "weak_buckets": weak_buckets,
+        "symbol_stats": {k: {"sample": v["n"], "win_rate": round(v["w"] / v["n"] * 100, 1)} for k, v in symbol_stats.items()},
+        "bucket_stats": {k: {"sample": v["n"], "win_rate": round(v["w"] / v["n"] * 100, 1)} for k, v in bucket_stats.items()},
+    }

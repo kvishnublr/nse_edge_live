@@ -52,23 +52,30 @@ def _send_whatsapp(msg: str):
 
 # ─── SPIKE SCORING HELPER ─────────────────────────────────────────────────────
 def _score_spike(vol_mult: float, chg_pct: float, sym: str, candle_min: int) -> int:
-    """Score a spike 0-100 based on empirical win-rate analysis (March 2026, 297 signals)."""
+    """Score a spike 0-100. Higher price/vol now score higher (not penalized)."""
     score = 0
-    # Volume quality (0-35)
-    if 3.0 <= vol_mult < 5.0:    score += 35
-    elif 5.0 <= vol_mult < 7.0:  score += 25
+    # Volume quality (0-35): 5-8× is sweet spot; very high can still be valid
+    if 5.0 <= vol_mult < 8.0:    score += 35
+    elif 3.0 <= vol_mult < 5.0:  score += 30
+    elif vol_mult >= 8.0:        score += 22   # exceptional — can reverse but notable
     elif 2.0 <= vol_mult < 3.0:  score += 15
-    else:                         score += 5   # 7x+ often reverses
-    # Price momentum quality (0-30)
+    else:                         score += 5
+    # Price momentum quality (0-30): bigger moves score higher, not lower
     ap = abs(chg_pct)
-    if 0.5 <= ap < 1.0:    score += 30
-    elif 0.4 <= ap < 0.5:  score += 20
-    elif 1.0 <= ap < 1.5:  score += 20
+    if ap >= 1.5:          score += 30
+    elif ap >= 1.0:        score += 28
+    elif 0.5 <= ap < 1.0:  score += 25
+    elif 0.4 <= ap < 0.5:  score += 18
     elif 0.3 <= ap < 0.4:  score += 10
-    else:                   score += 5   # >1.5% over-extended
-    # Symbol quality (0-20)
-    hi_sym = {'TCS', 'TATASTEEL', 'MARUTI', 'INFY'}
-    md_sym = {'HDFCBANK', 'RELIANCE', 'BAJFINANCE', 'TATAMOTORS'}
+    else:                   score += 4
+    # Symbol quality (0-20) — expanded lists for NSE F&O universe
+    hi_sym = {'TCS', 'TATASTEEL', 'MARUTI', 'INFY', 'RELIANCE', 'HDFCBANK', 'ICICIBANK', 'AXISBANK'}
+    md_sym = {
+        'BAJFINANCE', 'TATAMOTORS', 'WIPRO', 'TECHM', 'SBIN', 'KOTAKBANK',
+        'LT', 'NTPC', 'POWERGRID', 'ONGC', 'COALINDIA', 'INDUSINDBK',
+        'BAJAJFINSV', 'ADANIENT', 'ADANIPORTS', 'HINDUNILVR', 'BHARTIARTL',
+        'SUNPHARMA', 'DRREDDY', 'DIVISLAB', 'EICHERMOT', 'HEROMOTOCO',
+    }
     if sym in hi_sym:    score += 20
     elif sym in md_sym:  score += 12
     else:                score += 5
@@ -480,13 +487,34 @@ def compute_verdict(gates: list) -> tuple:
 
 
 # ─── SPIKE DETECTOR ───────────────────────────────────────────────────────────
-def detect_spikes(stocks: list, prev: dict) -> list:
+def detect_spikes(stocks: list, prev: dict, gates: dict | None = None, verdict: str = "WAIT") -> list:
     from datetime import datetime
+    import backtest_data as bd
     import pytz
     now_dt   = datetime.now(pytz.timezone("Asia/Kolkata"))
     now      = now_dt.strftime("%H:%M")
     candle_min = now_dt.hour * 60 + now_dt.minute
     spikes   = []
+
+    # Spike radar is fully independent of gates — fires on price/vol/OI merit only
+    gate_score_floor = 50
+
+    try:
+        acc_filters = bd.get_signal_accuracy_filters()
+    except Exception:
+        acc_filters = {"weak_symbols": set(), "weak_buckets": set()}
+
+    if candle_min < 570:
+        time_bucket = "open_915_930"
+    elif candle_min < 630:
+        time_bucket = "morning_930_1030"
+    elif candle_min < 780:
+        time_bucket = "midday_1030_1300"
+    else:
+        time_bucket = "late_1300_plus"
+
+    if time_bucket in acc_filters.get("weak_buckets", set()):
+        return []
 
     for s in stocks:
         sym      = s.get("symbol", "")
@@ -496,49 +524,80 @@ def detect_spikes(stocks: list, prev: dict) -> list:
         vol      = s.get("volume", 1) or 1
         prev_vol = prev.get(sym, {}).get("volume", vol) or vol
         vm       = vol / prev_vol if prev_vol else 1.0
+        stock_pc = int(s.get("pc", 0) or 0)
+        stock_verdict = str(s.get("verdict", "WAIT") or "WAIT")
+        if sym in acc_filters.get("weak_symbols", set()):
+            continue
 
         sp_type = sig = trigger = ""
-        strength = "lo"
 
-        # Detect spike type
-        if abs(chg_pct) >= TH["spike_price_pct"]:
-            sp_type  = "buy" if chg_pct > 0 else "sell"
-            trigger  = f"Price {'+' if chg_pct > 0 else ''}{chg_pct:.2f}%"
-            sig      = "LONG" if chg_pct > 0 else "SHORT"
-            strength = "hi" if abs(chg_pct) >= 1.5 else "md"
-        if abs(oi_pct) >= TH["spike_oi_pct"] and not sp_type:
-            sp_type  = "buy" if oi_pct > 0 else "sell"
-            trigger  = f"OI {'+' if oi_pct > 0 else ''}{oi_pct:.1f}%"
-            sig      = "OI BUILD" if oi_pct > 0 else "OI UNWIND"
-            strength = "hi" if abs(oi_pct) >= 15 else "md"
-        elif vm >= TH["spike_vol_mult"] and not sp_type:
-            sp_type  = "vol"
-            trigger  = f"Vol {vm:.1f}×"
-            sig      = "VOL SPIKE"
-            strength = "lo"
+        # Time window filter: 9:30-11:00 (570-660) + 13:00-14:00 (780-840)
+        # SKIP 11:00-13:00 — lunch-hour chop has <15% accuracy (data-validated)
+        in_window = (570 <= candle_min < 660) or (780 <= candle_min <= 840)
+        if not in_window:
+            continue
+
+        price_th = TH.get("spike_price_pct", 0.2)
+        vol_th   = TH.get("spike_vol_mult", 1.5)
+        oi_th    = TH.get("spike_oi_pct", 12.0)
+
+        # Detect spike type — price+vol spike takes priority, then OI-only, then vol-only
+        if abs(chg_pct) >= price_th and vm >= vol_th:
+            sp_type = "buy" if chg_pct > 0 else "sell"
+            sig     = "LONG" if chg_pct > 0 else "SHORT"
+            trigger = f"Price {'+' if chg_pct > 0 else ''}{chg_pct:.2f}% | Vol {vm:.1f}×"
+            if abs(oi_pct) >= oi_th:
+                oi_sign = "+" if oi_pct > 0 else ""
+                sig    += " + OI"
+                trigger = f"{trigger} | OI {oi_sign}{oi_pct:.0f}%"
+        elif abs(oi_pct) >= oi_th:
+            sp_type = "buy" if oi_pct > 0 else "sell"
+            sig     = "OI BUILD" if oi_pct > 0 else "OI UNWIND"
+            trigger = f"OI {'+' if oi_pct > 0 else ''}{oi_pct:.1f}%"
+        elif vm >= vol_th and abs(chg_pct) >= price_th * 0.5:
+            sp_type = "vol"
+            sig     = "VOL SPIKE"
+            trigger = f"Vol {vm:.1f}×"
 
         if not sp_type:
             continue
 
-        # Score the spike using empirical win-rate model
+        # Score the spike — threshold rises when gates are stopped
         score = _score_spike(vm, chg_pct, sym, candle_min)
-
-        # Only include spikes with score >= 40
-        if score < 40:
+        if score < gate_score_floor:
             continue
 
+        # Gate quality filter — require pc>=2 (allows signals during moderate gate failures)
+        if stock_pc < 2 or stock_verdict not in ("EXECUTE", "WATCH", "MONITOR"):
+            continue
+
+        # Confirmation proxy — OI-aware: skip OI check if data is likely stale (near-zero)
+        oi_available = abs(oi_pct) >= 1.0
+        if oi_available:
+            same_dir_oi  = (chg_pct > 0 and oi_pct > 0) or (chg_pct < 0 and oi_pct < 0)
+            has_confirmation = same_dir_oi or vm >= 3.0
+        else:
+            # OI data stale / unavailable — rely on price + volume alone
+            has_confirmation = vm >= 2.5 or abs(chg_pct) >= 0.8
+        if not has_confirmation:
+            continue
+
+        # Unified strength from score
+        strength = "hi" if score >= 70 else "md"
+
         spike_dict = {
-            "symbol":   sym,
-            "time":     now,
-            "price":    price,
-            "chg_pct":  chg_pct,
-            "vol_mult": round(vm, 1),
-            "oi_pct":   oi_pct,
-            "type":     sp_type,
-            "trigger":  trigger,
-            "signal":   sig,
-            "strength": strength,
-            "score":    score,
+            "symbol":       sym,
+            "time":         now,
+            "price":        price,
+            "chg_pct":      chg_pct,
+            "vol_mult":     round(vm, 1),
+            "oi_pct":       oi_pct,
+            "type":         sp_type,
+            "trigger":      trigger,
+            "signal":       sig,
+            "strength":     strength,
+            "score":        score,
+            "pc":           stock_pc,
         }
         spikes.append(spike_dict)
 
@@ -597,8 +656,33 @@ def run_signal_engine(indices: dict, chain: dict, fii: dict,
 
     verdict, sub, pass_cnt = compute_verdict(gates)
 
+    gates_dict = {i + 1: g for i, g in enumerate(gates)}
+    stocks = _annotate_live_stocks(stocks, gates_dict, verdict)
     prev   = {s["symbol"]: s for s in state.get("last_stocks", [])}
-    spikes = detect_spikes(stocks, prev)
+    new_spikes = detect_spikes(stocks, prev, gates_dict, verdict)
+
+    # Preserve today's spikes across the session — don't wipe them when the
+    # time window closes.  Merge new detections into the running list; clear
+    # only when the calendar date rolls over (new trading day).
+    import datetime as _dt
+    today_str = _dt.date.today().isoformat()
+    prev_spikes = state.get("spikes", [])
+    prev_date   = state.get("spikes_date", today_str)
+
+    if prev_date != today_str:
+        # New trading day — start fresh
+        merged_spikes = new_spikes
+    else:
+        # Same day — merge: add new spikes not already in the list
+        existing_keys = {(s["symbol"], s["time"], s["type"]) for s in prev_spikes}
+        merged_spikes = prev_spikes + [s for s in new_spikes
+                                       if (s["symbol"], s["time"], s["type"]) not in existing_keys]
+        # Keep latest 30, sorted by score
+        merged_spikes.sort(key=lambda x: -x.get("score", 0))
+        merged_spikes = merged_spikes[:30]
+
+    spikes = merged_spikes
+    state["spikes_date"] = today_str
 
     # Build intel ticker
     ticker = []
@@ -622,9 +706,6 @@ def run_signal_engine(indices: dict, chain: dict, fii: dict,
     for sp in spikes[:3]:
         if sp["strength"] == "hi":
             ticker.append(f"{sp['symbol']} SPIKE — <em>{sp['signal']}</em> — {sp['trigger']}")
-
-    gates_dict = {i + 1: g for i, g in enumerate(gates)}
-    stocks = _annotate_live_stocks(stocks, gates_dict, verdict)
 
     # ── Confidence score (0-10) using gate weights from backtest analysis ──
     try:
@@ -693,6 +774,7 @@ def run_signal_engine(indices: dict, chain: dict, fii: dict,
     try:
         import backtest_data as bd
         bd.log_signal(gates_dict, verdict, pass_cnt, indices, chain, fii)
+        bd.log_live_spikes(spikes, gates_dict, verdict, pass_cnt, indices, chain)
     except Exception:
         pass
 
