@@ -17,6 +17,7 @@
   --st:#ff3355;--st-d:rgba(255,51,85,.11);--st-b:rgba(255,51,85,.26);
   --am:#ffaa00;--am-d:rgba(255,170,0,.11);--am-b:rgba(255,170,0,.26);
   --bl:#38beff;--bl-d:rgba(56,190,255,.10);--bl-b:rgba(56,190,255,.24);
+  --pu:#a78bfa;--pu-d:rgba(167,139,250,.10);--pu-b:rgba(167,139,250,.24);
   --t0:#d8e8f8;--t1:#7a9ab8;--t2:#3d5c78;--t3:#253856;
   --fn:'IBM Plex Mono',monospace;--fh:'Syne',sans-serif;
 }
@@ -106,6 +107,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .lpill{display:flex;align-items:center;gap:5px;font-size:9px;color:var(--go)}
 .ldot{width:5px;height:5px;border-radius:50%;background:var(--go);animation:pulse 1.5s ease-in-out infinite}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(0,232,122,.5)}60%{box-shadow:0 0 0 5px rgba(0,232,122,0)}}
+@keyframes dot-execute{0%,100%{box-shadow:0 0 0 0 rgba(0,232,122,.8)}70%{box-shadow:0 0 0 6px rgba(0,232,122,0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes dot-watch{0%,100%{box-shadow:0 0 0 0 rgba(255,170,0,.7)}70%{box-shadow:0 0 0 5px rgba(255,170,0,0)}}
+#right.rp-execute #rp-state-dot,#right.rp-execute #rs-dot{animation:dot-execute 2s ease-in-out infinite}
+#right.rp-watch #rp-state-dot,#right.rp-watch #rs-dot{animation:dot-watch 3s ease-in-out infinite}
 .zlbl{font-size:9px;color:var(--t2)}
 .tbr{display:flex;align-items:center;gap:12px}
 .clk{font-size:10px;color:var(--t1);font-weight:500;letter-spacing:.5px}
@@ -120,13 +126,194 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 #tb-live-btn:hover{background:var(--go);color:#04110a}
 
 /* GRID */
-#grid{flex:1;display:grid;grid-template-columns:252px 1fr 200px;overflow:hidden}
+#grid{flex:1;display:grid;grid-template-columns:40px 1fr 38px;overflow:hidden;transition:grid-template-columns .42s cubic-bezier(.4,0,.2,1)}
+#grid.panels-open{grid-template-columns:260px 1fr 38px}
+#grid.right-open{grid-template-columns:40px 1fr 230px}
+#grid.panels-open.right-open{grid-template-columns:260px 1fr 230px}
+#grid.right-open.right-expanded{grid-template-columns:40px 1fr 285px}
+#grid.panels-open.right-open.right-expanded{grid-template-columns:260px 1fr 285px}
+
+/* RIGHT PANEL — collapsed + open states */
+#right{overflow:hidden;display:flex;flex-direction:column;transition:box-shadow .5s,border-left-color .5s;border-left:2px solid var(--b1)}
+#right.rp-execute{border-left-color:var(--go);box-shadow:-3px 0 20px rgba(0,232,122,.15)}
+#right.rp-watch{border-left-color:var(--am);box-shadow:-3px 0 14px rgba(255,185,0,.12)}
+#right.rp-notrade{border-left-color:var(--st);box-shadow:none}
+
+/* Collapsed strip */
+#right-strip{
+  width:38px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;
+  padding:12px 0 10px;gap:10px;cursor:pointer;
+  background:var(--s1);height:100%;
+  border-right:1px solid var(--b1);
+  transition:background .2s;
+  user-select:none;
+}
+#right-strip:hover{background:var(--s2)}
+#rs-dot{width:9px;height:9px;border-radius:50%;background:var(--t2);transition:background .4s,box-shadow .4s;flex-shrink:0}
+.rs-metric{writing-mode:vertical-rl;text-orientation:mixed;font-size:7px;font-weight:700;letter-spacing:1.5px;color:var(--t2);white-space:nowrap;transform:rotate(180deg);line-height:1}
+.rs-val{font-family:var(--fh);font-size:10px;font-weight:800;color:var(--t1);writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:-.5px}
+#rs-tally{font-family:var(--fh);font-size:13px;font-weight:900;writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:-1px}
+.rs-label-rotate{writing-mode:vertical-rl;transform:rotate(180deg);font-size:7px;letter-spacing:1.5px;font-weight:700;color:var(--t2)}
+
+/* Full content hidden when collapsed */
+/* #right-content defined below in RIGHT PANEL section */
+#left{overflow:hidden;display:flex;flex-direction:row}
+
+/* COLLAPSED GATE STRIP */
+#left-strip{
+  width:40px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;
+  padding:14px 0 12px;gap:0;cursor:pointer;background:var(--s1);
+  border-right:1px solid var(--b1);transition:background .2s;
+  user-select:none;position:relative;overflow:hidden;
+}
+#left-strip::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,var(--bl),transparent);opacity:0;
+  transition:opacity .3s;
+}
+#left-strip:hover::before{opacity:1}
+#left-strip:hover{background:var(--s2)}
+.gs-expand-btn{
+  width:24px;height:24px;border-radius:6px;background:var(--bl-d);
+  border:1px solid var(--bl-b);display:flex;align-items:center;justify-content:center;
+  font-size:12px;color:var(--bl);transition:all .2s;flex-shrink:0;margin-bottom:12px;
+}
+#left-strip:hover .gs-expand-btn{background:var(--bl);color:#fff;transform:scale(1.05)}
+.gs-label{
+  writing-mode:vertical-rl;text-orientation:mixed;font-size:7px;font-weight:700;
+  letter-spacing:2.5px;color:var(--t2);margin-bottom:10px;
+}
+.gs-pip{
+  width:10px;height:10px;border-radius:3px;margin:2px 0;
+  transition:all .3s;border:1px solid transparent;flex-shrink:0;
+}
+.gs-pip.go{background:var(--go);box-shadow:0 0 6px rgba(0,232,122,.4)}
+.gs-pip.st{background:var(--st);box-shadow:0 0 6px rgba(255,51,85,.4)}
+.gs-pip.am{background:var(--am);box-shadow:0 0 6px rgba(255,170,0,.3)}
+.gs-pip.wt{background:var(--bl);box-shadow:0 0 6px rgba(56,190,255,.3)}
+.gs-pip.off{background:var(--b1)}
+.gs-score-ring{
+  margin-top:auto;width:28px;height:28px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--fh);font-size:11px;font-weight:800;
+  border:2px solid var(--am-b);color:var(--am);background:var(--am-d);
+  transition:all .3s;
+}
+.gs-score-ring.go{border-color:var(--go-b);color:var(--go);background:var(--go-d)}
+.gs-score-ring.st{border-color:var(--st-b);color:var(--st);background:var(--st-d)}
+
+/* EXPANDED GATE PANEL */
+#left-content{
+  display:none;flex-direction:column;width:260px;flex-shrink:0;
+  min-height:0;overflow:hidden;
+}
+#gate-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 10px;height:36px;flex-shrink:0;
+  background:linear-gradient(180deg,var(--s3),var(--s2));
+  border-bottom:1px solid var(--b1);
+}
+.gh-left{display:flex;align-items:center;gap:8px}
+.gh-icon{
+  width:22px;height:22px;border-radius:5px;background:var(--bl-d);
+  border:1px solid var(--bl-b);display:flex;align-items:center;justify-content:center;
+  font-size:9px;color:var(--bl);font-weight:700;
+}
+.gh-title{font-size:8px;font-weight:700;letter-spacing:2px;color:var(--t0)}
+.gh-close{
+  width:22px;height:22px;border-radius:4px;border:1px solid var(--b1);
+  background:transparent;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;font-size:12px;color:var(--t2);transition:all .15s;
+}
+.gh-close:hover{background:var(--st-d);border-color:var(--st-b);color:var(--st)}
+
+/* VERDICT CARD */
+#vd{
+  margin:10px;border-radius:6px;padding:12px;flex-shrink:0;
+  position:relative;overflow:hidden;transition:all .3s;
+}
+#vd::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse at 50% 0%,currentColor,transparent 70%);
+  opacity:.07;pointer-events:none;
+}
+.vgo{border:1px solid var(--go-b);background:var(--go-d);color:var(--go)}
+.vst{border:1px solid var(--st-b);background:var(--st-d);color:var(--st)}
+.vam{border:1px solid var(--am-b);background:var(--am-d);color:var(--am)}
+.vtag{font-size:7px;font-weight:700;letter-spacing:2.5px;opacity:.7;margin-bottom:5px}
+.vword{font-family:var(--fh);font-size:22px;font-weight:900;letter-spacing:3px;line-height:1}
+.vsub{font-size:8px;opacity:.65;margin-top:5px;line-height:1.5}
+.vconf-row{display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.07)}
+.vconf-lbl{font-size:7px;font-weight:600;letter-spacing:1.5px;opacity:.6}
+.vconf-val{display:flex;align-items:center;gap:4px}
+.vdirs{display:flex;gap:6px;margin-top:8px}
+.vdir{flex:1;padding:4px;text-align:center;border-radius:3px;font-size:8px;font-weight:700;letter-spacing:1.5px;border:1px solid var(--b1);color:var(--t2);cursor:pointer}
+.vdir.lon{background:var(--go);color:#000;border-color:var(--go)}
+.vpos{font-size:9px;margin-top:7px;padding:5px 7px;background:rgba(0,0,0,.15);border-radius:4px;border:1px solid rgba(255,255,255,.07);display:flex;justify-content:space-between;align-items:center}
+
+/* GATES */
+#gates{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:4px}
+#gates::-webkit-scrollbar{width:3px}
+#gates::-webkit-scrollbar-track{background:transparent}
+#gates::-webkit-scrollbar-thumb{background:var(--b1);border-radius:2px}
+.gate{border-radius:6px;overflow:hidden;border:1px solid var(--b1);transition:border-color .3s}
+.gate.go{border-color:var(--go-b)}.gate.st{border-color:var(--st-b)}
+.gate.am{border-color:var(--am-b)}.gate.wt{border-color:var(--bl-b)}
+.gtop{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;cursor:pointer;user-select:none;gap:8px}
+.gate.go .gtop{background:linear-gradient(90deg,var(--go-d),transparent)}
+.gate.st .gtop{background:linear-gradient(90deg,var(--st-d),transparent)}
+.gate.am .gtop{background:linear-gradient(90deg,var(--am-d),transparent)}
+.gate.wt .gtop{background:linear-gradient(90deg,var(--bl-d),transparent)}
+.gL{display:flex;align-items:center;gap:8px}
+.gnum{
+  width:20px;height:20px;border-radius:5px;display:flex;align-items:center;
+  justify-content:center;font-size:8px;font-weight:800;flex-shrink:0;
+}
+.gate.go .gnum{background:var(--go);color:#000}
+.gate.st .gnum{background:var(--st);color:#fff}
+.gate.am .gnum{background:var(--am-d);color:var(--am);border:1px solid var(--am-b)}
+.gate.wt .gnum{background:var(--bl-d);color:var(--bl);border:1px solid var(--bl-b)}
+.gn{display:none}
+.gnm{font-size:9px;font-weight:600;color:var(--t0);letter-spacing:.5px}
+.gst{font-size:8px;font-weight:700;letter-spacing:1px;flex-shrink:0}
+.gate.go .gst{color:var(--go)}.gate.st .gst{color:var(--st)}
+.gate.am .gst{color:var(--am)}.gate.wt .gst{color:var(--bl)}
+.gbar{height:2px;background:rgba(255,255,255,.05);overflow:hidden}
+.gbf{height:100%;transition:width .8s cubic-bezier(.22,1,.36,1)}
+.gate.go .gbf{background:linear-gradient(90deg,var(--go-d),var(--go))}
+.gate.st .gbf{background:linear-gradient(90deg,var(--st-d),var(--st))}
+.gate.am .gbf{background:linear-gradient(90deg,var(--am-d),var(--am))}
+.gate.wt .gbf{background:linear-gradient(90deg,var(--bl-d),var(--bl))}
+.gbody{display:none;padding:8px 10px;border-top:1px solid rgba(255,255,255,.05);background:rgba(0,0,0,.1)}
+.gbody.open{display:block}
+.gm{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.gm:last-child{border:none}
+.gk{color:var(--t2);font-size:8px}
+.gv{font-size:9px;font-weight:600}
+.cg{color:var(--go)}.cr{color:var(--st)}.ca{color:var(--am)}.cm{color:var(--t2)}.cb{color:var(--bl)}
+
+/* SCORE STRIP */
+#ss{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 10px;border-top:1px solid var(--b1);
+  background:linear-gradient(180deg,var(--s2),var(--s1));flex-shrink:0;
+}
+.slbl{font-size:7px;color:var(--t2);letter-spacing:1.5px;margin-bottom:3px;font-weight:600}
+.sdots{display:flex;gap:3px}
+.sdot{width:20px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:800;transition:all .3s}
+.sdot.go{background:var(--go);color:#000;box-shadow:0 0 8px rgba(0,232,122,.3)}
+.sdot.st{background:var(--st);color:#fff;box-shadow:0 0 8px rgba(255,51,85,.3)}
+.sdot.am{background:var(--am-d);color:var(--am);border:1px solid var(--am-b)}
+.sdot.wt{background:var(--bl-d);color:var(--bl);border:1px solid var(--bl-b)}
+.sdot.off{background:var(--s3);color:var(--t3);border:1px solid var(--b1)}
+.snum{font-family:var(--fh);font-size:20px;font-weight:900;line-height:1}
+.snum.go{color:var(--go)}.snum.am{color:var(--am)}.snum.st{color:var(--st)}
 .pn{display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--b1)}
 .pn:last-child{border-right:none}
 
 /* PANEL HEADERS */
-.ph{display:flex;align-items:center;justify-content:space-between;padding:0 8px;height:24px;flex-shrink:0;background:var(--s2);border-bottom:1px solid var(--b1)}
-.pht{font-size:7px;font-weight:600;letter-spacing:1.5px;color:var(--t2)}
+.ph{display:flex;align-items:center;justify-content:space-between;padding:0 10px;height:28px;flex-shrink:0;background:linear-gradient(180deg,var(--s3),var(--s2));border-bottom:1px solid var(--b1)}
+.pht{font-size:7px;font-weight:700;letter-spacing:2px;color:var(--t2)}
 .bd{font-size:7px;font-weight:600;letter-spacing:.3px;padding:1px 5px;border-radius:2px}
 .bg{background:var(--go-d);color:var(--go);border:1px solid var(--go-b)}
 .ocdom{font-size:9px;padding:3px 9px;border-radius:3px;font-weight:800;letter-spacing:1px;display:inline-flex;align-items:center;min-height:20px}
@@ -218,22 +405,28 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
 /* TABS */
 #tabs{display:flex;border-bottom:1px solid var(--b1);flex-shrink:0;background:var(--s2);overflow-x:auto}
-.tab{padding:0 11px;height:27px;display:flex;align-items:center;font-size:8px;font-weight:600;letter-spacing:1.5px;cursor:pointer;color:var(--t2);border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap;flex-shrink:0}
-.tab.on{color:var(--go);border-bottom-color:var(--go)}
-.tab:hover:not(.on){color:var(--t0)}
+.tab{padding:0 13px;height:30px;display:flex;align-items:center;font-size:8.5px;font-weight:600;letter-spacing:1.2px;cursor:pointer;color:var(--t2);border-bottom:2px solid transparent;transition:color .15s,background .15s,border-color .15s;white-space:nowrap;flex-shrink:0}
+.tab:hover:not(.on){color:var(--t0);background:rgba(255,255,255,.03)}
+.tab.on{color:var(--go);border-bottom-color:var(--go);background:rgba(0,232,122,.04)}
 .tab.analytics-tab{color:var(--bl)}
-.tab.analytics-tab.on{color:var(--bl);border-bottom-color:var(--bl)}
+.tab.analytics-tab.on{color:var(--bl);border-bottom-color:var(--bl);background:rgba(56,190,255,.04)}
+.tab.tab-spike{color:var(--go)}
+.tab.tab-signal{color:#f0b429;font-weight:700}
+.tab.tab-bt{color:var(--bl)}
+.tab.tab-btg{color:#a78bfa}
+.tab.tab-pnl{color:var(--am)}
 #ta{flex:1;overflow:hidden;display:flex;flex-direction:column}
 .tp{display:none;flex-direction:column;gap:10px;flex:1;min-height:0}
 .tp.on{display:flex;overflow-y:auto;padding:12px}
 
 /* SHARED TABLE */
 .xtbl{width:100%;border-collapse:collapse;font-size:9px}
-.xtbl th{padding:4px 8px;text-align:right;color:var(--t2);font-weight:600;letter-spacing:.5px;border-bottom:1px solid var(--b1);background:var(--s3);position:sticky;top:0}
+.xtbl th{padding:5px 8px;text-align:right;color:var(--t2);font-weight:700;letter-spacing:.7px;font-size:8px;border-bottom:1px solid var(--b1);background:var(--s3);position:sticky;top:0;text-transform:uppercase}
 .xtbl th:first-child{text-align:left}
-.xtbl td{padding:5px 8px;text-align:right;border-bottom:1px solid rgba(37,56,86,.4)}
+.xtbl td{padding:5.5px 8px;text-align:right;border-bottom:1px solid rgba(37,56,86,.35);font-size:9px}
 .xtbl td:first-child{text-align:left}
-.xtbl tr:hover td{background:var(--s2)}
+.xtbl tbody tr{transition:background .1s}
+.xtbl tbody tr:hover td{background:rgba(255,255,255,.03)}
 
 /* KILL ZONES */
 .kzbar{display:flex;height:34px;border-radius:3px;overflow:hidden;border:1px solid var(--b1);flex-shrink:0}
@@ -287,9 +480,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
 /* STOCK OI */
 .sfbar{display:flex;gap:4px;margin-bottom:8px;flex-shrink:0}
-.sf{padding:2px 8px;border-radius:2px;font-size:8px;font-weight:600;letter-spacing:.5px;border:1px solid var(--b1);cursor:pointer;color:var(--t2);background:transparent;font-family:var(--fn);transition:all .14s}
-.sf.on{background:var(--go);color:#000;border-color:var(--go)}
-.sf:hover:not(.on){color:var(--t0)}
+.sf{padding:3px 9px;border-radius:3px;font-size:8px;font-weight:600;letter-spacing:.5px;border:1px solid var(--b1);cursor:pointer;color:var(--t2);background:transparent;font-family:var(--fn);transition:all .14s}
+.sf.on{background:var(--go);color:#000;border-color:var(--go);box-shadow:0 0 8px rgba(0,232,122,.2)}
+.sf:hover:not(.on){color:var(--t0);background:rgba(255,255,255,.04);border-color:var(--b2)}
 .sigtag{font-size:7px;font-weight:700;padding:1px 5px;border-radius:2px;letter-spacing:.5px}
 .scr{display:inline-flex;align-items:center;justify-content:center;width:26px;height:18px;border-radius:2px;font-size:9px;font-weight:700}
 .scr.hi{background:var(--go);color:#000}.scr.md{background:var(--am-d);color:var(--am);border:1px solid var(--am-b)}.scr.lo{background:var(--st-d);color:var(--st);border:1px solid var(--st-b)}
@@ -355,27 +548,53 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .ttci{font-size:9px;color:var(--t1)}.ttct{font-size:9px;font-weight:600}.ttcl{font-size:8px;color:var(--t2)}
 
 /* RIGHT PANEL */
-#right{width:220px}
-.mi{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-bottom:1px solid var(--b1)}
-.min{font-size:8px;color:var(--t2);letter-spacing:.5px;margin-bottom:2px;text-transform:uppercase}
-.miv{font-size:13px;font-weight:700}
-.mic{font-size:9px;margin-bottom:0;font-weight:600}
-.mit{font-size:8px;color:var(--t2)}
-.rpicks{padding:6px 8px;display:flex;flex-direction:column;gap:6px;flex-shrink:0}
-.rpk{padding:9px 10px;border-radius:3px;cursor:pointer}
-.rpk-go{border:1px solid var(--go-b);background:var(--go-d)}
-.rpk-am{border:1px solid var(--am-b);background:var(--am-d)}
-.rpk-st{border:1px solid var(--st-b);background:var(--st-d)}
-.rpkn{font-family:var(--fh);font-size:13px;font-weight:700;letter-spacing:.3px}
-.rpkm{font-size:9px;color:var(--t2);margin-top:3px;line-height:1.5}
-.rpkr{font-size:9px;margin-top:2px;font-weight:600}
-.cl{padding:6px 8px;flex:1;overflow-y:auto}
-.ci{display:flex;align-items:flex-start;gap:6px;padding:4px 0;border-bottom:1px solid var(--b1);cursor:pointer}
+#right{width:100%;overflow:hidden}
+#right-content{flex:1;min-width:0;display:none;flex-direction:column;overflow:hidden}
+
+/* RIGHT PANEL — MACRO CONTEXT */
+.mi{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:9px 12px;border-bottom:1px solid var(--b1);
+  transition:background .15s;cursor:default;position:relative;
+}
+.mi:hover{background:rgba(255,255,255,.025)}
+.mi::before{content:'';position:absolute;left:0;top:20%;bottom:20%;width:2px;border-radius:1px;background:transparent;transition:background .3s}
+.mi:hover::before{background:var(--b2)}
+.min{font-size:7.5px;color:var(--t2);letter-spacing:1px;margin-bottom:4px;text-transform:uppercase;font-weight:600}
+.miv{font-size:15px;font-weight:700;line-height:1;font-family:var(--fh);letter-spacing:-.3px}
+.mic{font-size:9.5px;font-weight:700;margin-bottom:2px;letter-spacing:-.2px}
+.mit{font-size:8px;color:var(--t2);letter-spacing:.3px}
+
+/* RIGHT PANEL — PICKS */
+.rpicks{padding:6px;display:flex;flex-direction:column;gap:5px;flex-shrink:0}
+.rpk{
+  padding:9px 10px;border-radius:5px;cursor:pointer;
+  transition:transform .15s,box-shadow .15s;
+  position:relative;overflow:hidden;
+}
+.rpk::before{
+  content:'';position:absolute;top:0;left:0;width:3px;height:100%;
+}
+.rpk:hover{transform:translateX(2px)}
+.rpk-go{border:1px solid var(--go-b);background:linear-gradient(135deg,var(--go-d),transparent)}
+.rpk-go::before{background:var(--go)}
+.rpk-am{border:1px solid var(--am-b);background:linear-gradient(135deg,var(--am-d),transparent)}
+.rpk-am::before{background:var(--am)}
+.rpk-st{border:1px solid var(--st-b);background:linear-gradient(135deg,var(--st-d),transparent)}
+.rpk-st::before{background:var(--st)}
+.rpkn{font-family:var(--fh);font-size:12px;font-weight:700;letter-spacing:.3px}
+.rpkm{font-size:8.5px;color:var(--t2);margin-top:2px;line-height:1.5}
+.rpkr{font-size:8.5px;margin-top:2px;font-weight:600}
+.cl{padding:4px 10px;flex:1;overflow-y:auto}
+.cl::-webkit-scrollbar{width:2px}
+.cl::-webkit-scrollbar-thumb{background:var(--b1);border-radius:1px}
+.ci{display:flex;align-items:flex-start;gap:8px;padding:6px 2px;border-bottom:1px solid rgba(37,56,86,.25);cursor:pointer;transition:background .12s;border-radius:2px}
 .ci:last-child{border:none}
-.cibox{width:11px;height:11px;border-radius:1px;border:1px solid var(--b2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:7px;transition:all .15s;margin-top:0px}
-.ci.done .cibox{background:var(--go);border-color:var(--go);color:#000}
-.cit{font-size:7px;color:var(--t2);line-height:1.35}
-.ci.done .cit{text-decoration:line-through;opacity:.4}
+.ci:hover{background:rgba(255,255,255,.025)}
+.cibox{width:13px;height:13px;border-radius:2px;border:1px solid var(--b2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:8px;transition:all .2s;margin-top:1px}
+.ci.done .cibox{background:var(--go);border-color:var(--go);color:#000;box-shadow:0 0 6px rgba(0,232,122,.3)}
+.cit{font-size:8px;color:var(--t1);line-height:1.45}
+.ci.done .cit{text-decoration:line-through;opacity:.3;color:var(--t2)}
 
 /* TICKER */
 #ticker{height:22px;display:flex;align-items:center;border-top:1px solid var(--b1);background:var(--s1);overflow:hidden;flex-shrink:0}
@@ -417,10 +636,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .asub{font-size:10px;color:var(--t1);line-height:1.45}
 .acard{background:var(--s3);border:1px solid var(--b1);border-radius:4px;padding:10px}
 .acardt{font-size:9px;color:var(--bl);letter-spacing:1.2px;font-weight:700;margin-bottom:7px;text-transform:uppercase}
-.atbl{width:100%;border-collapse:collapse;font-size:9px}
-.atbl th{padding:4px 8px;text-align:right;color:var(--t2);font-weight:600;letter-spacing:.5px;border-bottom:1px solid var(--b1);background:var(--s3);position:sticky;top:0}
+.atbl{width:100%;border-collapse:collapse;font-size:10px}
+.atbl th{padding:6px 12px;text-align:right;color:var(--t2);font-weight:600;letter-spacing:.5px;border-bottom:1px solid var(--b1);background:var(--s3);position:sticky;top:0}
 .atbl th:first-child,.atbl td:first-child{text-align:left}
-.atbl td{padding:5px 8px;text-align:right;border-bottom:1px solid rgba(37,56,86,.4)}
+.atbl td{padding:7px 12px;text-align:right;border-bottom:1px solid rgba(37,56,86,.4)}
 .atbl tr:hover td{background:var(--s3)}
 .atbl tr.sbuy td{background:rgba(0,232,122,.04)!important}
 .atbl tr.ssell td{background:rgba(255,51,85,.04)!important}
@@ -603,6 +822,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <button onclick="exportCSV()" title="Export visible data as CSV" style="padding:2px 8px;font-family:var(--fn);font-size:8px;font-weight:600;border:1px solid var(--b1);border-radius:3px;cursor:pointer;color:var(--t1);background:transparent;letter-spacing:.5px">⬇ CSV</button>
     <button onclick="testTelegram()" title="Test Telegram alert" style="padding:2px 8px;font-family:var(--fn);font-size:8px;border:1px solid var(--b1);border-radius:3px;cursor:pointer;color:var(--t2);background:transparent">✈ TG</button>
     <button onclick="testWhatsapp()" title="Test WhatsApp alert" style="padding:2px 8px;font-family:var(--fn);font-size:8px;border:1px solid var(--b1);border-radius:3px;cursor:pointer;color:var(--t2);background:transparent">📱 WA</button>
+    <button onclick="toggleSidePanels()" id="side-tog" title="Toggle side panels (Gates + Macro)" style="padding:2px 8px;font-family:var(--fn);font-size:8px;font-weight:600;border:1px solid var(--b1);border-radius:3px;cursor:pointer;color:var(--t2);background:transparent;letter-spacing:.5px">⊞ PANELS</button>
     <button onclick="showShortcuts()" title="Keyboard shortcuts (Press ?)" style="padding:2px 8px;font-family:var(--fn);font-size:8px;border:1px solid var(--b1);border-radius:3px;cursor:pointer;color:var(--t2);background:transparent">⌨</button>
     <button class="theme-tog" id="theme-tog" onclick="toggleTheme()" title="Toggle light/dark mode"></button>
   </div>
@@ -629,7 +849,32 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
 <!-- LEFT PANE -->
 <div class="pn" id="left">
-  <div class="ph"><span class="pht">GATE FILTER</span><span class="bd bm" id="gbadge">3 / 5 PASS</span></div>
+
+  <!-- Collapsed strip -->
+  <div id="left-strip" onclick="toggleGatePanel()" title="Expand Gate Filter">
+    <div class="gs-expand-btn">›</div>
+    <div class="gs-label">GATES</div>
+    <div id="strip-pips" style="display:flex;flex-direction:column;align-items:center;gap:3px">
+      <div class="gs-pip off" id="sp1"></div>
+      <div class="gs-pip off" id="sp2"></div>
+      <div class="gs-pip off" id="sp3"></div>
+      <div class="gs-pip off" id="sp4"></div>
+      <div class="gs-pip off" id="sp5"></div>
+    </div>
+    <div class="gs-score-ring" id="strip-score-ring">—</div>
+  </div>
+
+  <!-- Expanded content -->
+  <div id="left-content">
+  <!-- Header -->
+  <div id="gate-header">
+    <div class="gh-left">
+      <div class="gh-icon">G</div>
+      <span class="gh-title">GATE SYSTEM</span>
+      <span class="bd bm" id="gbadge" style="font-size:7px;padding:1px 6px;border-radius:3px">— / 5</span>
+    </div>
+    <button class="gh-close" onclick="toggleGatePanel()" title="Collapse">✕</button>
+  </div>
 
   <div id="vd" class="vam">
     <div class="vtag">SYSTEM VERDICT</div>
@@ -656,7 +901,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   <div id="gates">
     <div class="gate go" id="g1" ondblclick="cycleGate(1)">
       <div class="gtop" onclick="toggleGate(1)">
-        <div class="gL"><span class="gn">G1</span><span class="gnm" id="gn1">REGIME</span></div>
+        <div class="gL"><div class="gnum">1</div><span class="gnm" id="gn1">REGIME</span></div>
         <span class="gst" id="gs1">WAIT</span>
       </div>
       <div class="gbar"><div class="gbf" id="gb1" style="width:0"></div></div>
@@ -664,7 +909,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     </div>
     <div class="gate go" id="g2" ondblclick="cycleGate(2)">
       <div class="gtop" onclick="toggleGate(2)">
-        <div class="gL"><span class="gn">G2</span><span class="gnm" id="gn2">SMART MONEY</span></div>
+        <div class="gL"><div class="gnum">2</div><span class="gnm" id="gn2">SMART MONEY</span></div>
         <span class="gst" id="gs2">WAIT</span>
       </div>
       <div class="gbar"><div class="gbf" id="gb2" style="width:0"></div></div>
@@ -672,7 +917,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     </div>
     <div class="gate go" id="g3" ondblclick="cycleGate(3)">
       <div class="gtop" onclick="toggleGate(3)">
-        <div class="gL"><span class="gn">G3</span><span class="gnm" id="gn3">STRUCTURE</span></div>
+        <div class="gL"><div class="gnum">3</div><span class="gnm" id="gn3">STRUCTURE</span></div>
         <span class="gst" id="gs3">WAIT</span>
       </div>
       <div class="gbar"><div class="gbf" id="gb3" style="width:0"></div></div>
@@ -680,7 +925,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     </div>
     <div class="gate wt" id="g4" ondblclick="cycleGate(4)">
       <div class="gtop" onclick="toggleGate(4)">
-        <div class="gL"><span class="gn">G4</span><span class="gnm" id="gn4">TRIGGER</span></div>
+        <div class="gL"><div class="gnum">4</div><span class="gnm" id="gn4">TRIGGER</span></div>
         <span class="gst" id="gs4">WAIT</span>
       </div>
       <div class="gbar"><div class="gbf" id="gb4" style="width:0"></div></div>
@@ -688,7 +933,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     </div>
     <div class="gate st" id="g5" ondblclick="cycleGate(5)">
       <div class="gtop" onclick="toggleGate(5)">
-        <div class="gL"><span class="gn">G5</span><span class="gnm" id="gn5">RISK VALID</span></div>
+        <div class="gL"><div class="gnum">5</div><span class="gnm" id="gn5">RISK VALID</span></div>
         <span class="gst" id="gs5">WAIT</span>
       </div>
       <div class="gbar"><div class="gbf" id="gb5" style="width:0"></div></div>
@@ -697,9 +942,16 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   </div>
 
   <div id="ss">
-    <div><div class="slbl">GATES</div><div class="sdots" id="sdots"></div></div>
-    <div style="text-align:right"><div class="slbl">SCORE</div><div class="snum am" id="snum">3 / 5</div></div>
+    <div>
+      <div class="slbl">GATE STATUS</div>
+      <div class="sdots" id="sdots"></div>
+    </div>
+    <div style="text-align:right">
+      <div class="slbl">SCORE</div>
+      <div class="snum am" id="snum">3 / 5</div>
+    </div>
   </div>
+  </div><!-- /left-content -->
 </div>
 
 <!-- CENTER PANE -->
@@ -744,26 +996,28 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
   <!-- TABS -->
   <div id="tabs">
-    <div class="tab on" onclick="sw('killzones',this)">KILL ZONES</div>
+    <div class="tab tab-signal on" onclick="sw('sigengine',this)">SIGNAL ENGINE</div>
+    <div class="tab tab-signal" onclick="sw('sestocks',this)" id="ses-tab">SE STOCKS</div>
+    <div class="tab" onclick="sw('killzones',this)">KILL ZONES</div>
     <div class="tab" onclick="sw('levels',this)">KEY LEVELS</div>
     <div class="tab" onclick="sw('chain',this)">OPTION CHAIN</div>
     <div class="tab" onclick="sw('stocks',this)">STOCK OI</div>
     <div class="tab" onclick="sw('swing',this)">SWING RADAR</div>
-    <div class="tab" onclick="sw('spikescanner',this)" style="color:var(--go)" id="sr-tab">SPIKE RADAR ⚡</div>
+    <div class="tab tab-spike" onclick="sw('spikescanner',this)" id="sr-tab">SPIKE RADAR ⚡</div>
     <div class="tab" onclick="sw('journal',this)">JOURNAL</div>
     <div class="tab" onclick="sw('stats',this)">STATS</div>
     <div class="tab analytics-tab" onclick="sw('analytics',this)">EDGE ANALYTICS</div>
-    <div class="tab" style="color:var(--bl)" onclick="sw('backtest',this)">BACKTEST</div>
-    <div class="tab" style="color:#a78bfa" onclick="sw('learnbt',this)">📚 BACKTEST GUIDE</div>
-    <div class="tab" style="color:var(--am)" onclick="sw('pnl',this)">P&amp;L TRACKER</div>
+    <div class="tab tab-bt" onclick="sw('backtest',this)">BACKTEST</div>
+    <div class="tab tab-btg" onclick="sw('learnbt',this)">BACKTEST GUIDE</div>
+    <div class="tab tab-pnl" onclick="sw('pnl',this)">P&amp;L TRACKER</div>
     <div class="tab" onclick="sw('heatmap',this)">HEATMAP</div>
-    <div class="tab" style="color:var(--t2)" onclick="sw('calendar',this)">CALENDAR</div>
+    <div class="tab" onclick="sw('calendar',this)">CALENDAR</div>
   </div>
 
   <div id="ta">
 
   <!-- TAB: KILL ZONES -->
-  <div class="tp on" id="tp-killzones">
+  <div class="tp" id="tp-killzones">
     <div>
       <div style="display:flex;justify-content:space-between;margin-bottom:5px">
         <span style="font-size:8px;color:var(--t2);letter-spacing:1px">SESSION — NSE 9:15 TO 15:30 IST</span>
@@ -922,7 +1176,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   </div>
 
   <!-- TAB: SPIKE RADAR -->
-  <div class="tp" id="tp-spikescanner" style="padding:0;gap:0;overflow-y:hidden">
+  <div class="tp" id="tp-spikescanner" style="padding:0;gap:0;overflow-y:hidden;max-width:100%">
 
     <!-- Sub-tab switcher: LIVE vs BACKTEST -->
     <div style="display:flex;border-bottom:1px solid var(--b1);flex-shrink:0">
@@ -1518,9 +1772,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   <div class="tp" id="tp-learnbt" style="overflow-y:auto;padding:16px;gap:0">
 
     <!-- Hero banner -->
-    <div style="background:linear-gradient(135deg,#1a0a2e 0%,#16213e 50%,#0f3460 100%);border:1px solid #a78bfa44;border-radius:8px;padding:20px 24px;margin-bottom:16px">
-      <div style="font-family:var(--fh);font-size:16px;font-weight:900;letter-spacing:3px;color:#a78bfa;margin-bottom:4px">📚 OPTIONS BACKTEST GUIDE</div>
-      <div style="font-size:9px;color:var(--t2);letter-spacing:1px">How to build, test, and validate intraday options strategies · Python + Real Data</div>
+    <div style="background:linear-gradient(135deg,#0f0a1e 0%,#13192e 60%,#0d2240 100%);border:1px solid rgba(167,139,250,.2);border-radius:8px;padding:18px 22px;margin-bottom:16px;position:relative;overflow:hidden">
+      <div style="position:absolute;top:-20px;right:-20px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,rgba(167,139,250,.12),transparent 70%);pointer-events:none"></div>
+      <div style="font-size:7px;font-weight:700;letter-spacing:3px;color:rgba(167,139,250,.6);margin-bottom:6px">NSE EDGE v5</div>
+      <div style="font-family:var(--fh);font-size:17px;font-weight:900;letter-spacing:2px;color:#c4b5fd;margin-bottom:6px;line-height:1.1">OPTIONS BACKTEST<br>GUIDE</div>
+      <div style="font-size:8.5px;color:var(--t1);line-height:1.6">Build, test, and validate intraday options strategies using Python and real 1-min data. Use the system's live backtest engine as the benchmark.</div>
     </div>
 
     <!-- Dataset section -->
@@ -1528,7 +1784,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
       <!-- Underlying CSV -->
       <div style="background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:14px">
-        <div style="font-size:8px;font-weight:700;letter-spacing:2px;color:var(--go);margin-bottom:8px">📊 UNDERLYING DATA (NIFTY)</div>
+        <div style="font-size:7px;font-weight:700;letter-spacing:2px;color:var(--go);margin-bottom:8px">UNDERLYING DATA · NIFTY 1-MIN</div>
         <div style="font-size:7.5px;color:var(--t2);margin-bottom:6px">underlying.csv</div>
         <pre style="font-size:7px;color:#a3e635;background:var(--s3);border-radius:4px;padding:8px;overflow-x:auto;margin:0;line-height:1.7">timestamp,open,high,low,close,volume,vwap
 2024-01-01 09:15,22000,22040,21980,22030,150000,22020
@@ -1542,7 +1798,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
       <!-- Options CSV -->
       <div style="background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:14px">
-        <div style="font-size:8px;font-weight:700;letter-spacing:2px;color:var(--bl);margin-bottom:8px">📈 OPTIONS DATA</div>
+        <div style="font-size:7px;font-weight:700;letter-spacing:2px;color:var(--bl);margin-bottom:8px">OPTIONS DATA · STRIKE PRICES</div>
         <div style="font-size:7.5px;color:var(--t2);margin-bottom:6px">options.csv</div>
         <pre style="font-size:7px;color:#7dd3fc;background:var(--s3);border-radius:4px;padding:8px;overflow-x:auto;margin:0;line-height:1.7">timestamp,strike,type,price,volume,oi
 2024-01-01 09:15,22100,CE,120,5000,150000
@@ -1562,7 +1818,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <!-- Trade example callout -->
     <div style="background:linear-gradient(90deg,rgba(0,232,122,.08),rgba(0,232,122,.02));border-left:3px solid var(--go);border-radius:0 6px 6px 0;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:20px">
       <div>
-        <div style="font-size:8px;font-weight:700;letter-spacing:2px;color:var(--go);margin-bottom:4px">💥 EXAMPLE TRADE — 171% RETURN</div>
+        <div style="font-size:7px;font-weight:700;letter-spacing:2px;color:var(--go);margin-bottom:4px">EXAMPLE TRADE · 171% RETURN</div>
         <div style="font-size:8px;color:var(--t1)">Entry: 22100 CE at 09:16 → <b style="color:var(--t0)">₹140</b> &nbsp;|&nbsp; Exit: 09:21 → <b style="color:var(--go)">₹380</b></div>
         <div style="font-size:7.5px;color:var(--t2);margin-top:3px">Return = (380 − 140) / 140 = <b style="color:var(--go)">171%</b> &nbsp;·&nbsp; This is a 100–200% move in 5 minutes</div>
       </div>
@@ -1573,26 +1829,26 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     </div>
 
     <!-- 3 test strategies -->
-    <div style="font-size:8px;font-weight:700;letter-spacing:2px;color:var(--t0);margin-bottom:10px">🧠 WHAT TO TEST WITH THIS DATASET</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
-      <div style="background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:12px">
-        <div style="font-size:8px;font-weight:700;color:#a78bfa;margin-bottom:6px">TEST 1 — VWAP Breakout</div>
-        <div style="font-size:7.5px;color:var(--t2);line-height:1.8">Entry when:<br><b style="color:var(--t0)">close &gt; VWAP</b><br>+ price makes new high<br><br>Pick OTM CE strike<br>Track next 5 candles</div>
+    <div style="font-size:7px;font-weight:700;letter-spacing:2.5px;color:var(--t2);margin-bottom:10px">STRATEGIES TO TEST</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">
+      <div style="background:var(--s2);border:1px solid rgba(167,139,250,.2);border-radius:6px;padding:12px;border-top:2px solid #a78bfa">
+        <div style="font-size:7px;font-weight:700;letter-spacing:1.5px;color:#a78bfa;margin-bottom:8px">TEST 1 · VWAP BREAKOUT</div>
+        <div style="font-size:8px;color:var(--t1);line-height:2">Entry: <b style="color:var(--t0)">close &gt; VWAP</b><br>+ price makes new high<br>Strike: ATM + 100 CE<br>Hold: 5 candles</div>
       </div>
-      <div style="background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:12px">
-        <div style="font-size:8px;font-weight:700;color:var(--bl);margin-bottom:6px">TEST 2 — Volume Spike</div>
-        <div style="font-size:7.5px;color:var(--t2);line-height:1.8">Entry when:<br><b style="color:var(--t0)">volume &gt; 2× avg</b><br>+ price move &gt; 0.3%<br><br>Filter false breakouts<br>Compare accuracy</div>
+      <div style="background:var(--s2);border:1px solid rgba(56,190,255,.2);border-radius:6px;padding:12px;border-top:2px solid var(--bl)">
+        <div style="font-size:7px;font-weight:700;letter-spacing:1.5px;color:var(--bl);margin-bottom:8px">TEST 2 · VOLUME SPIKE</div>
+        <div style="font-size:8px;color:var(--t1);line-height:2">Entry: <b style="color:var(--t0)">vol &gt; 2× avg</b><br>+ price move &gt; 0.3%<br>Filters false breaks<br>Compare win rate</div>
       </div>
-      <div style="background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:12px">
-        <div style="font-size:8px;font-weight:700;color:var(--go);margin-bottom:6px">TEST 3 — OI Confirmation</div>
-        <div style="font-size:7.5px;color:var(--t2);line-height:1.8">Entry when:<br><b style="color:var(--t0)">OI rising + price up</b><br>+ CE premium surging<br><br>Best edge condition<br>Fewer but cleaner trades</div>
+      <div style="background:var(--s2);border:1px solid rgba(0,232,122,.2);border-radius:6px;padding:12px;border-top:2px solid var(--go)">
+        <div style="font-size:7px;font-weight:700;letter-spacing:1.5px;color:var(--go);margin-bottom:8px">TEST 3 · OI CONFIRM</div>
+        <div style="font-size:8px;color:var(--t1);line-height:2">Entry: <b style="color:var(--t0)">OI rising + price up</b><br>+ CE premium surging<br>Highest edge quality<br>Fewer, cleaner trades</div>
       </div>
     </div>
 
     <!-- Python backtester -->
     <div style="background:var(--s2);border:1px solid #a78bfa44;border-radius:6px;padding:14px;margin-bottom:14px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-size:8px;font-weight:700;letter-spacing:2px;color:#a78bfa">🐍 PYTHON BACKTESTER — PLUG &amp; PLAY</div>
+        <div style="font-size:7px;font-weight:700;letter-spacing:2px;color:#a78bfa">PYTHON BACKTESTER · PLUG &amp; PLAY</div>
         <button onclick="document.getElementById('lbt-code').select();document.execCommand('copy');this.textContent='✓ COPIED';setTimeout(()=>this.textContent='COPY',1500)" style="font-family:var(--fn);font-size:7px;font-weight:700;letter-spacing:1px;padding:3px 10px;background:rgba(167,139,250,.15);border:1px solid #a78bfa55;color:#a78bfa;border-radius:3px;cursor:pointer">COPY</button>
       </div>
       <textarea id="lbt-code" readonly style="width:100%;height:420px;background:var(--s3);border:none;color:#e2e8f0;font-family:'Courier New',monospace;font-size:7.5px;line-height:1.7;padding:10px;border-radius:4px;resize:vertical;outline:none">import pandas as pd
@@ -1712,14 +1968,14 @@ else:
     <!-- Trade output example -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
       <div style="background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:14px">
-        <div style="font-size:8px;font-weight:700;letter-spacing:2px;color:var(--am);margin-bottom:8px">📉 SAMPLE TRADE OUTPUT</div>
+        <div style="font-size:7px;font-weight:700;letter-spacing:2px;color:var(--am);margin-bottom:8px">SAMPLE TRADE OUTPUT</div>
         <pre style="font-size:7px;color:#fbbf24;background:var(--s3);border-radius:4px;padding:8px;overflow-x:auto;margin:0;line-height:1.7">trades.csv
 
 entry_time    strike  type  entry  max   exit  return%
 09:16         22100   CE    140    380   350   +150%</pre>
       </div>
       <div style="background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:14px">
-        <div style="font-size:8px;font-weight:700;letter-spacing:2px;color:var(--go);margin-bottom:8px">⚙️ HOW TO USE</div>
+        <div style="font-size:7px;font-weight:700;letter-spacing:2px;color:var(--go);margin-bottom:8px">QUICK START</div>
         <div style="font-size:7.5px;color:var(--t2);line-height:2">
           1. Save the CSVs above as files<br>
           2. Install: <b style="color:var(--t0)">pip install pandas numpy</b><br>
@@ -1730,14 +1986,22 @@ entry_time    strike  type  entry  max   exit  return%
       </div>
     </div>
 
-    <!-- Next level CTA -->
-    <div style="background:linear-gradient(135deg,rgba(167,139,250,.12),rgba(59,130,246,.08));border:1px solid #a78bfa55;border-radius:8px;padding:16px;text-align:center">
-      <div style="font-size:9px;font-weight:700;letter-spacing:2px;color:#a78bfa;margin-bottom:6px">🚀 NEXT LEVEL</div>
-      <div style="font-size:8px;color:var(--t2);margin-bottom:10px">Ask Claude to generate for you:</div>
-      <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
-        <span style="background:rgba(167,139,250,.15);border:1px solid #a78bfa44;color:#a78bfa;padding:5px 14px;border-radius:4px;font-size:7.5px;font-weight:700">"Give multi-day dataset (300+ rows)"</span>
-        <span style="background:rgba(59,130,246,.15);border:1px solid #3b82f644;color:#7dd3fc;padding:5px 14px;border-radius:4px;font-size:7.5px;font-weight:700">"Add stop-loss to backtester"</span>
-        <span style="background:rgba(0,232,122,.1);border:1px solid rgba(0,232,122,.3);color:var(--go);padding:5px 14px;border-radius:4px;font-size:7.5px;font-weight:700">"Test PE side (bearish entries)"</span>
+    <!-- Advanced extensions -->
+    <div style="background:linear-gradient(135deg,rgba(167,139,250,.1),rgba(56,190,255,.06));border:1px solid rgba(167,139,250,.25);border-radius:8px;padding:16px">
+      <div style="font-size:8px;font-weight:700;letter-spacing:2px;color:#a78bfa;margin-bottom:12px">⚙ EXTEND YOUR BACKTESTER</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div style="background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.2);border-radius:6px;padding:10px">
+          <div style="font-size:7.5px;font-weight:700;color:#a78bfa;margin-bottom:6px;letter-spacing:1px">MULTI-DAY DATA</div>
+          <div style="font-size:7px;color:var(--t2);line-height:1.8">Expand underlying.csv to 300+ rows across multiple sessions. Add <b style="color:var(--t0)">date</b> column and group by day before computing daily VWAP.</div>
+        </div>
+        <div style="background:rgba(56,190,255,.06);border:1px solid rgba(56,190,255,.18);border-radius:6px;padding:10px">
+          <div style="font-size:7.5px;font-weight:700;color:var(--bl);margin-bottom:6px;letter-spacing:1px">ADD STOP-LOSS</div>
+          <div style="font-size:7px;color:var(--t2);line-height:1.8">Track intra-candle lows vs <b style="color:var(--t0)">SL = entry × 0.995</b>. Exit early if low breaches SL before HOLD_CANDLES completes.</div>
+        </div>
+        <div style="background:rgba(0,232,122,.06);border:1px solid rgba(0,232,122,.2);border-radius:6px;padding:10px">
+          <div style="font-size:7.5px;font-weight:700;color:var(--go);margin-bottom:6px;letter-spacing:1px">BEARISH SIDE (PE)</div>
+          <div style="font-size:7px;color:var(--t2);line-height:1.8">Mirror the logic: <b style="color:var(--t0)">close &lt; VWAP</b> + price down &gt; 0.3% + PE OI rising. Select ATM − 100 put. Track PUT premiums.</div>
+        </div>
       </div>
     </div>
 
@@ -1789,33 +2053,456 @@ entry_time    strike  type  entry  max   exit  return%
     <div id="cal-grid" style="display:flex;flex-direction:column;gap:4px;flex:1;min-height:0;overflow-y:auto"></div>
   </div>
 
+  <!-- TAB: SIGNAL ENGINE (redesigned) -->
+  <div class="tp on" id="tp-sigengine" style="gap:0;padding:0;overflow:hidden;flex-direction:row">
+  <style>
+  /* ══ SIGNAL ENGINE v2 ══════════════════════════════════════════════════ */
+  #se-wrap{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
+  /* Top hero bar */
+  #se-hero{display:flex;align-items:stretch;gap:0;height:86px;flex-shrink:0;border-bottom:1px solid var(--b1);background:var(--s1)}
+  .se-hero-block{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;border-right:1px solid var(--b1);padding:8px 8px;text-align:center;position:relative;overflow:hidden;cursor:default;transition:background .15s}
+  .se-hero-block:last-child{border-right:none}
+  .se-hero-block:hover{background:var(--s2)}
+  .se-hero-block::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:transparent;transition:background .3s}
+  .se-hero-block.go::after{background:var(--go)}.se-hero-block.am::after{background:var(--am)}.se-hero-block.st::after{background:var(--st)}.se-hero-block.bl::after{background:var(--bl)}.se-hero-block.pu::after{background:var(--pu)}
+  .se-hb-lbl{font-size:6.5px;font-weight:500;letter-spacing:2px;color:var(--t2);margin-bottom:3px;text-transform:uppercase}
+  .se-hb-val{font-family:var(--fh);font-size:22px;font-weight:700;line-height:1;letter-spacing:-1px}
+  .se-hb-sub{font-size:7.5px;font-weight:400;color:var(--t2);margin-top:3px;letter-spacing:.3px}
+  .se-hb-badge{font-size:7px;font-weight:600;padding:2px 7px;border-radius:10px;margin-top:4px;letter-spacing:.5px}
+  /* Main body grid — scrollable 3-col layout */
+  #se-body{flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;grid-auto-rows:minmax(230px,1fr);gap:0;min-height:0;overflow-y:auto;overflow-x:hidden}
+  .se-panel{border-right:1px solid var(--b1);border-bottom:1px solid var(--b1);padding:10px 12px;display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;position:relative}
+  .se-panel:nth-child(3n){border-right:none}
+  .se-panel-title{font-size:7px;font-weight:500;letter-spacing:1.8px;color:var(--t2);margin-bottom:8px;text-transform:uppercase;display:flex;align-items:center;gap:6px;flex-shrink:0}
+  .se-panel-title::after{content:'';flex:1;height:1px;background:var(--b1)}
+  /* OFI tug-of-war bar */
+  .ofi-tug{height:20px;background:var(--s3);border-radius:4px;overflow:hidden;display:flex;position:relative;margin:4px 0}
+  .ofi-tug-bid{height:100%;background:linear-gradient(90deg,rgba(0,232,122,.8),rgba(0,232,122,.4));transition:width .6s cubic-bezier(.22,1,.36,1)}
+  .ofi-tug-ask{height:100%;background:linear-gradient(90deg,rgba(255,51,85,.4),rgba(255,51,85,.8));transition:width .6s cubic-bezier(.22,1,.36,1)}
+  .ofi-center{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--fh);font-size:9px;font-weight:600;pointer-events:none;letter-spacing:.5px}
+  /* Factor rows */
+  .sfr{display:flex;align-items:center;gap:6px;padding:2.5px 0;border-bottom:1px solid rgba(37,56,86,.25);font-size:8px}
+  .sfr:last-child{border-bottom:none}
+  .sfr-name{flex:1;color:var(--t2);font-size:7.5px;font-weight:400}
+  .sfr-bar{flex:2;height:3px;background:var(--s3);border-radius:2px;overflow:hidden}
+  .sfr-fill{height:100%;border-radius:2px;transition:width .7s cubic-bezier(.22,1,.36,1)}
+  .sfr-val{width:30px;text-align:right;font-family:var(--fn);font-size:7.5px;font-weight:600;flex-shrink:0}
+  /* Volume leaderboard */
+  .vlbr{display:flex;align-items:center;gap:5px;padding:3px 0;border-bottom:1px solid rgba(37,56,86,.2);font-size:8px}
+  .vlbr:last-child{border-bottom:none}
+  .vlbr-rank{width:12px;color:var(--t2);font-size:7px;flex-shrink:0;text-align:center;font-weight:400}
+  .vlbr-sym{font-family:var(--fn);font-weight:500;font-size:8.5px;flex:1;color:var(--t0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vlbr-bar{flex:2;height:3px;background:var(--s3);border-radius:2px;overflow:hidden}
+  .vlbr-fill{height:100%;border-radius:2px;transition:width .6s cubic-bezier(.22,1,.36,1)}
+  .vlbr-val{width:32px;text-align:right;font-family:var(--fn);font-size:8px;font-weight:600;flex-shrink:0}
+  /* RS heatmap */
+  .rshm{display:grid;grid-template-columns:repeat(5,1fr);gap:3px}
+  .rshm-cell{border-radius:4px;padding:4px 2px;text-align:center;font-size:8.5px;font-weight:600;border:1px solid transparent;cursor:default;transition:transform .12s,box-shadow .12s;display:flex;flex-direction:column;justify-content:center}
+  .rshm-cell:hover{transform:scale(1.05);box-shadow:0 2px 8px rgba(0,0,0,.2)}
+  .rshm-cell .rsc-sym{font-size:6px;font-weight:500;display:block;color:var(--t2);letter-spacing:.5px;margin-bottom:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rshm-cell.rhgo{background:rgba(0,232,122,.10);border-color:rgba(0,232,122,.20);color:var(--go)}
+  .rshm-cell.rhst{background:rgba(255,51,85,.09);border-color:rgba(255,51,85,.18);color:var(--st)}
+  .rshm-cell.rham{background:rgba(255,170,0,.08);border-color:rgba(255,170,0,.16);color:var(--am)}
+  .rshm-cell.rhnt{background:var(--s3);border-color:var(--b1);color:var(--t2)}
+  /* PCR arc + Max Pain zone */
+  .pcr-arc-wrap{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .mp-zone{height:6px;background:var(--s3);border-radius:3px;position:relative;overflow:visible;margin:5px 0 3px}
+  .mp-zone-fill{position:absolute;top:0;height:100%;border-radius:3px;background:rgba(255,170,0,.2);transition:all .5s}
+  .mp-zone-needle{position:absolute;top:-5px;width:2px;height:16px;background:#fff;border-radius:1px;box-shadow:0 0 5px rgba(255,255,255,.5);transition:left .5s}
+  /* IV split */
+  .ivs{display:flex;gap:5px;flex-shrink:0}
+  .ivs-side{flex:1;border-radius:5px;padding:6px 5px;text-align:center;border:1px solid var(--b1)}
+  .ivs-val{font-family:var(--fh);font-size:16px;font-weight:600;letter-spacing:-.5px;line-height:1}
+  .ivs-lbl{font-size:6.5px;font-weight:500;letter-spacing:1.5px;margin-bottom:3px;text-transform:uppercase}
+  /* Gate pass rate */
+  .gpr{display:flex;align-items:center;gap:6px;padding:3.5px 0;border-bottom:1px solid rgba(37,56,86,.2);font-size:8px}
+  .gpr:last-child{border-bottom:none}
+  .gpr-nm{flex:1;font-size:7px;color:var(--t2);letter-spacing:.3px;font-weight:400}
+  .gpr-bk{flex:2;height:3px;background:var(--s3);border-radius:2px;overflow:hidden}
+  .gpr-bf{height:100%;border-radius:2px;transition:width .7s cubic-bezier(.22,1,.36,1)}
+  .gpr-vl{width:28px;text-align:right;font-family:var(--fn);font-size:8px;font-weight:600;flex-shrink:0}
+  </style>
+
+  <div id="se-wrap">
+    <!-- HERO ROW: 5 key metrics across the top -->
+    <div id="se-hero">
+      <div class="se-hero-block go" id="se-h-mfs">
+        <div class="se-hb-lbl">MF SCORE</div>
+        <div class="se-hb-val" id="se-mfs-num" style="color:var(--go)">—</div>
+        <div class="se-hb-sub" id="se-mfs-verdict">LOADING</div>
+      </div>
+      <div class="se-hero-block bl">
+        <div class="se-hb-lbl">PCR</div>
+        <div class="se-hb-val" id="se-pcr-big" style="color:var(--bl)">—</div>
+        <div class="se-hb-sub" id="se-pcr-interp">OI BIAS</div>
+      </div>
+      <div class="se-hero-block am">
+        <div class="se-hb-lbl">MAX PAIN</div>
+        <div class="se-hb-val" id="se-mp-val" style="color:var(--am);font-size:18px">—</div>
+        <div class="se-hb-sub" id="se-mp-dist">DIST FROM SPOT</div>
+      </div>
+      <div class="se-hero-block pu">
+        <div class="se-hb-lbl">IV SKEW</div>
+        <div class="se-hb-val" id="se-iv-skew" style="color:var(--pu)">—</div>
+        <div class="se-hb-sub" id="se-iv-skew-lbl">PUT − CALL</div>
+      </div>
+      <div class="se-hero-block" id="se-h-ofi">
+        <div class="se-hb-lbl">ORDER FLOW</div>
+        <div class="ofi-tug" style="width:100%;margin:4px 0">
+          <div class="ofi-tug-bid" id="ofi-bid-bar" style="width:50%"></div>
+          <div class="ofi-tug-ask" id="ofi-ask-bar" style="width:50%"></div>
+          <div class="ofi-center" id="ofi-hero-lbl">—</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:7.5px;width:100%">
+          <span style="color:var(--go)" id="ofi-bid-pct">50% BID</span>
+          <span style="color:var(--st)" id="ofi-ask-pct">50% ASK</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- BODY: 3×2 panel grid -->
+    <div id="se-body">
+
+      <!-- Panel 1: Factor breakdown -->
+      <div class="se-panel">
+        <div class="se-panel-title">FACTOR BREAKDOWN</div>
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-shrink:0">
+          <svg width="72" height="72" viewBox="0 0 72 72" style="flex-shrink:0">
+            <circle cx="36" cy="36" r="28" fill="none" stroke="var(--s3)" stroke-width="6"/>
+            <circle id="se-gauge-arc" cx="36" cy="36" r="28" fill="none" stroke="var(--go)" stroke-width="6"
+              stroke-dasharray="175.9" stroke-dashoffset="175.9" stroke-linecap="round"
+              transform="rotate(-90 36 36)" style="transition:stroke-dashoffset .7s,stroke .4s"/>
+            <text x="36" y="40" text-anchor="middle" font-family="Syne,sans-serif" font-size="15" font-weight="900" fill="var(--t1)" id="se-gauge-num">—</text>
+          </svg>
+          <div style="flex:1;font-size:9px;color:var(--t2);line-height:1.6">
+            <div style="font-weight:700;color:var(--t1);font-size:10px;margin-bottom:2px" id="se-factor-verdict">LOADING...</div>
+            <div id="se-factor-tip" style="font-size:8px;color:var(--t2);line-height:1.5">Waiting for data</div>
+          </div>
+        </div>
+        <div id="se-factor-rows" style="flex:1;overflow:hidden">
+          <div class="sfr"><span class="sfr-name">VWAP</span><div class="sfr-bar"><div class="sfr-fill" id="sfb-vwap" style="background:var(--go)"></div></div><span class="sfr-val cg" id="sfv-vwap">—</span></div>
+          <div class="sfr"><span class="sfr-name">PCR</span><div class="sfr-bar"><div class="sfr-fill" id="sfb-pcr" style="background:var(--bl)"></div></div><span class="sfr-val cb" id="sfv-pcr">—</span></div>
+          <div class="sfr"><span class="sfr-name">OI SURGE</span><div class="sfr-bar"><div class="sfr-fill" id="sfb-oi" style="background:var(--am)"></div></div><span class="sfr-val ca" id="sfv-oi">—</span></div>
+          <div class="sfr"><span class="sfr-name">VOL SURGE</span><div class="sfr-bar"><div class="sfr-fill" id="sfb-vol" style="background:var(--go)"></div></div><span class="sfr-val cg" id="sfv-vol">—</span></div>
+          <div class="sfr"><span class="sfr-name">GATE</span><div class="sfr-bar"><div class="sfr-fill" id="sfb-gate" style="background:var(--am)"></div></div><span class="sfr-val ca" id="sfv-gate">—</span></div>
+          <div class="sfr"><span class="sfr-name">IV EDGE</span><div class="sfr-bar"><div class="sfr-fill" id="sfb-iv" style="background:var(--pu)"></div></div><span class="sfr-val" id="sfv-iv" style="color:var(--pu)">—</span></div>
+        </div>
+      </div>
+
+      <!-- Panel 2: Volume Surge Leaderboard -->
+      <div class="se-panel">
+        <div class="se-panel-title">VOLUME SURGE — TOP 10</div>
+        <div id="se-vol-lb" style="flex:1;overflow:hidden"></div>
+      </div>
+
+      <!-- Panel 3: OFI Detailed + Nifty Spread -->
+      <div class="se-panel">
+        <div class="se-panel-title">ORDER FLOW · STOCK IMBALANCE</div>
+        <div id="se-ofi-list" style="flex:1;overflow:hidden"></div>
+        <div style="flex-shrink:0;margin-top:8px;padding-top:8px;border-top:1px solid var(--b1)">
+          <div style="font-size:7px;letter-spacing:1.5px;color:var(--t2);font-weight:700;margin-bottom:4px">NIFTY BID / ASK</div>
+          <div style="display:flex;gap:10px;font-size:10px">
+            <div><span style="color:var(--t2);font-size:8px">BID </span><span id="se-nf-bid" style="font-weight:700;color:var(--go)">—</span></div>
+            <div><span style="color:var(--t2);font-size:8px">ASK </span><span id="se-nf-ask" style="font-weight:700;color:var(--st)">—</span></div>
+            <div><span style="color:var(--t2);font-size:8px">SPD </span><span id="se-nf-spd" style="font-weight:700;color:var(--am)">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel 4: RS Momentum Heatmap -->
+      <div class="se-panel">
+        <div class="se-panel-title">RELATIVE STRENGTH HEATMAP</div>
+        <div class="rshm" id="se-rs-grid" style="flex:1"></div>
+      </div>
+
+      <!-- Panel 5: PCR + Max Pain zone -->
+      <div class="se-panel">
+        <div class="se-panel-title">PCR · MAX PAIN · IV</div>
+        <div class="pcr-arc-wrap">
+          <svg width="60" height="60" viewBox="0 0 60 60" style="flex-shrink:0">
+            <circle cx="30" cy="30" r="22" fill="none" stroke="var(--s3)" stroke-width="5"/>
+            <circle id="se-pcr-arc" cx="30" cy="30" r="22" fill="none" stroke="var(--bl)" stroke-width="5"
+              stroke-dasharray="138.2" stroke-dashoffset="138.2" stroke-linecap="round"
+              transform="rotate(-90 30 30)" style="transition:stroke-dashoffset .6s,stroke .4s"/>
+            <text x="30" y="34" text-anchor="middle" font-family="Syne,sans-serif" font-size="11" font-weight="900" fill="var(--t1)" id="se-pcr-arc-txt">—</text>
+          </svg>
+          <div style="flex:1">
+            <div style="font-size:11px;font-weight:700;font-family:var(--fh)" id="se-pcr-big2">—</div>
+            <div style="font-size:8px;color:var(--t2);margin-top:2px" id="se-pcr-interp2">Loading...</div>
+          </div>
+        </div>
+        <div style="font-size:7.5px;color:var(--t2);letter-spacing:1px;margin-bottom:3px;font-weight:600">MAX PAIN ZONE</div>
+        <div class="mp-zone"><div class="mp-zone-fill" id="se-mp-fill"></div><div class="mp-zone-needle" id="se-mp-needle"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:7px;color:var(--t2);margin-bottom:8px">
+          <span id="se-mp-low">—</span><span style="color:var(--am)">⬆ PAIN</span><span id="se-mp-high">—</span>
+        </div>
+        <div class="ivs">
+          <div class="ivs-side" style="background:rgba(0,232,122,.05);border-color:rgba(0,232,122,.15)">
+            <div class="ivs-lbl" style="color:var(--go)">CALL IV</div>
+            <div class="ivs-val" id="se-call-iv" style="color:var(--go)">—</div>
+            <div style="font-size:7.5px;color:var(--t2);margin-top:2px" id="se-call-iv-lbl">ATM CE</div>
+          </div>
+          <div class="ivs-side" style="background:rgba(255,51,85,.05);border-color:rgba(255,51,85,.15)">
+            <div class="ivs-lbl" style="color:var(--st)">PUT IV</div>
+            <div class="ivs-val" id="se-put-iv" style="color:var(--st)">—</div>
+            <div style="font-size:7.5px;color:var(--t2);margin-top:2px" id="se-put-iv-lbl">ATM PE</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel 6: Gate Pass Rate -->
+      <div class="se-panel">
+        <div class="se-panel-title">GATE PASS RATE · FNO SCAN</div>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:space-between">
+          <div id="se-gpr-list">
+            <div class="gpr"><span class="gpr-nm">G1 · REGIME</span><div class="gpr-bk"><div class="gpr-bf" id="gpr1"></div></div><span class="gpr-vl" id="gprv1">—</span></div>
+            <div class="gpr"><span class="gpr-nm">G2 · SMART MONEY</span><div class="gpr-bk"><div class="gpr-bf" id="gpr2"></div></div><span class="gpr-vl" id="gprv2">—</span></div>
+            <div class="gpr"><span class="gpr-nm">G3 · STRUCTURE</span><div class="gpr-bk"><div class="gpr-bf" id="gpr3"></div></div><span class="gpr-vl" id="gprv3">—</span></div>
+            <div class="gpr"><span class="gpr-nm">G4 · TRIGGER</span><div class="gpr-bk"><div class="gpr-bf" id="gpr4"></div></div><span class="gpr-vl" id="gprv4">—</span></div>
+            <div class="gpr"><span class="gpr-nm">G5 · RISK VALID</span><div class="gpr-bk"><div class="gpr-bf" id="gpr5"></div></div><span class="gpr-vl" id="gprv5">—</span></div>
+          </div>
+          <div style="border-top:1px solid var(--b1);padding-top:6px;margin-top:4px">
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-size:7.5px;color:var(--t1);font-weight:700;flex:1">ALL 5 GATES PASS</span>
+              <div class="gpr-bk" style="flex:2"><div class="gpr-bf" id="gpr-all" style="background:var(--am)"></div></div>
+              <span class="gpr-vl" id="gprv-all">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /se-body -->
+  </div><!-- /se-wrap -->
+  </div><!-- /tp-sigengine -->
+
+  <!-- TAB: SE STOCKS — End-to-End Trade Analysis -->
+  <div class="tp" id="tp-sestocks" style="gap:0;padding:0;overflow:hidden;flex-direction:column">
+  <style>
+  /* ══ SE STOCKS ═══════════════════════════════════════════════════════════ */
+  #ses-header{display:flex;align-items:center;gap:10px;padding:0 12px;height:36px;flex-shrink:0;background:var(--s1);border-bottom:1px solid var(--b1)}
+  #ses-header .ses-title{font-family:var(--fh);font-size:10px;font-weight:700;letter-spacing:1.5px;color:#f0b429}
+  .ses-filter-btn{padding:1px 8px;border-radius:2px;font-size:7px;font-weight:600;letter-spacing:.6px;border:1px solid var(--b1);cursor:pointer;color:var(--t2);background:transparent;font-family:var(--fn);transition:all .14s}
+  .ses-filter-btn.on{background:#f0b429;color:#000;border-color:#f0b429}
+  .ses-filter-btn:hover:not(.on){color:var(--t0);border-color:var(--b2)}
+  /* Summary bar */
+  #ses-summary{display:flex;border-bottom:1px solid var(--b1);flex-shrink:0;background:var(--s2)}
+  .ses-stat{flex:1;padding:4px 8px;border-right:1px solid var(--b1);text-align:center}
+  .ses-stat:last-child{border-right:none}
+  .ses-stat-val{font-family:var(--fh);font-size:13px;font-weight:700;line-height:1;letter-spacing:-.3px}
+  .ses-stat-lbl{font-size:6.5px;color:var(--t2);letter-spacing:.8px;margin-top:2px;font-weight:400}
+  /* ── SE STOCKS TABLE ─────────────────────────────── */
+  #ses-cards{flex:1;overflow-y:auto;overflow-x:auto;display:block;padding:0}
+  /* Table shell */
+  .ses-tbl{width:100%;border-collapse:collapse;table-layout:fixed}
+  .ses-tbl thead{position:sticky;top:0;z-index:2;background:var(--s1)}
+  .ses-tbl th{padding:5px 8px;font-size:6.5px;font-weight:600;letter-spacing:1.2px;color:var(--t2);border-bottom:2px solid var(--b1);text-align:left;white-space:nowrap}
+  .ses-tbl th.num{text-align:right}
+  /* Column widths */
+  .sc-rk{width:38px}.sc-sym{width:130px}.sc-sig{width:90px}.sc-gates{width:72px}.sc-conf{width:52px}
+  .sc-ie{width:70px}.sc-it{width:70px}.sc-is{width:70px}.sc-ir{width:90px}
+  .sc-pe{width:70px}.sc-pt{width:70px}.sc-ps{width:70px}.sc-pr{width:90px}
+  .sc-tk{width:80px}
+  /* Header group labels */
+  .ses-tbl .hg-intra{background:rgba(56,190,255,.07);color:var(--bl)}
+  .ses-tbl .hg-pos{background:rgba(167,139,250,.07);color:var(--pu)}
+  /* Rows */
+  .ses-tbl tbody tr{border-bottom:1px solid var(--b1);cursor:pointer;transition:background .1s}
+  .ses-tbl tbody tr:hover{background:rgba(255,255,255,.04)}
+  .ses-tbl tbody tr.sr-execute{background:rgba(0,232,122,.04)}
+  .ses-tbl tbody tr.sr-watch{background:rgba(255,170,0,.03)}
+  .ses-tbl td{padding:7px 8px;font-size:8.5px;vertical-align:middle;white-space:nowrap}
+  .ses-tbl td.num{text-align:right;font-family:var(--fn)}
+  /* Rank cell */
+  .sr-rank{font-family:var(--fh);font-size:12px;font-weight:700;text-align:center;color:var(--t2)}
+  /* Symbol */
+  .sr-sym{font-family:var(--fh);font-size:11px;font-weight:700;color:var(--t0)}
+  .sr-meta{font-size:7px;color:var(--t2);margin-top:1px}
+  /* Signal chip */
+  .sr-chip{display:inline-block;font-size:7px;font-weight:700;padding:2px 7px;border-radius:2px;letter-spacing:.5px}
+  /* Gate dots */
+  .ses-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:2px;vertical-align:middle}
+  .ses-dot.go{background:var(--go)}.ses-dot.am{background:var(--am)}.ses-dot.st{background:rgba(255,255,255,.12)}.ses-dot.off{background:rgba(255,255,255,.12)}
+  /* Number cells */
+  .sr-num{font-family:var(--fn);font-size:8.5px;color:var(--t1)}
+  /* Result cell */
+  .sr-res{font-family:var(--fn);font-size:8px;font-weight:700;padding:2px 7px;border-radius:2px;display:inline-block}
+  .sr-res.win{color:var(--go);background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.22)}
+  .sr-res.loss{color:var(--st);background:rgba(255,51,85,.10);border:1px solid rgba(255,51,85,.18)}
+  .sr-res.neut{color:var(--t2);background:var(--s3);border:1px solid var(--b1)}
+  .sr-res.live{color:var(--t2);font-style:italic}
+  /* TAKE cell */
+  .sr-take{font-family:var(--fh);font-size:9px;font-weight:700;text-align:center}
+  /* Conf bar inline */
+  .sr-cbar{width:100%;height:3px;background:var(--s3);border-radius:1.5px;margin-top:2px}
+  .sr-cfill{height:100%;border-radius:1.5px}
+  /* Divider between intra / pos header groups */
+  .ses-tbl th.grp-divider,.ses-tbl td.grp-divider{border-left:2px solid var(--b1)!important}
+  /* Empty state */
+  #ses-empty{display:none;flex:1;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:var(--t2)}
+  .ses-badge{font-size:6.5px;font-weight:600;padding:1px 6px;border-radius:8px;letter-spacing:.4px;white-space:nowrap}
+  /* Verdict chip (table version) */
+  .sv-chip{display:inline-block;font-size:6.5px;font-weight:700;padding:2px 6px;border-radius:2px;letter-spacing:.5px;white-space:nowrap}
+  .sv-chip.execute{background:var(--go-b);color:var(--go)}
+  .sv-chip.watch{background:var(--am-b);color:var(--am)}
+  .sv-chip.scan{background:var(--s3);color:var(--t2)}
+  .sv-chip.dir{border:1px solid;background:transparent}
+  /* Gate dots (inline table version) */
+  .tbl-gdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:3px}
+  .tbl-gdot.go{background:var(--go)}.tbl-gdot.am{background:var(--am)}.tbl-gdot.off{background:rgba(255,255,255,.12)}
+  /* Number td cells */
+  .ses-tbl td.sc-num{font-family:var(--fn);font-size:8.5px;color:var(--t1);text-align:right;white-space:nowrap}
+  .ses-tbl td.sc-num.go{color:var(--go)}.ses-tbl td.sc-num.st{color:var(--st)}.ses-tbl td.sc-num.dim{color:var(--t3)}
+  /* Group header row */
+  .ses-tbl th.grp-hdr{text-align:center;font-size:7.5px;letter-spacing:1.5px;border-bottom:1px solid var(--b1)}
+  /* Left border between intra/pos groups */
+  .ses-tbl .sc-pe,.ses-tbl .sc-ie{border-left:2px solid var(--b1)!important}
+  .ses-tbl .sc-tk{border-left:2px solid var(--b1)!important}
+  /* Conf bar */
+  .ses-conf-bar{width:100%;height:3px;background:var(--s3);border-radius:1.5px}
+  .ses-conf-fill{height:100%;border-radius:1.5px}
+  </style>
+
+  <div id="ses-header">
+    <span class="ses-title">SE STOCKS</span>
+    <div style="width:1px;height:16px;background:var(--b2)"></div>
+    <button class="ses-filter-btn on" onclick="sesFilter('all',this)">ALL</button>
+    <button class="ses-filter-btn" onclick="sesFilter('execute',this)" style="border-color:rgba(0,232,122,.3)">EXECUTE</button>
+    <button class="ses-filter-btn" onclick="sesFilter('watch',this)" style="border-color:rgba(255,170,0,.3)">WATCH</button>
+    <button class="ses-filter-btn" onclick="sesFilter('scan',this)">SCAN</button>
+    <button class="ses-filter-btn" onclick="sesFilter('long',this)">LONG</button>
+    <button class="ses-filter-btn" onclick="sesFilter('short',this)">SHORT</button>
+    <div style="width:1px;height:16px;background:var(--b2);margin-left:4px"></div>
+    <!-- History backfill controls -->
+    <input type="date" id="ses-date" class="btdate" style="width:110px;font-size:8px;padding:2px 6px"
+      title="Load historical per-stock analysis for this date">
+    <button class="ses-filter-btn" id="ses-hist-btn" onclick="sesLoadHistory()" style="border-color:var(--bl-b);color:var(--bl)">⬇ LOAD DATE</button>
+    <button class="ses-filter-btn" id="ses-live-btn" onclick="sesGoLive()" style="display:none;border-color:var(--go-b);color:var(--go)">◉ LIVE</button>
+    <!-- Intraday / Positional toggle (hidden — table shows both columns) -->
+    <button class="ses-filter-btn on" id="ses-mode-intra" onclick="sesModeSwitch('intraday',this)" style="display:none">INTRA</button>
+    <button class="ses-filter-btn" id="ses-mode-pos" onclick="sesModeSwitch('positional',this)" style="display:none">POSITIONAL</button>
+    <div style="margin-left:auto;font-size:7.5px;color:var(--t2)" id="ses-updated">—</div>
+  </div>
+
+  <!-- Mode banner: shown when in history mode -->
+  <div id="ses-hist-banner" style="display:none;padding:4px 12px;background:rgba(56,190,255,.07);border-bottom:1px solid rgba(56,190,255,.2);font-size:8px;color:var(--bl);letter-spacing:.5px;flex-shrink:0;align-items:center;gap:4px;flex-wrap:wrap">
+    <span id="ses-hist-lbl">HISTORICAL MODE</span>
+    <span style="color:var(--t2);margin-left:6px">· Entry = next-day open.</span>
+    <span id="ses-hist-wr-lbl" style="margin-left:6px"></span>
+    <span style="color:var(--t2);margin-left:6px">Click ◉ LIVE to return to live feed.</span>
+  </div>
+
+  <div id="ses-summary">
+    <div class="ses-stat"><div class="ses-stat-val cg" id="ses-s-execute">0</div><div class="ses-stat-lbl">EXECUTE</div></div>
+    <div class="ses-stat"><div class="ses-stat-val ca" id="ses-s-watch">0</div><div class="ses-stat-lbl">WATCH</div></div>
+    <div class="ses-stat"><div class="ses-stat-val" id="ses-s-scan" style="color:var(--t1)">0</div><div class="ses-stat-lbl">SCAN</div></div>
+    <div class="ses-stat"><div class="ses-stat-val cg" id="ses-s-long">0</div><div class="ses-stat-lbl">LONG</div></div>
+    <div class="ses-stat"><div class="ses-stat-val cr" id="ses-s-short">0</div><div class="ses-stat-lbl">SHORT</div></div>
+    <div class="ses-stat"><div class="ses-stat-val cb" id="ses-s-highconf">0</div><div class="ses-stat-lbl">HIGH CONF</div></div>
+    <div class="ses-stat"><div class="ses-stat-val cg" id="ses-s-win" style="font-size:10px">—</div><div class="ses-stat-lbl">WIN RATE</div></div>
+    <div class="ses-stat"><div class="ses-stat-val" id="ses-s-kz" style="color:#f0b429;font-size:9px;letter-spacing:0">—</div><div class="ses-stat-lbl">KILL ZONE</div></div>
+  </div>
+
+  <div id="ses-cards"></div>
+  <div id="ses-empty">
+    <div style="font-size:32px;opacity:.2">⚡</div>
+    <div style="font-size:10px;letter-spacing:1px">NO SIGNALS MATCH FILTER</div>
+    <div style="font-size:8px;color:var(--t2);margin-top:4px">Try SCAN filter or load a date with ⬇ LOAD DATE</div>
+  </div>
+  </div><!-- /tp-sestocks -->
+
   </div><!-- /ta -->
 </div><!-- /center -->
 
 <!-- RIGHT PANE -->
-<div class="pn" id="right">
-  <div class="ph"><span class="pht">MACRO CONTEXT</span><span class="bd bm" id="macro-badge">WAIT</span></div>
-  <div class="mi"><div><div class="min">NIFTY SPOT</div><div class="miv ca" id="rp-nifty">—</div></div><div style="text-align:right"><div class="mic ca" id="rp-nifty-chg">Waiting...</div><div class="mit" id="rp-nifty-lbl">Waiting for index state</div></div></div>
-  <div class="mi"><div><div class="min">INDIA VIX</div><div class="miv ca" id="rp-vix">—</div></div><div style="text-align:right"><div class="mic ca" id="rp-vix-chg">Waiting...</div><div class="mit ca" id="rp-vix-lbl">Waiting for volatility</div></div></div>
-  <div class="mi"><div><div class="min">FII CASH</div><div class="miv ca" id="rp-fii">—</div></div><div style="text-align:right"><div class="mic ca" id="rp-fii-lbl">Waiting...</div><div class="mit" id="rp-dii">DII —</div></div></div>
-  <div class="mi"><div><div class="min">PCR / OI BIAS</div><div class="miv ca" id="rp-pcrv">WAIT</div></div><div style="text-align:right"><div class="mic ca" id="rp-pcrchg">PCR —</div><div class="mit ca" id="rp-pcrlbl">Waiting for OI state</div></div></div>
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid var(--b1)">
-    <div style="padding:7px 10px;border-right:1px solid var(--b1)">
-      <div class="min">US 10Y</div><div style="font-size:13px;font-weight:700" class="ca" id="rp-us10y">—</div><div class="mit ca" id="rp-us10y-chg">Waiting...</div>
-    </div>
-    <div style="padding:7px 10px;border-right:1px solid var(--b1)">
-      <div class="min">DXY</div><div style="font-size:13px;font-weight:700" class="cr" id="rp-dxy">—</div><div class="mit cr" id="rp-dxy-chg">Waiting...</div>
-    </div>
-    <div style="padding:7px 10px">
-      <div class="min">CRUDE</div><div style="font-size:13px;font-weight:700" class="cg" id="rp-crude">—</div><div class="mit" id="rp-crude-chg">Waiting...</div>
+<div class="pn" id="right" style="flex-direction:row">
+
+  <!-- Collapsed right strip — always visible, click to expand -->
+  <div id="right-strip" onclick="toggleRightPanel()" title="Click to expand MACRO CONTEXT">
+    <div id="rs-dot"></div>
+    <div id="rs-tally" style="color:var(--t2);margin-top:4px">—/5</div>
+    <div style="width:20px;height:1px;background:var(--b1);margin:2px 0;flex-shrink:0"></div>
+    <div id="rs-nifty" class="rs-val">—</div>
+    <div class="rs-metric">NIFTY</div>
+    <div style="width:20px;height:1px;background:var(--b1);margin:2px 0;flex-shrink:0"></div>
+    <div id="rs-vix" class="rs-val" style="color:var(--am)">—</div>
+    <div class="rs-metric">VIX</div>
+    <div style="width:20px;height:1px;background:var(--b1);margin:2px 0;flex-shrink:0"></div>
+    <div id="rs-pcr" class="rs-val" style="color:var(--bl)">—</div>
+    <div class="rs-metric">PCR</div>
+    <div style="margin-top:auto;padding-bottom:4px">
+      <div class="rs-label-rotate" style="color:var(--t2);opacity:.5">MACRO</div>
     </div>
   </div>
 
-  <div style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column">
-  <div class="ph" style="margin-top:0;flex-shrink:0"><span class="pht" id="rp-hd">INTRADAY PICKS</span><span class="bd bg">LIVE RANKED</span></div>
+  <!-- Full macro content — slides in/out -->
+  <div id="right-content">
+  <!-- Macro Header — gate-state reactive -->
+  <div id="rp-header" style="display:flex;align-items:center;justify-content:space-between;padding:0 12px;height:38px;flex-shrink:0;background:linear-gradient(180deg,var(--s3),var(--s2));border-bottom:1px solid var(--b1);transition:background .5s">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div id="rp-state-dot" style="width:8px;height:8px;border-radius:50%;background:var(--t2);transition:background .4s,box-shadow .4s;flex-shrink:0"></div>
+      <div>
+        <div style="font-size:8px;font-weight:700;letter-spacing:2px;color:var(--t1)">MACRO CONTEXT</div>
+        <div style="font-size:7px;color:var(--t2);letter-spacing:.5px;margin-top:1px" id="rp-state-sub">LOADING...</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+      <span id="rp-gate-tally" style="font-size:12px;font-weight:800;font-family:var(--fh);color:var(--t2);line-height:1">—/5</span>
+      <span class="bd bm" id="macro-badge" style="font-size:6.5px;padding:1px 6px;border-radius:2px;letter-spacing:.5px">WAIT</span>
+    </div>
+  </div>
+
+  <!-- Macro key metrics — 2×2 grid for compact density -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--b1)">
+    <div class="mi" style="border-right:1px solid var(--b1);border-bottom:none">
+      <div><div class="min">NIFTY</div><div class="miv ca" id="rp-nifty">—</div></div>
+      <div style="text-align:right"><div class="mic ca" id="rp-nifty-chg">—</div><div class="mit" id="rp-nifty-lbl">spot</div></div>
+    </div>
+    <div class="mi" style="border-bottom:none">
+      <div><div class="min">INDIA VIX</div><div class="miv ca" id="rp-vix">—</div></div>
+      <div style="text-align:right"><div class="mic ca" id="rp-vix-chg">—</div><div class="mit ca" id="rp-vix-lbl">vol</div></div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--b1)">
+    <div class="mi" style="border-right:1px solid var(--b1);border-bottom:none">
+      <div><div class="min">FII NET</div><div class="miv ca" id="rp-fii">—</div></div>
+      <div style="text-align:right"><div class="mic ca" id="rp-fii-lbl">—</div><div class="mit" id="rp-dii">DII —</div></div>
+    </div>
+    <div class="mi" style="border-bottom:none">
+      <div><div class="min">PCR</div><div class="miv ca" id="rp-pcrv">—</div></div>
+      <div style="text-align:right"><div class="mic ca" id="rp-pcrchg">—</div><div class="mit ca" id="rp-pcrlbl">oi bias</div></div>
+    </div>
+  </div>
+
+  <!-- Global markets — compact row -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid var(--b1);background:var(--s1)">
+    <div style="padding:7px 8px;border-right:1px solid var(--b1)">
+      <div class="min" style="margin-bottom:3px">US 10Y</div>
+      <div style="font-size:11px;font-weight:700;font-family:var(--fh);letter-spacing:-.2px" class="ca" id="rp-us10y">—</div>
+      <div class="mit" style="color:var(--t2)" id="rp-us10y-chg">—</div>
+    </div>
+    <div style="padding:7px 8px;border-right:1px solid var(--b1)">
+      <div class="min" style="margin-bottom:3px">DXY</div>
+      <div style="font-size:11px;font-weight:700;font-family:var(--fh);letter-spacing:-.2px" class="cr" id="rp-dxy">—</div>
+      <div class="mit" style="color:var(--t2)" id="rp-dxy-chg">—</div>
+    </div>
+    <div style="padding:7px 8px">
+      <div class="min" style="margin-bottom:3px">CRUDE</div>
+      <div style="font-size:11px;font-weight:700;font-family:var(--fh);letter-spacing:-.2px" class="cg" id="rp-crude">—</div>
+      <div class="mit" style="color:var(--t2)" id="rp-crude-chg">—</div>
+    </div>
+  </div>
+
+  <div style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:0 12px;height:30px;flex-shrink:0;background:var(--s2);border-bottom:1px solid var(--b1)">
+    <span style="font-size:8px;font-weight:700;letter-spacing:1.5px;color:var(--t1)" id="rp-hd">INTRADAY PICKS</span>
+    <span class="bd bg" style="font-size:6.5px;padding:1px 6px;border-radius:2px;letter-spacing:.5px">LIVE RANKED</span>
+  </div>
   <div id="rp-picks" class="rpicks" style="flex-shrink:0"></div>
 
-  <div class="ph" style="margin-top:0;flex-shrink:0"><span class="pht">SESSION CHECKLIST (MANUAL)</span><span class="bd bm" id="cl-prog">5 / 8</span></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:0 12px;height:30px;flex-shrink:0;background:var(--s2);border-top:1px solid var(--b1);border-bottom:1px solid var(--b1)">
+    <span style="font-size:8px;font-weight:700;letter-spacing:1.5px;color:var(--t1)">SESSION CHECKLIST</span>
+    <span class="bd bm" id="cl-prog" style="font-size:6.5px;padding:1px 6px;border-radius:2px;letter-spacing:.5px">5 / 8</span>
+  </div>
   <div class="cl" id="cl">
     <div class="ci done" onclick="togCI(this)"><div class="cibox">✓</div><div class="cit">Check FII/DII data from NSE participant OI</div></div>
     <div class="ci done" onclick="togCI(this)"><div class="cibox">✓</div><div class="cit">Option chain — identify OI walls both sides</div></div>
@@ -1827,7 +2514,8 @@ entry_time    strike  type  entry  max   exit  return%
     <div class="ci" onclick="togCI(this)"><div class="cibox"></div><div class="cit">Set position size using VIX table (VIX 13 → full)</div></div>
   </div>
   </div><!-- /scrollable wrapper -->
-</div>
+  </div><!-- /right-content -->
+</div><!-- /right -->
 
 </div><!-- /grid -->
 
@@ -2227,6 +2915,7 @@ function updateVerdict(){
   const sn=document.getElementById('snum');
   sn.textContent=pass+' / 5';
   sn.className='snum '+(pass>=5?'go':pass>=3?'am':'st');
+  setTimeout(_syncStrip, 50);
   // verdict
   const vd=document.getElementById('vd');
   const vw=document.getElementById('vword');
@@ -2268,6 +2957,49 @@ function sw(name,btn){
   const tp=document.getElementById('tp-'+name);
   if(tp)tp.classList.add('on');
   if(name==='backtest') setTimeout(bt2Run, 100);
+  // Keep gate panel state as-is when switching tabs
+}
+
+let _gateOpen = false;
+function toggleGatePanel(){
+  _gateOpen = !_gateOpen;
+  const grid    = document.getElementById('grid');
+  const strip   = document.getElementById('left-strip');
+  const content = document.getElementById('left-content');
+  const btn     = document.getElementById('side-tog');
+  if(_gateOpen){
+    if(grid)    grid.classList.add('panels-open');
+    if(strip)   strip.style.display = 'none';
+    if(content) content.style.display = 'flex';
+    if(btn){    btn.textContent = '⊟ PANELS'; btn.style.color = 'var(--bl)'; }
+  } else {
+    if(grid)    grid.classList.remove('panels-open');
+    if(strip)   strip.style.display = 'flex';
+    if(content) content.style.display = 'none';
+    if(btn){    btn.textContent = '⊞ PANELS'; btn.style.color = 'var(--t2)'; }
+  }
+}
+function toggleSidePanels(){ toggleGatePanel(); }
+
+// Sync collapsed strip pips + score ring with live gate state
+function _syncStrip(){
+  // Map gate class → pip class
+  const clsMap = {go:'go', st:'st', am:'am', wt:'wt', off:'off'};
+  [1,2,3,4,5].forEach(n=>{
+    const gate = document.getElementById('g'+n);
+    const pip  = document.getElementById('sp'+n);
+    if(!gate||!pip) return;
+    const cls = ['go','st','am','wt'].find(c=>gate.classList.contains(c)) || 'off';
+    pip.className = 'gs-pip ' + cls;
+  });
+  // Score ring
+  const snum = document.getElementById('snum');
+  const ring = document.getElementById('strip-score-ring');
+  if(!snum||!ring) return;
+  const txt = snum.textContent; // e.g. "3 / 5"
+  const pass = parseInt(txt) || 0;
+  ring.textContent = pass;
+  ring.className = 'gs-score-ring ' + (pass >= 5 ? 'go' : pass >= 3 ? '' : 'st');
 }
 
 // ═══════════════════════════════════════════════
@@ -3117,6 +3849,7 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
         try { _renderVolumeRadarLive(); } catch(e){}
         try { _renderSwingLive(); } catch(e){}
         try { _renderLivePicks(); } catch(e){}
+        try { _syncRightPanel(pass, state.verdict || ''); } catch(e){}
       })
       .catch(()=>{});
   }
@@ -3700,6 +4433,8 @@ function _topActiveStocks(stocks){
         }
         _refreshPlaybookSummary();
         _renderLivePicks();
+        // ── Sync right panel expand + state colors ──
+        if(typeof _syncRightPanel === 'function') _syncRightPanel(pass, d.verdict || '');
         break;
       }
 
@@ -4127,17 +4862,28 @@ async function bt2Run() {
   const mode = document.getElementById('bt2-mode').value;
   if(!from || !to) { notify('Select date range first'); return; }
 
-  document.getElementById('bt2-showing').textContent = 'Running...';
+  const showEl = document.getElementById('bt2-showing');
+  if(showEl) showEl.textContent = 'Running backtest…';
+  const tradesEl = document.getElementById('bt2-trades');
+  if(tradesEl) tradesEl.innerHTML = `<tr><td colspan="18" style="text-align:center;padding:20px;color:var(--t2);font-size:9px">
+    <div style="display:inline-block;border:2px solid var(--b2);border-top-color:var(--go);border-radius:50%;width:16px;height:16px;animation:spin .8s linear infinite;margin-bottom:6px"></div><br>Running backtest…
+  </td></tr>`;
+
   try {
     const r = await fetch(`${API}/api/backtest/run?from_date=${from}&to_date=${to}&mode=${mode}`, {method:'POST'});
     const d = await r.json();
-    if(d.error){ notify('Backtest error: '+d.error); return; }
+    if(d.error){ notify('Backtest error: '+d.error); if(showEl) showEl.textContent = 'Error: '+d.error; return; }
     bt2RenderResults(d);
     bt2LoadWeights();
-    notify(`Backtest: ${d.metrics?.execute_signals||0} signals · WR ${d.metrics?.win_rate_pct||0}%`);
+    const sigs = d.metrics?.execute_signals || 0;
+    const wr   = d.metrics?.win_rate_pct || 0;
+    notify(sigs ? `Backtest: ${sigs} signals · WR ${wr}%` : 'Backtest complete — no signals in range (try ⬇ DOWNLOAD DATA first)');
   } catch(e) {
-    notify('Backtest failed — check backend');
-    document.getElementById('bt2-showing').textContent = 'Error';
+    notify('Backtest failed — is backend running on port 8000?');
+    if(showEl) showEl.textContent = 'Backend offline';
+    if(tradesEl) tradesEl.innerHTML = `<tr><td colspan="18" style="text-align:center;padding:20px;color:var(--st);font-size:9px">
+      Backend not reachable. Start backend with <b>start.sh</b> then retry.
+    </td></tr>`;
   }
 }
 
@@ -4157,6 +4903,19 @@ async function bt2CalcWeights() {
 
 function bt2RenderResults(data) {
   const m = data.metrics || {};
+
+  // Empty state — no data downloaded yet
+  const tradesEl = document.getElementById('bt2-trades');
+  if(!data.trades?.length && !m.total_days) {
+    if(tradesEl) tradesEl.innerHTML = `<tr><td colspan="18" style="text-align:center;padding:24px;color:var(--t2);font-size:9px;line-height:2">
+      <div style="font-size:14px;opacity:.25;margin-bottom:8px">📊</div>
+      No historical data found for this period.<br>
+      Click <b style="color:var(--am)">⬇ DOWNLOAD DATA</b> first to fetch OHLCV history,<br>
+      then click <b style="color:var(--go)">▶ RUN BACKTEST</b> again.
+    </td></tr>`;
+    document.getElementById('bt2-showing').textContent = 'No data — download first';
+    return;
+  }
 
   // Metrics
   const set = (id, val, cls) => {
@@ -5753,6 +6512,774 @@ document.addEventListener('click', e => {
     openTVChart(el.dataset.tvsym, window._histDate || null);
   }
 });
+
+// ── RIGHT PANEL — SLIDE TOGGLE ────────────────────────────────────────────────
+let _rightOpen = false;
+
+function toggleRightPanel(forceOpen) {
+  _rightOpen = forceOpen !== undefined ? forceOpen : !_rightOpen;
+  const grid    = document.getElementById('grid');
+  const content = document.getElementById('right-content');
+  if(_rightOpen) {
+    grid.classList.add('right-open');
+    if(content) { content.style.display = 'flex'; content.style.flexDirection = 'column'; }
+  } else {
+    grid.classList.remove('right-open','right-expanded');
+    if(content) content.style.display = 'none';
+  }
+}
+
+// Start collapsed
+toggleRightPanel(false);
+
+// ── RIGHT PANEL — GATE-DRIVEN AUTO-EXPAND ─────────────────────────────────────
+function _syncRightPanel(passCount, verdict) {
+  const grid   = document.getElementById('grid');
+  const right  = document.getElementById('right');
+  const dot    = document.getElementById('rp-state-dot');
+  const tally  = document.getElementById('rp-gate-tally');
+  const badge  = document.getElementById('macro-badge');
+  const hdr    = document.getElementById('rp-header');
+  const sub    = document.getElementById('rp-state-sub');
+  if(!grid || !right) return;
+
+  const isExecute = verdict === 'EXECUTE' || passCount >= 5;
+  const isWatch   = verdict === 'WATCH'   || passCount >= 3;
+
+  // Auto-slide open when watch or execute, close when no trade
+  if(isWatch || isExecute) {
+    if(!_rightOpen) toggleRightPanel(true);
+  } else {
+    if(_rightOpen) toggleRightPanel(false);
+  }
+
+  // Further widen when all 5 pass
+  if(passCount >= 4) grid.classList.add('right-expanded');
+  else               grid.classList.remove('right-expanded');
+
+  // State class on right panel border + shadow
+  right.classList.remove('rp-execute','rp-watch','rp-notrade');
+  right.classList.add(isExecute ? 'rp-execute' : isWatch ? 'rp-watch' : 'rp-notrade');
+
+  // ── Sync collapsed strip values ──────────────────────────────────────
+  const rsDot   = document.getElementById('rs-dot');
+  const rsTally = document.getElementById('rs-tally');
+  const rsNifty = document.getElementById('rs-nifty');
+  const rsVix   = document.getElementById('rs-vix');
+  const rsPcr   = document.getElementById('rs-pcr');
+  const stateColor = isExecute ? 'var(--go)' : isWatch ? 'var(--am)' : 'var(--st)';
+  if(rsDot) {
+    rsDot.style.background  = isExecute ? 'var(--go)' : isWatch ? 'var(--am)' : 'var(--st)';
+    rsDot.style.boxShadow   = isExecute ? '0 0 10px rgba(0,232,122,.8)' : isWatch ? '0 0 6px rgba(255,185,0,.5)' : 'none';
+  }
+  if(rsTally) { rsTally.textContent = passCount+'/5'; rsTally.style.color = stateColor; }
+  // Pull live values from existing elements
+  const niftyEl = document.getElementById('rp-nifty');
+  const vixEl   = document.getElementById('rp-vix');
+  const pcrEl   = document.getElementById('rp-pcrv');
+  if(rsNifty && niftyEl) { rsNifty.textContent = (niftyEl.textContent||'—').replace(/,/g,'').slice(0,5); rsNifty.style.color = niftyEl.classList.contains('cg')?'var(--go)':niftyEl.classList.contains('cr')?'var(--st)':'var(--am)'; }
+  if(rsVix   && vixEl)   { rsVix.textContent   = vixEl.textContent||'—'; rsVix.style.color = vixEl.classList.contains('cg')?'var(--go)':vixEl.classList.contains('cr')?'var(--st)':'var(--am)'; }
+  if(rsPcr   && pcrEl)   { rsPcr.textContent   = pcrEl.textContent||'—'; rsPcr.style.color = pcrEl.classList.contains('cg')?'var(--go)':pcrEl.classList.contains('cr')?'var(--st)':'var(--am)'; }
+
+  // Pulsing state dot
+  if(dot) {
+    if(isExecute)    { dot.style.background='var(--go)'; dot.style.boxShadow='0 0 10px rgba(0,232,122,.8)'; }
+    else if(isWatch) { dot.style.background='var(--am)'; dot.style.boxShadow='0 0 6px rgba(255,185,0,.5)'; }
+    else             { dot.style.background='var(--st)'; dot.style.boxShadow='none'; }
+  }
+
+  // Gate tally counter
+  if(tally) {
+    tally.textContent = passCount + '/5';
+    tally.style.color = isExecute ? 'var(--go)' : isWatch ? 'var(--am)' : 'var(--st)';
+  }
+
+  // State subtitle
+  if(sub) {
+    sub.textContent = isExecute ? 'ALL GATES CLEAR — EXECUTE' :
+                      isWatch   ? `${passCount} GATES PASS — WATCH` :
+                                  `${passCount} GATES — STAND DOWN`;
+    sub.style.color = isExecute ? 'var(--go)' : isWatch ? 'var(--am)' : 'var(--st)';
+  }
+
+  // Verdict badge
+  if(badge) {
+    badge.textContent = isExecute ? 'EXECUTE' : isWatch ? 'WATCH' : 'NO TRADE';
+    badge.className   = 'bd ' + (isExecute ? 'bg' : isWatch ? 'ba' : 'br');
+  }
+
+  // Header background — subtle tint based on state
+  if(hdr) {
+    hdr.style.background = isExecute
+      ? 'linear-gradient(180deg,rgba(0,232,122,.12),var(--s2))'
+      : isWatch
+      ? 'linear-gradient(180deg,rgba(255,185,0,.09),var(--s2))'
+      : 'linear-gradient(180deg,var(--s3),var(--s2))';
+  }
+}
+
+// ── SIGNAL ENGINE v2 ─────────────────────────────────────────────────────────
+function _updateSignalEngine() {
+  const stocks  = (window._lastStocks || []).filter(s => s && s.symbol && s.symbol !== 'BANKNIFTY');
+  const chain   = window._lastChain  || {};
+  const macro   = window._lastMacro  || {};
+  const gateS   = window._lastGateSummary || {};
+  if(!stocks.length && !chain.pcr) return;
+
+  // ── 1. Multi-Factor Score ─────────────────────────────────────────────────
+  const vwapPct  = window._lastVwapAbove === true ? 100 : window._lastVwapAbove === false ? 0 : 50;
+  const pcr      = Number(chain.pcr || 1);
+  const pcrPct   = Math.min(100, Math.max(0, (pcr - 0.5) / 1.0 * 100));
+  const avgOI    = stocks.length ? stocks.reduce((a,s) => a + Math.abs(Number(s.oi_chg_pct||0)), 0) / stocks.length : 0;
+  const oiPct    = Math.min(100, avgOI * 5);
+  const avgVol   = stocks.length ? stocks.reduce((a,s) => a + Number(s.vol_ratio||1), 0) / stocks.length : 1;
+  const volPct   = Math.min(100, (avgVol - 1) / 2 * 100);
+  const passCount = Number(gateS.pass_count || 0);
+  const gatePct  = passCount / 5 * 100;
+  const atmStrikes = chain.strikes || [];
+  const atm      = Number(chain.atm || 0);
+  const atmRow   = atmStrikes.find ? atmStrikes.find(s => s.strike === atm) : null;
+  const callIV   = atmRow ? Number(atmRow.call_iv || 0) : 0;
+  const putIV    = atmRow ? Number(atmRow.put_iv  || 0) : 0;
+  const ivEdgePct = callIV && putIV ? Math.min(100, Math.max(0, 50 + (putIV - callIV) * 5)) : 50;
+
+  const mfs = Math.round(
+    vwapPct  * 0.20 + pcrPct  * 0.15 + oiPct  * 0.15 +
+    volPct   * 0.15 + gatePct * 0.25 + ivEdgePct * 0.10
+  );
+
+  const mfsColor  = mfs >= 70 ? 'var(--go)' : mfs >= 45 ? 'var(--am)' : 'var(--st)';
+  const mfsLabel  = mfs >= 70 ? 'STRONG EDGE' : mfs >= 45 ? 'MODERATE EDGE' : 'WEAK / WAIT';
+  const mfsTip    = mfs >= 70 ? 'Market conditions aligned — all major factors bullish.'
+                  : mfs >= 45 ? 'Mixed signals — trade selectively on best setups.'
+                  : 'Low edge — stand aside or reduce size significantly.';
+
+  // Hero: MF score block color + update
+  const hMfs = document.getElementById('se-h-mfs');
+  if(hMfs) { hMfs.className = 'se-hero-block ' + (mfs >= 70 ? 'go' : mfs >= 45 ? 'am' : 'st'); }
+  const seHeroNum = document.getElementById('se-mfs-num');
+  if(seHeroNum) { seHeroNum.textContent = mfs; seHeroNum.style.color = mfsColor; }
+  const seHeroVerdict = document.getElementById('se-mfs-verdict');
+  if(seHeroVerdict) { seHeroVerdict.textContent = mfsLabel; seHeroVerdict.style.color = mfsColor; }
+
+  // Panel 1: Gauge arc (circumference 175.9, r=28)
+  const arc = document.getElementById('se-gauge-arc');
+  if(arc) {
+    arc.style.strokeDashoffset = (175.9 - 175.9 * mfs / 100).toFixed(2);
+    arc.style.stroke = mfsColor;
+  }
+  const gaugeNum = document.getElementById('se-gauge-num');
+  if(gaugeNum) { gaugeNum.textContent = mfs; gaugeNum.setAttribute('fill', mfsColor); }
+  const factVerdict = document.getElementById('se-factor-verdict');
+  if(factVerdict) { factVerdict.textContent = mfsLabel; factVerdict.style.color = mfsColor; }
+  const factTip = document.getElementById('se-factor-tip');
+  if(factTip) factTip.textContent = mfsTip;
+
+  // Factor bars + percentage text
+  const _fb = (bid, vid, pct, col) => {
+    const b = document.getElementById(bid); if(b) { b.style.width = Math.round(pct) + '%'; b.style.background = col; }
+    const v = document.getElementById(vid); if(v) v.textContent = Math.round(pct) + '%';
+  };
+  _fb('sfb-vwap','sfv-vwap', vwapPct,   vwapPct >= 50  ? 'var(--go)' : 'var(--st)');
+  _fb('sfb-pcr', 'sfv-pcr',  pcrPct,    pcrPct  >= 60  ? 'var(--go)' : pcrPct >= 35 ? 'var(--am)' : 'var(--st)');
+  _fb('sfb-oi',  'sfv-oi',   oiPct,     oiPct   >= 50  ? 'var(--am)' : 'var(--t2)');
+  _fb('sfb-vol', 'sfv-vol',  volPct,    volPct  >= 50  ? 'var(--go)' : 'var(--t2)');
+  _fb('sfb-gate','sfv-gate', gatePct,   gatePct >= 60  ? 'var(--go)' : gatePct >= 40 ? 'var(--am)' : 'var(--st)');
+  _fb('sfb-iv',  'sfv-iv',   ivEdgePct, 'var(--pu)');
+
+  // ── 2. Order Flow Imbalance ───────────────────────────────────────────────
+  let totalBid = 0, totalAsk = 0, ofiRows = [];
+  stocks.forEach(s => {
+    const bid = Number(s.bid || 0), ask = Number(s.ask || 0);
+    if(bid || ask) {
+      totalBid += bid; totalAsk += ask;
+      ofiRows.push({sym: s.symbol, bid, ask, imb: bid + ask ? (bid - ask) / (bid + ask) : 0});
+    }
+  });
+
+  const nfBid = Number(macro.nifty_bid || 0), nfAsk = Number(macro.nifty_ask || 0);
+  const nfBidEl = document.getElementById('se-nf-bid'); if(nfBidEl) nfBidEl.textContent = nfBid ? nfBid.toFixed(2) : '—';
+  const nfAskEl = document.getElementById('se-nf-ask'); if(nfAskEl) nfAskEl.textContent = nfAsk ? nfAsk.toFixed(2) : '—';
+  const nfSpdEl = document.getElementById('se-nf-spd'); if(nfSpdEl) nfSpdEl.textContent = (nfBid && nfAsk) ? (nfAsk - nfBid).toFixed(2) : '—';
+
+  const bidTotal = totalBid + totalAsk || 1;
+  const bidPct = Math.round(totalBid / bidTotal * 100);
+  const askPct = 100 - bidPct;
+  const bidBar = document.getElementById('ofi-bid-bar'); if(bidBar) bidBar.style.width = bidPct + '%';
+  const askBar = document.getElementById('ofi-ask-bar'); if(askBar) askBar.style.width = askPct + '%';
+  const bpEl = document.getElementById('ofi-bid-pct'); if(bpEl) bpEl.textContent = bidPct + '% BID';
+  const apEl = document.getElementById('ofi-ask-pct'); if(apEl) apEl.textContent = askPct + '% ASK';
+  // Hero OFI center label
+  const ofiHeroLbl = document.getElementById('ofi-hero-lbl');
+  if(ofiHeroLbl) {
+    const diff = bidPct - askPct;
+    ofiHeroLbl.textContent = diff > 5 ? 'BUY PRESSURE' : diff < -5 ? 'SELL PRESSURE' : 'BALANCED';
+    ofiHeroLbl.style.color = diff > 5 ? 'var(--go)' : diff < -5 ? 'var(--st)' : 'var(--t1)';
+  }
+
+  // OFI stock list (Panel 3)
+  ofiRows.sort((a,b) => Math.abs(b.imb) - Math.abs(a.imb));
+  const ofiList = document.getElementById('se-ofi-list');
+  if(ofiList) {
+    ofiList.innerHTML = ofiRows.slice(0,7).map(r => {
+      const pct = Math.round(r.imb * 100);
+      const col = pct > 10 ? 'var(--go)' : pct < -10 ? 'var(--st)' : 'var(--am)';
+      const lbl = pct >= 0 ? `+${pct}%` : `${pct}%`;
+      const barW = Math.min(100, Math.abs(pct) * 2);
+      return `<div class="vlbr">`
+           + `<span class="vlbr-sym">${r.sym}</span>`
+           + `<div class="vlbr-bar"><div class="vlbr-fill" style="width:${barW}%;background:${col}"></div></div>`
+           + `<span class="vlbr-val" style="color:${col}">${lbl}</span></div>`;
+    }).join('') || '<div style="color:var(--t2);font-size:8px;padding:6px 0">No bid/ask data available</div>';
+  }
+
+  // ── 3. Volume Surge Leaderboard (Panel 2) ────────────────────────────────
+  const volSorted = [...stocks].filter(s => s.vol_ratio != null)
+    .sort((a,b) => Number(b.vol_ratio) - Number(a.vol_ratio)).slice(0,10);
+  const maxVol = volSorted.length ? Math.max(Number(volSorted[0].vol_ratio), 1) : 1;
+  const volLb = document.getElementById('se-vol-lb');
+  if(volLb) {
+    volLb.innerHTML = volSorted.map((s,i) => {
+      const vr = Number(s.vol_ratio);
+      const pct = Math.round(vr / maxVol * 100);
+      const col = vr >= 3 ? 'var(--go)' : vr >= 1.5 ? 'var(--am)' : 'var(--t2)';
+      return `<div class="vlbr">`
+           + `<span class="vlbr-rank">${i+1}</span>`
+           + `<span class="vlbr-sym">${s.symbol}</span>`
+           + `<div class="vlbr-bar"><div class="vlbr-fill" style="width:${pct}%;background:${col}"></div></div>`
+           + `<span class="vlbr-val" style="color:${col}">${vr.toFixed(1)}x</span></div>`;
+    }).join('') || '<div style="color:var(--t2);font-size:8px;padding:6px 0">No volume data</div>';
+  }
+
+  // ── 4. RS Momentum Heatmap (Panel 4) ─────────────────────────────────────
+  const rsGrid = document.getElementById('se-rs-grid');
+  if(rsGrid) {
+    const rsSorted = [...stocks].filter(s => s.rs_pct != null)
+      .sort((a,b) => Number(b.rs_pct) - Number(a.rs_pct));
+    rsGrid.innerHTML = rsSorted.slice(0,20).map(s => {
+      const rs = Number(s.rs_pct);
+      const cls = rs > 1.5 ? 'rhgo' : rs < -1.5 ? 'rhst' : rs > 0.5 ? 'rham' : 'rhnt';
+      const sign = rs >= 0 ? '+' : '';
+      return `<div class="rshm-cell ${cls}"><span class="rsc-sym">${s.symbol}</span>${sign}${rs.toFixed(1)}%</div>`;
+    }).join('') || '<div style="color:var(--t2);font-size:8px">No RS data</div>';
+  }
+
+  // ── 5. PCR Arc + Hero + Max Pain (Panel 5) ───────────────────────────────
+  const pcrColor  = pcr >= 1.2 ? 'var(--go)' : pcr <= 0.8 ? 'var(--st)' : 'var(--am)';
+  const pcrInterpTxt = pcr >= 1.3 ? 'BULLISH — Put writers dominant' :
+                       pcr >= 1.1 ? 'SLIGHT BULLISH — Support building' :
+                       pcr >= 0.9 ? 'NEUTRAL — Balanced OI' :
+                       pcr >= 0.7 ? 'SLIGHT BEARISH — Call writers active' :
+                                    'BEARISH — Call writers dominant';
+
+  // Hero PCR
+  const pcrBig = document.getElementById('se-pcr-big');
+  if(pcrBig) { pcrBig.textContent = pcr.toFixed(2); pcrBig.style.color = pcrColor; }
+  const pcrInterp = document.getElementById('se-pcr-interp');
+  if(pcrInterp) pcrInterp.textContent = pcrInterpTxt.split(' — ')[0];
+
+  // Panel 5 PCR arc (circumference 138.2, r=22)
+  const pcrArc = document.getElementById('se-pcr-arc');
+  if(pcrArc) {
+    pcrArc.style.strokeDashoffset = (138.2 - 138.2 * Math.min(1, pcrPct / 100)).toFixed(2);
+    pcrArc.style.stroke = pcrColor;
+  }
+  const pcrArcTxt = document.getElementById('se-pcr-arc-txt');
+  if(pcrArcTxt) { pcrArcTxt.textContent = pcr.toFixed(2); pcrArcTxt.setAttribute('fill', pcrColor); }
+  const pcrBig2 = document.getElementById('se-pcr-big2');
+  if(pcrBig2) { pcrBig2.textContent = pcr.toFixed(2); pcrBig2.style.color = pcrColor; }
+  const pcrInterp2 = document.getElementById('se-pcr-interp2');
+  if(pcrInterp2) pcrInterp2.textContent = pcrInterpTxt;
+
+  // Max Pain — Hero block
+  const mp   = Number(chain.max_pain || 0);
+  const spot = Number(macro.nifty || 0);
+  const mpValEl = document.getElementById('se-mp-val');
+  const mpDistEl = document.getElementById('se-mp-dist');
+  if(mpValEl && mp) {
+    mpValEl.textContent = mp.toLocaleString('en-IN');
+    mpValEl.style.color = 'var(--am)';
+  }
+  if(mpDistEl && mp && spot) {
+    const dist = ((spot - mp) / mp * 100);
+    const sign = dist >= 0 ? '+' : '';
+    mpDistEl.textContent = `${sign}${dist.toFixed(2)}% FROM SPOT`;
+    mpDistEl.style.color = Math.abs(dist) < 0.5 ? 'var(--go)' : Math.abs(dist) < 1 ? 'var(--am)' : 'var(--st)';
+  }
+
+  // Max Pain zone bar (Panel 5)
+  if(mp && spot) {
+    const low = mp * 0.97, high = mp * 1.03;
+    const spotPct = Math.min(100, Math.max(0, (spot - low) / (high - low) * 100));
+    const mpPct   = Math.min(100, Math.max(0, (mp   - low) / (high - low) * 100));
+    const needle  = document.getElementById('se-mp-needle');
+    const fill    = document.getElementById('se-mp-fill');
+    const lowEl   = document.getElementById('se-mp-low');
+    const highEl  = document.getElementById('se-mp-high');
+    if(needle) needle.style.left = spotPct + '%';
+    if(fill)   { fill.style.left = Math.min(spotPct, mpPct) + '%'; fill.style.width = Math.abs(spotPct - mpPct) + '%'; }
+    if(lowEl)  lowEl.textContent = Math.round(low).toLocaleString('en-IN');
+    if(highEl) highEl.textContent = Math.round(high).toLocaleString('en-IN');
+  }
+
+  // ── 6. IV Dashboard (Panel 5) ────────────────────────────────────────────
+  const skew = putIV && callIV ? putIV - callIV : null;
+  // Hero IV skew
+  const skewEl  = document.getElementById('se-iv-skew');
+  const skewLbl = document.getElementById('se-iv-skew-lbl');
+  if(skewEl && skew !== null) {
+    skewEl.textContent = (skew >= 0 ? '+' : '') + skew.toFixed(1);
+    skewEl.style.color = skew > 3 ? 'var(--st)' : skew < -2 ? 'var(--go)' : 'var(--pu)';
+  }
+  if(skewLbl) {
+    skewLbl.textContent = skew === null ? 'PUT − CALL' :
+                          skew > 3  ? 'FEAR ELEVATED' :
+                          skew > 1  ? 'SLIGHT CAUTION' :
+                          skew < -2 ? 'SQUEEZE RISK' : 'IV BALANCED';
+  }
+  if(atmRow) {
+    const cIVEl  = document.getElementById('se-call-iv');  if(cIVEl) { cIVEl.textContent = callIV ? callIV.toFixed(1) : '—'; }
+    const pIVEl  = document.getElementById('se-put-iv');   if(pIVEl) { pIVEl.textContent = putIV  ? putIV.toFixed(1)  : '—'; }
+    const cLblEl = document.getElementById('se-call-iv-lbl'); if(cLblEl) cLblEl.textContent = atm ? atm.toLocaleString('en-IN') + ' CE' : 'ATM CE';
+    const pLblEl = document.getElementById('se-put-iv-lbl'); if(pLblEl) pLblEl.textContent = atm ? atm.toLocaleString('en-IN') + ' PE' : 'ATM PE';
+  }
+
+  // ── 7. Gate Pass Rate (Panel 6) ──────────────────────────────────────────
+  if(stocks.length) {
+    const total = stocks.length;
+    const gateCounts = [0,0,0,0,0];
+    stocks.forEach(s => { for(let g=1;g<=5;g++) if(s['g'+g]==='go') gateCounts[g-1]++; });
+    const allPass = stocks.filter(s => [1,2,3,4,5].every(g => s['g'+g]==='go')).length;
+    for(let g=1;g<=5;g++) {
+      const pct = Math.round(gateCounts[g-1] / total * 100);
+      const col = pct >= 60 ? 'var(--go)' : pct >= 30 ? 'var(--am)' : 'var(--st)';
+      const bar = document.getElementById('gpr'+g); if(bar) { bar.style.width = pct + '%'; bar.style.background = col; }
+      const val = document.getElementById('gprv'+g); if(val) { val.textContent = pct + '%'; val.style.color = col; }
+    }
+    const allPct = Math.round(allPass / total * 100);
+    const allCol = allPct >= 30 ? 'var(--go)' : allPct >= 15 ? 'var(--am)' : 'var(--st)';
+    const allBar = document.getElementById('gpr-all'); if(allBar) { allBar.style.width = allPct + '%'; allBar.style.background = allCol; }
+    const allVal = document.getElementById('gprv-all'); if(allVal) { allVal.textContent = allPct + '%'; allVal.style.color = allCol; }
+  }
+}
+
+// ── SE STOCKS ─────────────────────────────────────────────────────────────────
+let _sesCurrentFilter = 'all';
+let _sesCards = [];  // last computed cards for filter re-apply
+
+function sesFilter(type, btn) {
+  _sesCurrentFilter = type;
+  // Update button states
+  document.querySelectorAll('.ses-filter-btn').forEach(b => b.classList.remove('on'));
+  if(btn) btn.classList.add('on');
+  // Re-render from cached data
+  _renderSESCards();
+}
+
+function _sesKillZone() {
+  // Returns current IST kill zone label
+  const now = new Date();
+  const ist = new Date(now.toLocaleString('en-US', {timeZone:'Asia/Kolkata'}));
+  const h = ist.getHours(), m = ist.getMinutes();
+  const mins = h * 60 + m;
+  if(mins >= 555 && mins < 600) return {lbl:'OPEN DRIVE', cls:'kzd'};   // 9:15–10:00
+  if(mins >= 600 && mins < 660) return {lbl:'TREND CONT', cls:'kzt'};   // 10:00–11:00
+  if(mins >= 660 && mins < 720) return {lbl:'MIDDAY DRIFT', cls:'kzr'}; // 11:00–12:00
+  if(mins >= 780 && mins < 840) return {lbl:'EXPIRY PUSH', cls:'kze'};  // 13:00–14:00
+  if(mins >= 840 && mins < 900) return {lbl:'CLOSE RUN', cls:'kzd'};    // 14:00–15:00
+  return {lbl:'OFF ZONE', cls:''};
+}
+
+let _sesHistoryMode = false; // true when showing backfilled history
+let _sesTradeMode   = 'intraday'; // 'intraday' | 'positional'
+let _sesRawStocks   = [];  // raw API stocks for mode re-render
+
+function sesModeSwitch(mode, btn) {
+  _sesTradeMode = mode;
+  document.getElementById('ses-mode-intra').className = 'ses-filter-btn' + (mode==='intraday'?' on':'');
+  document.getElementById('ses-mode-pos').className   = 'ses-filter-btn' + (mode==='positional'?' on':'');
+  document.getElementById('ses-mode-intra').style.cssText = mode==='intraday'
+    ? 'border-color:var(--pu-b);background:var(--pu-b);color:var(--pu)'
+    : 'border-color:var(--pu-b);color:var(--pu)';
+  document.getElementById('ses-mode-pos').style.cssText = mode==='positional'
+    ? 'border-color:var(--pu-b);background:var(--pu-b);color:var(--pu)'
+    : 'border-color:var(--pu-b);color:var(--pu)';
+  if(_sesHistoryMode && _sesRawStocks.length) _sesApplyHistoryData(_sesRawStocks);
+}
+
+function _updateSEStocks() {
+  if(_sesHistoryMode) return; // history mode — don't overwrite with live data
+  const stocks  = (window._lastStocks || []).filter(s => s && s.symbol && s.symbol !== 'BANKNIFTY');
+  const macro   = window._lastMacro  || {};
+  const gateS   = window._lastGateSummary || {};
+  const kz      = _sesKillZone();
+
+  if(!stocks.length) {
+    document.getElementById('ses-empty').style.display = 'flex';
+    document.getElementById('ses-cards').innerHTML = '';
+    return;
+  }
+  document.getElementById('ses-empty').style.display = 'none';
+
+  const kzActive = kz.lbl !== 'OFF ZONE';
+
+  _sesCards = stocks.map(s => {
+    const sym      = s.symbol;
+    const price    = Number(s.ltp || s.price || 0);
+    const chgPct   = Number(s.chg_pct || s.chg || 0);
+    const volRatio = Number(s.vol_ratio || 1);
+    const oiChg    = Number(s.oi_chg_pct || 0);
+    const rsPct    = Number(s.rs_pct || 0);
+    const bid      = Number(s.bid || 0);
+    const ask      = Number(s.ask || 0);
+    const atr      = price > 0 ? price * 0.012 : 10;
+
+    const gates         = [1,2,3,4,5].map(g => s['g'+g] || 'st');
+    const gatePassCount = gates.filter(g => g === 'go').length;
+
+    const confScore = Math.round(
+      (gatePassCount / 5)             * 35 +
+      Math.min(1,(volRatio - 1) / 2)  * 20 +
+      Math.min(1, Math.abs(rsPct) / 3)* 15 +
+      Math.min(1, Math.abs(oiChg)/20) * 15 +
+      (kzActive ? 0.15 : 0)           * 100
+    );
+
+    const bullish = chgPct > 0.3 && oiChg > 0 && rsPct > 0;
+    const bearish = chgPct < -0.3 && rsPct < 0;
+    const dir     = bullish ? 'LONG' : bearish ? 'SHORT' : null;
+
+    const entryLow  = price - atr * 0.3;
+    const entryHigh = price + atr * 0.3;
+    const target    = dir === 'SHORT' ? price - atr * 2.5 : price + atr * 2.5;
+    const stop      = dir === 'SHORT' ? price + atr * 1.2 : price - atr * 1.2;
+
+    // Tiered verdict — ALL stocks shown now
+    const verdict = (gatePassCount >= 4 && dir) ? 'EXECUTE'
+                  : (gatePassCount >= 3)          ? 'WATCH'
+                  : (gatePassCount >= 1)           ? 'SCAN'
+                  : 'SCAN'; // show all
+
+    const ofiPct = bid + ask ? Math.round((bid - ask) / (bid + ask) * 100) : 0;
+
+    const rec = verdict==='EXECUTE' ? 'HIGH PROB' : verdict==='WATCH' ? 'MONITOR' : 'LOW EDGE';
+    const recColor = verdict==='EXECUTE' ? 'var(--go)' : verdict==='WATCH' ? 'var(--am)' : 'var(--t2)';
+    return { sym, price, chgPct, volRatio, oiChg, rsPct, gates, gatePassCount,
+             confScore, dir, entryLow, entryHigh, target, stop, verdict,
+             ofiPct, kz, outcome: null, pnl: null, isHistory: false,
+             trade_i: null, trade_p: null, rec, recColor };
+  });
+
+  _renderSESCards();
+  _sesSummaryBar(kz);
+}
+
+// ── History backfill via /api/dayview/stocks ──────────────────────────────────
+async function sesLoadHistory() {
+  const dateEl = document.getElementById('ses-date');
+  const date   = dateEl?.value;
+  if(!date) { notify('Pick a date first'); return; }
+
+  const btn = document.getElementById('ses-hist-btn');
+  if(btn) { btn.textContent = '⏳ LOADING…'; btn.disabled = true; }
+
+  try {
+    const r = await fetch(`${API}/api/dayview/stocks?date=${date}`);
+    const d = await r.json();
+    if(d.error) { notify('History error: ' + d.error); return; }
+
+    _sesHistoryMode = true;
+    _sesRawStocks   = d.stocks || [];
+
+    const banner = document.getElementById('ses-hist-banner');
+    if(banner) banner.style.display = 'flex';
+    const lbl = document.getElementById('ses-hist-lbl');
+    if(lbl) lbl.textContent = `HISTORY ${date} · VIX ${d.vix} · PCR ${d.pcr} · FII ${d.fii_net >= 0 ? '+' : ''}${d.fii_net} Cr`;
+    document.getElementById('ses-live-btn').style.display = 'inline-flex';
+    document.getElementById('ses-hist-btn').style.display = 'none';
+
+    // Reset filter to ALL so cards are visible
+    _sesCurrentFilter = 'all';
+    document.querySelectorAll('.ses-filter-btn').forEach(b => {
+      if(b.textContent.trim() === 'ALL') b.classList.add('on');
+      else if(!b.id?.startsWith('ses-mode') && !b.id?.startsWith('ses-live') && !b.id?.startsWith('ses-hist')) b.classList.remove('on');
+    });
+
+    _sesApplyHistoryData(_sesRawStocks);
+
+  } catch(e) {
+    notify('Failed to load history — check backend');
+  } finally {
+    if(btn) { btn.textContent = '⬇ LOAD DATE'; btn.disabled = false; }
+  }
+}
+
+function _sesApplyHistoryData(stocks) {
+  _sesCards = stocks.map(s => {
+    const g  = [s.g1, s.g2, s.g3, s.g4, s.g5];
+    const gStates       = g.map(x => (typeof x === 'object' ? x.state : x) || 'st');
+    const gatePassCount = gStates.filter(x => x === 'go').length;
+
+    const price    = s.close || 0;
+    const chgPct   = s.chg_pct || 0;
+    const volRatio = s.vol_ratio || 1;
+    const atr      = s.atr || price * 0.012;
+
+    const gScores   = g.map(x => (typeof x === 'object' ? (x.score || 50) : 50));
+    const confScore = Math.round(gScores.reduce((a,b)=>a+b,0) / 500 * 100);
+
+    // Store BOTH trades always
+    const ti = s.trade_i, tp = s.trade_p;
+
+    // Verdict from best available
+    const vi = s.verdict_i, vp = s.verdict_p;
+    const bestVerdict = vi === 'EXECUTE' || vp === 'EXECUTE' ? 'EXECUTE'
+                      : (s.pc_i >= 3 || s.pc_p >= 3) ? 'WATCH'
+                      : 'SCAN';
+
+    const dir = chgPct > 0.3 ? 'LONG' : chgPct < -0.3 ? 'SHORT' : null;
+
+    // Recommendation: which mode won, or has better expected value
+    const iWin = ti?.outcome === 'WIN', pWin = tp?.outcome === 'WIN';
+    const iPnl = ti?.pnl || 0, pPnl = tp?.pnl || 0;
+    let rec = 'SKIP', recColor = 'var(--t2)';
+    if(iWin && pWin)         { rec = iPnl >= pPnl ? 'INTRA ★' : 'POS ★';  recColor = 'var(--go)'; }
+    else if(iWin && !pWin)   { rec = 'INTRA ★';  recColor = 'var(--go)'; }
+    else if(!iWin && pWin)   { rec = 'POS ★';    recColor = 'var(--go)'; }
+    else if(!ti && !tp)      { rec = 'NO DATA';  recColor = 'var(--t2)'; }
+    else                     { rec = iPnl > pPnl ? 'INTRA' : 'POS';    recColor = 'var(--am)'; }
+    if(!ti && !tp) recColor = 'var(--t2)';
+
+    return {
+      sym: s.sym, price, chgPct, volRatio,
+      oiChg: 0, rsPct: 0,
+      gates: gStates, gatePassCount, confScore, dir,
+      verdict: bestVerdict, ofiPct: 0, kz: {lbl:'', cls:''},
+      trade_i: ti, trade_p: tp,
+      isHistory: true, lot: s.lot || 1,
+      rec, recColor,
+      // For summary/filter compat
+      entryLow: ti ? ti.entry : price, entryHigh: ti ? ti.entry : price,
+      target: ti ? ti.target : price, stop: ti ? ti.stop : price,
+      outcome: ti?.outcome || tp?.outcome || null, pnl: ti?.pnl || null,
+    };
+  });
+
+  // Sort: EXECUTE first, then by confScore desc
+  _sesCards.sort((a,b) => {
+    const vO = {EXECUTE:0,WATCH:1,SCAN:2};
+    return (vO[a.verdict]||3)-(vO[b.verdict]||3) || b.confScore-a.confScore;
+  });
+
+  _renderSESCards();
+
+  // Win rate: intra + positional side by side
+  const withI = _sesCards.filter(c => c.trade_i?.outcome);
+  const withP = _sesCards.filter(c => c.trade_p?.outcome);
+  const iWR = withI.length ? Math.round(withI.filter(c=>c.trade_i.outcome==='WIN').length/withI.length*100) : null;
+  const pWR = withP.length ? Math.round(withP.filter(c=>c.trade_p.outcome==='WIN').length/withP.length*100) : null;
+  const wrLbl = document.getElementById('ses-hist-wr-lbl');
+  if(wrLbl) {
+    const iCol = iWR>=50?'var(--go)':iWR>=35?'var(--am)':'var(--st)';
+    const pCol = pWR>=50?'var(--go)':pWR>=35?'var(--am)':'var(--st)';
+    wrLbl.innerHTML = `INTRA <b style="color:${iCol}">${iWR!=null?iWR+'%':'—'}</b> · POS <b style="color:${pCol}">${pWR!=null?pWR+'%':'—'}</b> win rate`;
+  }
+
+  _sesSummaryBar({lbl: 'HISTORY'});
+}
+
+function sesGoLive() {
+  _sesHistoryMode = false;
+  _sesRawStocks   = [];
+  const banner = document.getElementById('ses-hist-banner');
+  if(banner) banner.style.display = 'none';
+  document.getElementById('ses-live-btn').style.display = 'none';
+  document.getElementById('ses-hist-btn').style.display = 'inline-flex';
+  // Reset filter to ALL
+  _sesCurrentFilter = 'all';
+  document.querySelectorAll('.ses-filter-btn').forEach(b => {
+    if(b.textContent.trim()==='ALL') b.classList.add('on');
+    else if(!b.id?.startsWith('ses-mode')&&!b.id?.startsWith('ses-live')&&!b.id?.startsWith('ses-hist')) b.classList.remove('on');
+  });
+  _updateSEStocks();
+}
+
+function _sesSummaryBar(kz) {
+  const _sv = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+  const execN  = _sesCards.filter(c => c.verdict === 'EXECUTE').length;
+  const watchN = _sesCards.filter(c => c.verdict === 'WATCH').length;
+  const scanN  = _sesCards.filter(c => c.verdict === 'SCAN').length;
+  const longN  = _sesCards.filter(c => c.dir === 'LONG').length;
+  const shortN = _sesCards.filter(c => c.dir === 'SHORT').length;
+  const highN  = _sesCards.filter(c => c.confScore >= 70).length;
+  const withOutcome = _sesCards.filter(c => c.outcome);
+  const wins   = withOutcome.filter(c => c.outcome === 'WIN').length;
+  const winRate = withOutcome.length ? Math.round(wins / withOutcome.length * 100) : null;
+  _sv('ses-s-execute', execN);
+  _sv('ses-s-watch',   watchN);
+  _sv('ses-s-scan',    scanN);
+  _sv('ses-s-long',    longN);
+  _sv('ses-s-short',   shortN);
+  _sv('ses-s-highconf', highN);
+  _sv('ses-s-win', winRate !== null ? winRate + '%' : '—');
+  _sv('ses-s-kz', kz?.lbl || '—');
+  const updEl = document.getElementById('ses-updated');
+  if(updEl) updEl.textContent = _sesHistoryMode ? 'HISTORY' : 'LIVE ' + new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+function _renderSESCards() {
+  const cards = document.getElementById('ses-cards');
+  const empty = document.getElementById('ses-empty');
+  if(!cards) return;
+
+  const f = _sesCurrentFilter;
+  const filtered = _sesCards.filter(c => {
+    if(f === 'all')     return true;
+    if(f === 'execute') return c.verdict === 'EXECUTE';
+    if(f === 'watch')   return c.verdict === 'WATCH';
+    if(f === 'scan')    return c.verdict === 'SCAN';
+    if(f === 'long')    return c.dir === 'LONG';
+    if(f === 'short')   return c.dir === 'SHORT';
+    return true;
+  });
+
+  if(!filtered.length) {
+    cards.innerHTML = '';
+    if(empty) empty.style.display = 'flex';
+    return;
+  }
+  if(empty) empty.style.display = 'none';
+
+  // ── helpers ────────────────────────────────────────────────────────────────
+  const _oc  = oc => oc === 'WIN' ? 'win' : oc === 'LOSS' ? 'loss' : 'neut';
+  const _fmt = v  => v != null ? '₹' + v.toFixed(0) : '—';
+  const _pnlTxt = t => {
+    if(t?.pnl == null) return '';
+    const s = t.pnl >= 0 ? '+' : '';
+    return ` <span style="font-size:7px;opacity:.85">${s}${t.pnl.toFixed(1)}</span>`;
+  };
+
+  // ── trade columns: 3 td cells (entry/target/stop) + 1 result td ────────────
+  const _tradeTds = (t, isLive, price, dir, isIntra) => {
+    if(isLive && price > 0) {
+      const mult = dir === 'SHORT' ? -1 : 1;
+      const tgtPct = isIntra ? 0.03 : 0.05;
+      const slPct  = isIntra ? 0.012 : 0.02;
+      return `<td class="sc-num">${_fmt(price)}</td>
+              <td class="sc-num go">${_fmt(price*(1+mult*tgtPct))}</td>
+              <td class="sc-num st">${_fmt(price*(1-mult*slPct))}</td>
+              <td><span class="sr-res neut" style="font-size:7px">LIVE EST</span></td>`;
+    }
+    if(!t) return `<td class="sc-num dim">—</td><td class="sc-num dim">—</td><td class="sc-num dim">—</td><td></td>`;
+    const oc = t.outcome;
+    const resCls = _oc(oc);
+    const resLbl = oc ? `<span class="sr-res ${resCls}">${oc}${_pnlTxt(t)}</span>` : '<span style="color:var(--t2);font-size:7px">—</span>';
+    return `<td class="sc-num">${_fmt(t.entry)}</td>
+            <td class="sc-num go">${_fmt(t.target)}</td>
+            <td class="sc-num st">${_fmt(t.stop)}</td>
+            <td>${resLbl}</td>`;
+  };
+
+  const rows = filtered.map((c, i) => {
+    const rank     = i + 1;
+    const rankCol  = rank === 1 ? '#f0b429' : rank === 2 ? '#94a3b8' : rank === 3 ? '#cd7c3a' : 'var(--t3)';
+    const chgSign  = c.chgPct >= 0 ? '+' : '';
+    const dirColor = c.dir === 'LONG' ? 'var(--go)' : c.dir === 'SHORT' ? 'var(--st)' : 'var(--t2)';
+    const confW    = Math.min(100, Math.round(c.confScore));
+    const confCol  = confW >= 70 ? 'var(--go)' : confW >= 45 ? 'var(--am)' : 'var(--st)';
+
+    const gDots = (c.gates || []).slice(0,5).map(g =>
+      `<span class="tbl-gdot ${g==='go'?'go':g==='am'?'am':'off'}"></span>`
+    ).join('');
+
+    const vTag = c.verdict === 'EXECUTE'
+      ? `<span class="sv-chip execute">EXEC</span>`
+      : c.verdict === 'WATCH'
+      ? `<span class="sv-chip watch">WATCH</span>`
+      : `<span class="sv-chip scan">SCAN</span>`;
+
+    const dirTag = c.dir
+      ? `<span class="sv-chip dir" style="color:${dirColor};border-color:${dirColor}40">${c.dir}</span>` : '';
+
+    const rowCls = c.verdict==='EXECUTE' ? 'sr-execute' : c.verdict==='WATCH' ? 'sr-watch' : '';
+    const isLive = !c.isHistory;
+
+    const rec = c.rec || (isLive ? (c.verdict==='EXECUTE'?'HIGH PROB':c.verdict==='WATCH'?'MONITOR':'LOW EDGE') : '—');
+    const recColor = c.recColor || (isLive && c.verdict==='EXECUTE' ? 'var(--go)' : 'var(--t2)');
+
+    const tradedDate = c.isHistory && c.trade_i?.next_date ? `<div style="font-size:6px;color:var(--t3);margin-top:1px">${c.trade_i.next_date}</div>` : '';
+
+    return `<tr class="${rowCls}" onclick="openTVChart('${c.sym}')">
+  <td class="sc-rk" style="color:${rankCol};font-weight:700">${rank}</td>
+  <td class="sc-sym">
+    <div style="font-size:10px;font-weight:600;color:var(--t1)">${c.sym}</div>
+    <div style="font-size:7.5px;color:var(--t2);margin-top:1px">${c.price>0?'₹'+c.price.toFixed(1):'—'} <span style="color:${dirColor}">${chgSign}${c.chgPct.toFixed(2)}%</span></div>
+    ${tradedDate}
+  </td>
+  <td class="sc-sig">
+    <div style="display:flex;gap:3px;flex-wrap:wrap;align-items:center">${vTag}${dirTag}</div>
+    <div style="font-size:6.5px;color:var(--t2);margin-top:3px">${c.gatePassCount}/5 gates · ${c.volRatio.toFixed(1)}x vol</div>
+  </td>
+  <td class="sc-gates">${gDots}</td>
+  <td class="sc-conf">
+    <div style="font-size:9px;font-weight:600;color:${confCol}">${confW}%</div>
+    <div class="ses-conf-bar" style="margin-top:2px"><div class="ses-conf-fill" style="width:${confW}%;background:${confCol}"></div></div>
+  </td>
+  ${_tradeTds(c.trade_i, isLive, c.price, c.dir, true)}
+  ${_tradeTds(c.trade_p, isLive, c.price, c.dir, false)}
+  <td class="sc-tk sr-take" style="color:${recColor}">${rec}</td>
+</tr>`;
+  }).join('');
+
+  cards.innerHTML = `<table class="ses-tbl">
+    <thead>
+      <tr>
+        <th rowspan="2" class="sc-rk">#</th>
+        <th rowspan="2" class="sc-sym">SYMBOL</th>
+        <th rowspan="2" class="sc-sig">SIGNAL</th>
+        <th rowspan="2" class="sc-gates">GATES</th>
+        <th rowspan="2" class="sc-conf">CONF</th>
+        <th colspan="4" class="hg-intra grp-hdr">── INTRADAY ──</th>
+        <th colspan="4" class="hg-pos grp-hdr">── POSITIONAL ──</th>
+        <th rowspan="2" class="sc-tk">TAKE</th>
+      </tr>
+      <tr>
+        <th class="sc-ie hg-intra">ENTRY</th><th class="sc-it hg-intra">TARGET</th><th class="sc-is hg-intra">STOP</th><th class="sc-ir hg-intra">RESULT</th>
+        <th class="sc-pe hg-pos">ENTRY</th><th class="sc-pt hg-pos">TARGET</th><th class="sc-ps hg-pos">STOP</th><th class="sc-pr hg-pos">RESULT</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+// ── HOOK: update both Signal Engine and SE STOCKS ────────────────────────────
+(function _patchSEHook(){
+  setInterval(()=>{
+    if(document.getElementById('tp-sigengine')?.classList.contains('on')) _updateSignalEngine();
+    if(document.getElementById('tp-sestocks')?.classList.contains('on'))  _updateSEStocks();
+  }, 2000);
+
+  const origSw = window.sw;
+  if(origSw) {
+    window.sw = function(name, btn){
+      origSw(name, btn);
+      if(name === 'sigengine') setTimeout(_updateSignalEngine, 50);
+      if(name === 'sestocks')  setTimeout(_updateSEStocks, 50);
+    };
+  }
+
+  setTimeout(_updateSignalEngine, 400);
+  setTimeout(_updateSEStocks, 600);
+
+  // Init SE STOCKS date picker to yesterday
+  const sesDateEl = document.getElementById('ses-date');
+  if(sesDateEl) {
+    const yest = new Date(); yest.setDate(yest.getDate() - 1);
+    sesDateEl.value = yest.toISOString().split('T')[0];
+  }
+})();
+// ── END SIGNAL ENGINE ─────────────────────────────────────────────────────────
+
 </script>
 
 <!-- PWA Install Banner -->
