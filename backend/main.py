@@ -786,21 +786,42 @@ async def token_status():
 async def token_refresh_manual():
     """Manually trigger a Kite token refresh via Playwright headless login."""
     import asyncio as _aio
+
+    # Pre-flight: check all required credentials are present
+    missing = [k for k in ("KITE_USER_ID","KITE_PASSWORD","KITE_TOTP_SECRET","KITE_API_KEY","KITE_API_SECRET")
+               if not os.getenv(k,"").strip()]
+    if missing:
+        return JSONResponse({
+            "ok": False,
+            "msg": f"Missing env vars: {', '.join(missing)}. Add these in Railway → Variables tab and redeploy."
+        }, status_code=400)
+
     loop = _aio.get_event_loop()
     def _do():
+        import logging, io
+        # Capture auto_token log output to surface real errors
+        log_stream = io.StringIO()
+        h = logging.StreamHandler(log_stream)
+        h.setLevel(logging.ERROR)
+        logging.getLogger("auto_token").addHandler(h)
         try:
             from auto_token import refresh_token
             ok = refresh_token()
             if ok:
                 from scheduler import _apply_new_token
                 _apply_new_token()
-            return ok
+            log_stream.seek(0)
+            err = log_stream.read().strip()
+            return (ok, err or ("" if ok else "Login failed — check credentials or TOTP secret"))
         except Exception as e:
-            return str(e)
-    result = await loop.run_in_executor(None, _do)
-    if result is True:
+            return (False, str(e))
+        finally:
+            logging.getLogger("auto_token").removeHandler(h)
+
+    result, errmsg = await loop.run_in_executor(None, _do)
+    if result:
         return JSONResponse({"ok": True, "msg": "Token refreshed and applied live"})
-    return JSONResponse({"ok": False, "msg": str(result)}, status_code=500)
+    return JSONResponse({"ok": False, "msg": errmsg}, status_code=500)
 
 
 @app.get("/api/backtest/dayview")
