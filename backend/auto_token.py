@@ -33,7 +33,23 @@ def refresh_token(env_file: str = _ENV_FILE) -> bool:
     """
     Perform headless Kite login via Playwright and save new KITE_ACCESS_TOKEN to .env.
     Returns True on success, False on failure.
+    Auto-detects asyncio context and runs in a thread if needed.
     """
+    import asyncio
+    try:
+        asyncio.get_running_loop()
+        # Inside asyncio — must run Playwright sync API in a separate thread
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(_do_refresh, env_file)
+            return future.result(timeout=120)
+    except RuntimeError:
+        # No event loop running — call directly (CLI / APScheduler thread)
+        return _do_refresh(env_file)
+
+
+def _do_refresh(env_file: str = _ENV_FILE) -> bool:
+    """Internal: actual Playwright login. Always called from a plain thread."""
     load_dotenv(env_file, override=True)
 
     api_key     = os.getenv("KITE_API_KEY", "").strip()
@@ -178,7 +194,7 @@ if __name__ == "__main__":
     print("  NSE EDGE v5 — Auto Token Refresh")
     print("=" * 55)
 
-    ok = refresh_token()
+    ok = _do_refresh()
     if ok:
         print("\n  Token refreshed and saved to .env")
         print("  Restart the backend to apply the new token.")
