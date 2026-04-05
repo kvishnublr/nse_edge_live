@@ -1394,8 +1394,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
       <!-- Results table -->
       <div style="overflow-y:auto;flex:1;min-height:0;padding:0">
-        <div id="srbt-empty" style="text-align:center;padding:40px 16px;color:var(--t2);font-size:9px">
-          Select a date range and click RUN to backtest spike detection on 1-min candles.
+        <div id="srbt-empty" style="text-align:center;padding:40px 16px;color:var(--t2);font-size:9px;line-height:1.8">
+          <div style="font-size:18px;opacity:.25;margin-bottom:8px">⚡</div>
+          Loading last trading day spike signals…
         </div>
         <table id="srbt-tbl" class="xtbl" style="display:none;width:100%">
           <thead>
@@ -1403,7 +1404,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
               <th>SYMBOL</th><th>TIME</th><th>TYPE</th>
               <th>VOL×</th><th>CHG%</th>
               <th>ENTRY</th><th>SL</th><th>T1</th><th>T2</th>
-              <th>RESULT</th><th>P&L%</th><th>SCORE</th>
+              <th style="min-width:90px">RESULT</th><th>P&L%</th><th>SCORE</th>
             </tr>
           </thead>
           <tbody id="srbt-tbody"></tbody>
@@ -3505,6 +3506,24 @@ function anSw(name,btn){
   btn.classList.add('on');
   document.getElementById('an-'+name).classList.add('on');
   if(name==='history') loadSignalHistory();
+  // Spike Radar in Edge Analytics — default to backtest sub-tab with last trading day
+  if(name==='spike') {
+    const lastDay = _lastTradingDay();
+    const fi = document.getElementById('srbt-from');
+    const ti = document.getElementById('srbt-to');
+    if(fi) fi.value = lastDay;
+    if(ti) ti.value = lastDay;
+    // Switch spike radar to backtest sub-tab if not already
+    const btPanel = document.getElementById('sr-bt-panel');
+    const liPanel = document.getElementById('sr-live-panel');
+    if(btPanel) btPanel.style.display = 'flex';
+    if(liPanel) liPanel.style.display = 'none';
+    const lb = document.getElementById('sr-sub-live');
+    const bb = document.getElementById('sr-sub-bt');
+    if(lb){ lb.style.background='var(--s1)'; lb.style.color='var(--t2)'; lb.style.borderBottom='2px solid transparent'; }
+    if(bb){ bb.style.background='var(--s2)'; bb.style.color='var(--bl)'; bb.style.borderBottom='2px solid var(--bl)'; }
+    srBtRun();
+  }
 }
 
 // ═══════════════════════════════════════════════
@@ -6016,6 +6035,17 @@ function srRender() {
 // SPIKE RADAR — BACKTEST
 // ═══════════════════════════════════════════════════════════════════
 
+// Returns the last weekday (Mon–Fri) relative to today in IST
+function _lastTradingDay() {
+  const ist = new Date(new Date().toLocaleString('en-US', {timeZone:'Asia/Kolkata'}));
+  const d = new Date(ist);
+  // If before 09:15 IST treat today as not yet traded
+  if(ist.getHours() < 9 || (ist.getHours() === 9 && ist.getMinutes() < 15)) d.setDate(d.getDate()-1);
+  // Roll back over weekends
+  while(d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate()-1);
+  return d.toISOString().slice(0,10);
+}
+
 function srSubTab(tab) {
   const isLive = tab === 'live';
   document.getElementById('sr-live-panel').style.display = isLive ? 'flex' : 'none';
@@ -6029,14 +6059,14 @@ function srSubTab(tab) {
   bb.style.color         = isLive ? 'var(--t2)'  : 'var(--bl)';
   bb.style.borderBottom  = isLive ? '2px solid transparent' : '2px solid var(--bl)';
   if(!isLive) {
-    // default date range: last 7 days
-    const to = new Date(); to.setDate(to.getDate()-1);
-    const fr = new Date(); fr.setDate(fr.getDate()-8);
-    const fmt = d => d.toISOString().slice(0,10);
+    const lastDay = _lastTradingDay();
     const fi = document.getElementById('srbt-from');
     const ti = document.getElementById('srbt-to');
-    if(fi && !fi.value) fi.value = fmt(fr);
-    if(ti && !ti.value) ti.value = fmt(to);
+    // Always default to last trading day (single day)
+    if(fi) fi.value = lastDay;
+    if(ti) ti.value = lastDay;
+    // Auto-run immediately
+    srBtRun();
   }
 }
 
@@ -6045,10 +6075,10 @@ async function srBtRun() {
   const to   = document.getElementById('srbt-to').value;
   if(!from || !to) { alert('Select date range'); return; }
   const status = document.getElementById('srbt-status');
-  status.textContent = 'Running...';
+  status.textContent = `Loading ${from === to ? from : from + ' → ' + to}…`;
   status.style.color = 'var(--am)';
   document.getElementById('srbt-empty').style.display = 'block';
-  document.getElementById('srbt-empty').textContent   = 'Fetching 1-min candles and running spike detection...';
+  document.getElementById('srbt-empty').innerHTML = `<div style="font-size:18px;opacity:.25;margin-bottom:8px">⚡</div>Fetching 1-min candles for <b style="color:var(--t1)">${from}</b> and running spike detection…`;
   document.getElementById('srbt-tbl').style.display   = 'none';
   document.getElementById('srbt-summary').style.display = 'none';
 
@@ -6104,26 +6134,35 @@ async function srBtRun() {
       return;
     }
 
-    // Group results by date for context
-    const rMap = { HIT_T2:'var(--go)', HIT_T1:'var(--bl)', HIT_SL:'var(--st)', EXPIRED:'var(--t2)' };
+    // Result badge map
+    const _resBadge = res => {
+      switch(res) {
+        case 'HIT_T2': return `<span style="display:inline-block;padding:2px 8px;border-radius:3px;font-size:8px;font-weight:800;letter-spacing:.5px;background:rgba(0,232,122,.15);color:var(--go);border:1px solid rgba(0,232,122,.3)">✓ HIT T2</span>`;
+        case 'HIT_T1': return `<span style="display:inline-block;padding:2px 8px;border-radius:3px;font-size:8px;font-weight:800;letter-spacing:.5px;background:rgba(56,190,255,.12);color:var(--bl);border:1px solid rgba(56,190,255,.25)">✓ HIT T1</span>`;
+        case 'HIT_SL': return `<span style="display:inline-block;padding:2px 8px;border-radius:3px;font-size:8px;font-weight:800;letter-spacing:.5px;background:rgba(255,51,85,.12);color:var(--st);border:1px solid rgba(255,51,85,.25)">✗ HIT SL</span>`;
+        case 'EXPIRED': return `<span style="display:inline-block;padding:2px 8px;border-radius:3px;font-size:8px;font-weight:700;letter-spacing:.5px;background:var(--s3);color:var(--t2);border:1px solid var(--b1)">— EXPIRED</span>`;
+        default: return `<span style="color:var(--t2);font-size:8px">${res.replace('_',' ')}</span>`;
+      }
+    };
+    const _rowBg = res => res === 'HIT_T2' ? 'rgba(0,232,122,.03)' : res === 'HIT_T1' ? 'rgba(56,190,255,.03)' : res === 'HIT_SL' ? 'rgba(255,51,85,.04)' : 'transparent';
+
     const rows = d.results.map(r => {
-      const rc = rMap[r.result] || 'var(--t2)';
       const pc = r.pnl_pct >= 0 ? 'var(--go)' : 'var(--st)';
       const tc = r.type === 'BUY' ? 'var(--go)' : 'var(--st)';
-      const dateStr = r.time.slice(0,10);
-      const timeStr = r.time.slice(11);
-      return `<tr>
+      const dateStr = r.time ? r.time.slice(0,10) : '—';
+      const timeStr = r.time ? r.time.slice(11,16) : '—';
+      return `<tr style="background:${_rowBg(r.result)}">
         <td style="color:var(--t0);font-weight:700"><span class="tv-link" data-tvsym="${r.symbol}">${r.symbol}</span></td>
-        <td style="color:var(--t2);font-size:9px">${dateStr}<br><span style="color:var(--t1)">${timeStr}</span></td>
-        <td style="color:${tc};font-weight:700">${r.type}</td>
-        <td style="color:${r.vol_mult>=5?'var(--go)':r.vol_mult>=3?'var(--am)':'var(--t2)'}">${r.vol_mult}×</td>
-        <td style="color:${tc}">${r.chg_pct > 0 ? '+' : ''}${r.chg_pct}%</td>
-        <td style="font-size:9px">${r.entry}</td>
-        <td style="color:var(--st);font-size:9px">${r.sl}</td>
-        <td style="color:var(--bl);font-size:9px">${r.t1}</td>
-        <td style="color:var(--go);font-size:9px">${r.t2}</td>
-        <td style="color:${rc};font-weight:700">${r.result.replace('_',' ')}</td>
-        <td style="color:${pc};font-weight:700">${r.pnl_pct >= 0 ? '+' : ''}${r.pnl_pct}%</td>
+        <td style="color:var(--t2);font-size:9px">${dateStr}<br><span style="color:var(--t1);font-size:9.5px;font-weight:600">${timeStr}</span></td>
+        <td><span style="font-size:8px;font-weight:700;padding:1px 7px;border-radius:2px;background:${tc}22;color:${tc};border:1px solid ${tc}44">${r.type}</span></td>
+        <td style="color:${r.vol_mult>=5?'var(--go)':r.vol_mult>=3?'var(--am)':'var(--t2)'}; font-weight:600">${r.vol_mult}×</td>
+        <td style="color:${tc};font-weight:600">${r.chg_pct > 0 ? '+' : ''}${r.chg_pct}%</td>
+        <td style="font-family:var(--fn);font-size:9px">${r.entry}</td>
+        <td style="color:var(--st);font-family:var(--fn);font-size:9px">${r.sl}</td>
+        <td style="color:var(--bl);font-family:var(--fn);font-size:9px">${r.t1}</td>
+        <td style="color:var(--go);font-family:var(--fn);font-size:9px">${r.t2}</td>
+        <td>${_resBadge(r.result)}</td>
+        <td style="color:${pc};font-weight:700;font-size:10px">${r.pnl_pct >= 0 ? '+' : ''}${r.pnl_pct}%</td>
         <td style="color:${r.score>=60?'var(--go)':r.score>=45?'var(--am)':'var(--st)'};font-weight:700">${r.score||'—'}</td>
       </tr>`;
     }).join('');
