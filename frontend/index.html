@@ -6046,6 +6046,13 @@ function _lastTradingDay() {
   return d.toISOString().slice(0,10);
 }
 
+function _prevTradingDay(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() - 1);
+  while(d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 function srSubTab(tab) {
   const isLive = tab === 'live';
   document.getElementById('sr-live-panel').style.display = isLive ? 'flex' : 'none';
@@ -6070,7 +6077,7 @@ function srSubTab(tab) {
   }
 }
 
-async function srBtRun() {
+async function srBtRun(retryCount = 0) {
   const from = document.getElementById('srbt-from').value;
   const to   = document.getElementById('srbt-to').value;
   if(!from || !to) { alert('Select date range'); return; }
@@ -6134,13 +6141,22 @@ async function srBtRun() {
     document.getElementById('srbt-summary').style.display = 'flex';
 
     if(!d.results || !d.results.length) {
+      // Auto-retry with previous trading day (handles NSE holidays like Good Friday)
+      if(retryCount < 3 && from === to) {
+        const prevDay = _prevTradingDay(from);
+        status.textContent = `0 spikes on ${from} (holiday?) — trying ${prevDay}…`;
+        status.style.color = 'var(--am)';
+        document.getElementById('srbt-from').value = prevDay;
+        document.getElementById('srbt-to').value   = prevDay;
+        return srBtRun(retryCount + 1);
+      }
       document.getElementById('srbt-empty').innerHTML =
         `<div style="font-size:18px;opacity:.25;margin-bottom:8px">📊</div>
          No spike signals on <b style="color:var(--t1)">${from}</b>
          ${from !== to ? ' → <b style="color:var(--t1)">' + to + '</b>' : ''}
-         <br><span style="color:var(--t3);font-size:8px">This date may be a market holiday, or the Kite token needs refresh.<br>Try: ⬆ VOL to 1.5× · ⬆ MOVE to 0.2% · MIN SCORE 30</span>`;
+         <br><span style="color:var(--t3);font-size:8px">Market may be on holiday, or lower the filters further.<br>Check Kite token via the banner if dates look correct.</span>`;
       document.getElementById('srbt-empty').style.display = 'block';
-      status.textContent = '0 spikes — holiday or token expired'; status.style.color='var(--am)';
+      status.textContent = '0 spikes after retrying 3 days'; status.style.color='var(--am)';
       return;
     }
 
