@@ -81,11 +81,26 @@ async def lifespan(app: FastAPI):
     logger.info("  NSE EDGE v5 — Zerodha Kite Connect")
     logger.info("=" * 55)
 
-    # Validate config
-    if not KITE_API_KEY or not KITE_ACCESS_TOKEN:
-        logger.error("KITE_API_KEY and KITE_ACCESS_TOKEN missing in .env")
-        logger.error("Run: python3 generate_token.py to get today's token")
+    # Validate config — if token missing, try auto-refresh before giving up
+    if not KITE_API_KEY:
+        logger.error("KITE_API_KEY missing in .env — cannot start")
         raise SystemExit(1)
+
+    if not KITE_ACCESS_TOKEN:
+        logger.warning("KITE_ACCESS_TOKEN not set — attempting auto token refresh...")
+        try:
+            from auto_token import refresh_token
+            if refresh_token():
+                from dotenv import load_dotenv
+                _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+                load_dotenv(_env_path, override=True)
+                import config as _cfg
+                _cfg.KITE_ACCESS_TOKEN = os.getenv("KITE_ACCESS_TOKEN", "").strip()
+                logger.info("Auto token refresh OK at startup")
+            else:
+                logger.warning("Auto refresh failed — starting in DEMO mode")
+        except Exception as _e:
+            logger.warning(f"Auto refresh error: {_e} — starting in DEMO mode")
 
     # Start broadcast loop
     asyncio.create_task(_bcast_loop())
@@ -765,6 +780,27 @@ async def token_status():
             "error":   str(e),
             "uptime_h": round((_time.time() - _start_time) / 3600, 1),
         })
+
+
+@app.post("/api/token-refresh")
+async def token_refresh_manual():
+    """Manually trigger a Kite token refresh via Playwright headless login."""
+    import asyncio as _aio
+    loop = _aio.get_event_loop()
+    def _do():
+        try:
+            from auto_token import refresh_token
+            ok = refresh_token()
+            if ok:
+                from scheduler import _apply_new_token
+                _apply_new_token()
+            return ok
+        except Exception as e:
+            return str(e)
+    result = await loop.run_in_executor(None, _do)
+    if result is True:
+        return JSONResponse({"ok": True, "msg": "Token refreshed and applied live"})
+    return JSONResponse({"ok": False, "msg": str(result)}, status_code=500)
 
 
 @app.get("/api/backtest/dayview")

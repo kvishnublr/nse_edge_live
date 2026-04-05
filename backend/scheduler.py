@@ -219,17 +219,81 @@ def job_spikes():
         logger.warning(f"job_spikes: {e}")
 
 
+# ─── JOB: DAILY KITE TOKEN REFRESH (7:55 AM IST) ────────────────────────────
+def job_token_refresh():
+    """
+    Refresh Kite access token every morning at 7:55 AM IST via Playwright
+    headless login. Reloads the new token into the live KiteConnect instance
+    so no restart is needed.
+    """
+    logger.info("=== Daily token refresh starting (7:55 AM IST) ===")
+    try:
+        from auto_token import refresh_token
+        ok = refresh_token()
+    except Exception as e:
+        logger.error(f"Token refresh exception: {e}")
+        ok = False
+
+    if not ok:
+        logger.error("Daily token refresh FAILED — will retry in 5 minutes")
+        # Schedule a one-off retry
+        import threading, time as _t
+        def _retry():
+            _t.sleep(300)
+            logger.info("Token refresh retry attempt...")
+            try:
+                from auto_token import refresh_token as _rt
+                if _rt():
+                    _apply_new_token()
+                    logger.info("Token refresh retry SUCCESS")
+                else:
+                    logger.error("Token refresh retry also FAILED — manual intervention needed")
+            except Exception as e2:
+                logger.error(f"Token refresh retry error: {e2}")
+        threading.Thread(target=_retry, daemon=True).start()
+        return
+
+    _apply_new_token()
+
+
+def _apply_new_token():
+    """Reload KITE_ACCESS_TOKEN from .env and push it into the live Kite instance."""
+    try:
+        import os
+        from dotenv import load_dotenv
+        _env = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+        load_dotenv(_env, override=True)
+        new_token = os.getenv("KITE_ACCESS_TOKEN", "").strip()
+        if not new_token:
+            logger.error("_apply_new_token: token empty after reload")
+            return
+        import config
+        config.KITE_ACCESS_TOKEN = new_token
+        from feed import get_kite, _kite as _fkite
+        import feed as _feed
+        _feed._kite = None          # force re-init with new token
+        kite = get_kite()           # creates fresh KiteConnect with new token
+        # Update scheduler reference
+        global _kite
+        _kite = kite
+        logger.info(f"=== Token applied live — last 6: ...{new_token[-6:]} ===")
+    except Exception as e:
+        logger.error(f"_apply_new_token error: {e}")
+
+
 # ─── BUILD SCHEDULER ─────────────────────────────────────────────────────────
 def build_scheduler() -> BackgroundScheduler:
     sched = BackgroundScheduler(
         timezone="Asia/Kolkata",
         job_defaults={"coalesce": True, "max_instances": 1, "misfire_grace_time": 5},
     )
-    sched.add_job(job_prices, "interval", seconds=1,   id="prices")
-    sched.add_job(job_chain,  "interval", seconds=30,  id="chain")
-    sched.add_job(job_stocks, "interval", seconds=30,  id="stocks")
-    sched.add_job(job_fii,    "interval", seconds=300, id="fii")
-    sched.add_job(job_spikes, "interval", seconds=10,  id="spikes")
+    sched.add_job(job_prices,        "interval", seconds=1,   id="prices")
+    sched.add_job(job_chain,         "interval", seconds=30,  id="chain")
+    sched.add_job(job_stocks,        "interval", seconds=30,  id="stocks")
+    sched.add_job(job_fii,           "interval", seconds=300, id="fii")
+    sched.add_job(job_spikes,        "interval", seconds=10,  id="spikes")
+    # Daily token refresh at 7:55 AM IST — runs before market open (9:15 AM)
+    sched.add_job(job_token_refresh, "cron", hour=7, minute=55, id="token_refresh")
 
     def on_err(ev):
         logger.error(f"Scheduler job {ev.job_id} failed: {ev.exception}")
