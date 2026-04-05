@@ -87,20 +87,23 @@ async def lifespan(app: FastAPI):
         raise SystemExit(1)
 
     if not KITE_ACCESS_TOKEN:
-        logger.warning("KITE_ACCESS_TOKEN not set — attempting auto token refresh...")
-        try:
-            from auto_token import refresh_token
-            if refresh_token():
-                from dotenv import load_dotenv
-                _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-                load_dotenv(_env_path, override=True)
-                import config as _cfg
-                _cfg.KITE_ACCESS_TOKEN = os.getenv("KITE_ACCESS_TOKEN", "").strip()
-                logger.info("Auto token refresh OK at startup")
-            else:
-                logger.warning("Auto refresh failed — starting in DEMO mode")
-        except Exception as _e:
-            logger.warning(f"Auto refresh error: {_e} — starting in DEMO mode")
+        logger.warning("KITE_ACCESS_TOKEN not set — will auto-refresh in background after startup")
+        import threading
+        def _bg_refresh():
+            import time as _t
+            _t.sleep(3)  # Let server finish starting first
+            logger.info("Background startup token refresh starting...")
+            try:
+                from auto_token import _do_refresh
+                if _do_refresh():
+                    from scheduler import _apply_new_token
+                    _apply_new_token()
+                    logger.info("Background startup token refresh SUCCESS")
+                else:
+                    logger.warning("Background startup token refresh FAILED — running in DEMO mode")
+            except Exception as _e:
+                logger.warning(f"Background startup token refresh error: {_e}")
+        threading.Thread(target=_bg_refresh, daemon=True).start()
 
     # Start broadcast loop
     asyncio.create_task(_bcast_loop())
