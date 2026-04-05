@@ -11,9 +11,15 @@ import pytz
 from dotenv import load_dotenv
 
 # Load .env from backend directory (next to this file)
+# override=False means Railway/system env vars always take priority over .env file
 _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-load_dotenv(_env_path)
+load_dotenv(_env_path, override=False)
 logger = logging.getLogger("config")
+
+# Debug: log which env vars are present (helps diagnose Railway issues)
+_has_api_key = bool(os.getenv("KITE_API_KEY", "").strip())
+_has_token   = bool(os.getenv("KITE_ACCESS_TOKEN", "").strip())
+print(f"[config] KITE_API_KEY present: {_has_api_key} | KITE_ACCESS_TOKEN present: {_has_token}", flush=True)
 
 # ─── ENVIRONMENT VALIDATION ───────────────────────────────────────────────────
 def _validate_config():
