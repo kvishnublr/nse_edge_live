@@ -3510,8 +3510,8 @@ function anSw(name,btn){
   if(name==='spike') {
     const fi = document.getElementById('srbt-from');
     const ti = document.getElementById('srbt-to');
-    if(fi && !fi.value) fi.value = _nTradingDaysAgo(5);
-    if(ti && !ti.value) ti.value = _lastTradingDay();
+    if(fi) fi.value = _nTradingDaysAgo(5);
+    if(ti) ti.value = _lastTradingDay();
     // Switch spike radar to backtest sub-tab if not already
     const btPanel = document.getElementById('sr-bt-panel');
     const liPanel = document.getElementById('sr-live-panel');
@@ -6079,9 +6079,9 @@ function srSubTab(tab) {
   if(!isLive) {
     const fi = document.getElementById('srbt-from');
     const ti = document.getElementById('srbt-to');
-    // Default to last 5 trading days range (handles holidays automatically)
-    if(fi && !fi.value) fi.value = _nTradingDaysAgo(5);
-    if(ti && !ti.value) ti.value = _lastTradingDay();
+    // Always reset to last 5 trading days (never keep stale cached dates)
+    if(fi) fi.value = _nTradingDaysAgo(5);
+    if(ti) ti.value = _lastTradingDay();
     // Auto-run immediately
     srBtRun();
   }
@@ -6160,13 +6160,17 @@ async function srBtRun(retryCount = 0) {
         document.getElementById('srbt-to').value   = _lastTradingDay();
         return srBtRun(retryCount + 1);
       }
+      const failHint = (d.summary?.symbols_failed > 0)
+        ? `<br><span style="color:var(--st);font-size:8px">⚠ ${d.summary.symbols_failed} symbols failed to load — Kite token may be expired. Click ↻ REFRESH NOW above.</span>`
+        : `<br><span style="color:var(--t3);font-size:8px">These may all be market holidays — try a wider date range.</span>`;
       document.getElementById('srbt-empty').innerHTML =
         `<div style="font-size:18px;opacity:.25;margin-bottom:8px">📊</div>
          No spike signals found for <b style="color:var(--t1)">${from}</b>
          ${from !== to ? ' → <b style="color:var(--t1)">' + to + '</b>' : ''}
-         <br><span style="color:var(--t3);font-size:8px">These may all be market holidays, or the Kite token needs refresh.</span>`;
+         ${failHint}`;
       document.getElementById('srbt-empty').style.display = 'block';
-      status.textContent = '0 spikes — check dates or token'; status.style.color='var(--am)';
+      const tokenWarn = d.summary?.symbols_failed > 0 ? ' — token may be expired' : ' — check dates';
+      status.textContent = '0 spikes' + tokenWarn; status.style.color='var(--am)';
       return;
     }
 

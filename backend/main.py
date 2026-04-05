@@ -1622,6 +1622,9 @@ async def spikes_backtest(
             results = []
             summary = {"total": 0, "hit_t1": 0, "hit_t2": 0, "hit_sl": 0, "expired": 0}
             score_accumulator = []
+            symbols_ok = 0
+            symbols_failed = 0
+            last_error = None
 
             symbols = [s for s in FNO_SYMBOLS if s in KITE_TOKENS and s not in ("INDIAVIX", "NIFTY", "BANKNIFTY")]
 
@@ -1629,8 +1632,11 @@ async def spikes_backtest(
                 token = KITE_TOKENS[sym]
                 try:
                     candles = kite.historical_data(token, fd, td, "minute")
+                    symbols_ok += 1
                 except Exception as e:
                     logger.warning(f"Spike BT: {sym} historical_data failed: {e}")
+                    symbols_failed += 1
+                    last_error = str(e)
                     continue
 
                 if len(candles) < 25:
@@ -1795,9 +1801,14 @@ async def spikes_backtest(
                  summary["hit_sl"] / summary["total"] * 0.0025) * 100, 3
             ) if summary["total"] else 0
 
+            # If ALL symbols failed, it's almost certainly a token issue
+            if symbols_ok == 0 and symbols_failed > 0:
+                return {"error": f"Token expired or invalid — all {symbols_failed} symbol fetches failed. Last error: {last_error}"}
+
             return {
                 "summary":  {**summary, "win_rate": win_rate, "avg_pnl": avg_pnl,
-                             "expectancy_pct": expect, "avg_score": avg_score},
+                             "expectancy_pct": expect, "avg_score": avg_score,
+                             "symbols_ok": symbols_ok, "symbols_failed": symbols_failed},
                 "results":  results[:500],
                 "from_date": from_date,
                 "to_date":   to_date,
