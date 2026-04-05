@@ -228,31 +228,13 @@ class FeedManager:
             logger.info(f"Kite auth OK — logged in as: {profile.get('user_name', 'unknown')}")
         except Exception as e:
             logger.warning(f"Kite auth failed: {e}")
-            # Try auto-refresh before falling back to demo mode
-            try:
-                from auto_token import refresh_token
-                logger.info("Attempting automatic token refresh...")
-                if refresh_token():
-                    # Reload token from .env and retry
-                    from dotenv import load_dotenv
-                    _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-                    load_dotenv(_env_path, override=True)
-                    new_token = os.getenv("KITE_ACCESS_TOKEN", "").strip()
-                    global _kite
-                    _kite = None  # force re-init with new token
-                    import config
-                    config.KITE_ACCESS_TOKEN = new_token
-                    kite = get_kite()
-                    profile = kite.profile()
-                    logger.info(f"Auto token refresh OK — logged in as: {profile.get('user_name', 'unknown')}")
-                else:
-                    raise RuntimeError("auto_token refresh returned False")
-            except Exception as e2:
-                logger.warning(f"Auto token refresh failed: {e2}")
-                logger.warning("Using DEMO mode with yfinance data (no live trading)")
-                self._demo_mode = True
-                self._fetch_demo_data()
-                return
+            # Token refresh is handled by main.py background thread after startup.
+            # Do not block here — fall through to demo mode; background refresh
+            # will call _apply_new_token() and reconnect once Playwright finishes.
+            logger.warning("Starting in DEMO mode — background token refresh in progress...")
+            self._demo_mode = True
+            self._fetch_demo_data()
+            return
 
         # Do one REST fetch immediately so cache is populated on startup
         logger.info("Initial REST quote fetch...")
