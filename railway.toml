@@ -1,13 +1,10 @@
 [build]
-builder = "nixpacks"
-buildCommand = "pip install -r backend/requirements.txt"
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "cd backend && python main.py"
+startCommand = "python main.py"
 healthcheckPath = "/api/health"
-healthcheckTimeout = 30
+healthcheckTimeout = 120
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
-
-[[services]]
-name = "nse-edge-backend"
+restartPolicyMaxRetries = 5
