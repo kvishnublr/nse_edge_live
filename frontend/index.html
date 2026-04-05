@@ -3506,13 +3506,12 @@ function anSw(name,btn){
   btn.classList.add('on');
   document.getElementById('an-'+name).classList.add('on');
   if(name==='history') loadSignalHistory();
-  // Spike Radar in Edge Analytics — default to backtest sub-tab with last trading day
+  // Spike Radar in Edge Analytics — default to backtest sub-tab with last 5 trading days
   if(name==='spike') {
-    const lastDay = _lastTradingDay();
     const fi = document.getElementById('srbt-from');
     const ti = document.getElementById('srbt-to');
-    if(fi) fi.value = lastDay;
-    if(ti) ti.value = lastDay;
+    if(fi && !fi.value) fi.value = _nTradingDaysAgo(5);
+    if(ti && !ti.value) ti.value = _lastTradingDay();
     // Switch spike radar to backtest sub-tab if not already
     const btPanel = document.getElementById('sr-bt-panel');
     const liPanel = document.getElementById('sr-live-panel');
@@ -6053,6 +6052,18 @@ function _prevTradingDay(dateStr) {
   return d.toISOString().slice(0, 10);
 }
 
+function _nTradingDaysAgo(n) {
+  // Returns date string n trading days before the last trading day
+  const last = _lastTradingDay();
+  let d = new Date(last + 'T00:00:00');
+  let count = 0;
+  while(count < n) {
+    d.setDate(d.getDate() - 1);
+    if(d.getDay() !== 0 && d.getDay() !== 6) count++;
+  }
+  return d.toISOString().slice(0, 10);
+}
+
 function srSubTab(tab) {
   const isLive = tab === 'live';
   document.getElementById('sr-live-panel').style.display = isLive ? 'flex' : 'none';
@@ -6066,12 +6077,11 @@ function srSubTab(tab) {
   bb.style.color         = isLive ? 'var(--t2)'  : 'var(--bl)';
   bb.style.borderBottom  = isLive ? '2px solid transparent' : '2px solid var(--bl)';
   if(!isLive) {
-    const lastDay = _lastTradingDay();
     const fi = document.getElementById('srbt-from');
     const ti = document.getElementById('srbt-to');
-    // Always default to last trading day (single day)
-    if(fi) fi.value = lastDay;
-    if(ti) ti.value = lastDay;
+    // Default to last 5 trading days range (handles holidays automatically)
+    if(fi && !fi.value) fi.value = _nTradingDaysAgo(5);
+    if(ti && !ti.value) ti.value = _lastTradingDay();
     // Auto-run immediately
     srBtRun();
   }
@@ -6141,22 +6151,22 @@ async function srBtRun(retryCount = 0) {
     document.getElementById('srbt-summary').style.display = 'flex';
 
     if(!d.results || !d.results.length) {
-      // Auto-retry with previous trading day (handles NSE holidays like Good Friday)
-      if(retryCount < 3 && from === to) {
-        const prevDay = _prevTradingDay(from);
-        status.textContent = `0 spikes on ${from} (holiday?) — trying ${prevDay}…`;
+      // If single day with 0 results, auto-widen to last 5 trading days
+      if(retryCount === 0 && from === to) {
+        const wideFrom = _nTradingDaysAgo(5);
+        status.textContent = `0 spikes on ${from} (holiday?) — expanding to last 5 trading days…`;
         status.style.color = 'var(--am)';
-        document.getElementById('srbt-from').value = prevDay;
-        document.getElementById('srbt-to').value   = prevDay;
+        document.getElementById('srbt-from').value = wideFrom;
+        document.getElementById('srbt-to').value   = _lastTradingDay();
         return srBtRun(retryCount + 1);
       }
       document.getElementById('srbt-empty').innerHTML =
         `<div style="font-size:18px;opacity:.25;margin-bottom:8px">📊</div>
-         No spike signals on <b style="color:var(--t1)">${from}</b>
+         No spike signals found for <b style="color:var(--t1)">${from}</b>
          ${from !== to ? ' → <b style="color:var(--t1)">' + to + '</b>' : ''}
-         <br><span style="color:var(--t3);font-size:8px">Market may be on holiday, or lower the filters further.<br>Check Kite token via the banner if dates look correct.</span>`;
+         <br><span style="color:var(--t3);font-size:8px">These may all be market holidays, or the Kite token needs refresh.</span>`;
       document.getElementById('srbt-empty').style.display = 'block';
-      status.textContent = '0 spikes after retrying 3 days'; status.style.color='var(--am)';
+      status.textContent = '0 spikes — check dates or token'; status.style.color='var(--am)';
       return;
     }
 
