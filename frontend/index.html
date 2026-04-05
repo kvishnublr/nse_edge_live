@@ -101,12 +101,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 /* TOPBAR */
 #tb{height:36px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:var(--s1);border-bottom:1px solid var(--b1);flex-shrink:0}
 .tbl{display:flex;align-items:center;gap:14px}
-.logo{display:flex;align-items:center;gap:8px;cursor:default;user-select:none}
-.logo-icon{flex-shrink:0}
-.logo-text{display:flex;flex-direction:column;line-height:1}
-.logo-name{font-family:var(--fh);font-size:13px;font-weight:800;letter-spacing:2.5px;color:var(--t0)}
-.logo-name span{color:var(--go)}
-.logo-sub{font-family:var(--fn);font-size:7px;font-weight:500;letter-spacing:2px;color:var(--t3);margin-top:1px}
+.logo{display:flex;align-items:center;gap:10px;cursor:default;user-select:none}
+.logo-icon{flex-shrink:0;filter:drop-shadow(0 0 6px rgba(0,232,122,.35))}
+.logo-text{display:flex;flex-direction:column;line-height:1.1}
+.logo-name{font-family:var(--fh);font-size:16px;font-weight:900;letter-spacing:3px;background:linear-gradient(90deg,#00e87a 0%,#38beff 60%,#a78bfa 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.logo-sub{font-family:var(--fn);font-size:6.5px;font-weight:500;letter-spacing:2.5px;color:var(--t3);margin-top:2px;text-transform:uppercase}
 .sep{width:1px;height:16px;background:var(--b2)}
 .lpill{display:flex;align-items:center;gap:5px;font-size:9px;color:var(--go)}
 .ldot{width:5px;height:5px;border-radius:50%;background:var(--go);animation:pulse 1.5s ease-in-out infinite}
@@ -804,22 +803,38 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 <div id="tb">
   <div class="tbl">
     <div class="logo">
-      <!-- NSE EDGE logo mark -->
-      <svg class="logo-icon" width="30" height="30" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <!-- Hexagon background -->
-        <polygon points="15,2 26,8.5 26,21.5 15,28 4,21.5 4,8.5" fill="rgba(0,232,122,.1)" stroke="rgba(0,232,122,.35)" stroke-width="1"/>
-        <!-- Bar chart bars -->
-        <rect x="8"  y="19" width="3" height="6"  rx=".4" fill="#00e87a" opacity=".45"/>
-        <rect x="13.5" y="13" width="3" height="12" rx=".4" fill="#00e87a" opacity=".85"/>
-        <rect x="19" y="16" width="3" height="9"  rx=".4" fill="#00e87a" opacity=".65"/>
-        <!-- Rising trend line -->
-        <polyline points="8,20 13.5,14 19,17" stroke="#00e87a" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-        <!-- Dot on peak -->
-        <circle cx="13.5" cy="14" r="1.4" fill="#00e87a"/>
+      <!-- STOCKR logomark: candlestick S-curve -->
+      <svg class="logo-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="lg1" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#00e87a"/>
+            <stop offset="100%" stop-color="#38beff"/>
+          </linearGradient>
+          <linearGradient id="lg2" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#38beff" stop-opacity=".9"/>
+            <stop offset="100%" stop-color="#a78bfa" stop-opacity=".9"/>
+          </linearGradient>
+        </defs>
+        <!-- Outer ring -->
+        <circle cx="16" cy="16" r="15" fill="rgba(0,232,122,.06)" stroke="url(#lg1)" stroke-width="1"/>
+        <!-- Candlestick 1 (green) -->
+        <rect x="7" y="18" width="4" height="8" rx=".8" fill="#00e87a" opacity=".9"/>
+        <line x1="9" y1="16" x2="9" y2="18" stroke="#00e87a" stroke-width="1.2"/>
+        <line x1="9" y1="26" x2="9" y2="28" stroke="#00e87a" stroke-width="1.2"/>
+        <!-- Candlestick 2 (blue) -->
+        <rect x="14" y="12" width="4" height="10" rx=".8" fill="url(#lg2)" opacity=".95"/>
+        <line x1="16" y1="8" x2="16" y2="12" stroke="#38beff" stroke-width="1.2"/>
+        <line x1="16" y1="22" x2="16" y2="25" stroke="#38beff" stroke-width="1.2"/>
+        <!-- Candlestick 3 (green bright) -->
+        <rect x="21" y="9" width="4" height="12" rx=".8" fill="#00e87a"/>
+        <line x1="23" y1="6" x2="23" y2="9" stroke="#00e87a" stroke-width="1.2"/>
+        <line x1="23" y1="21" x2="23" y2="24" stroke="#00e87a" stroke-width="1.2"/>
+        <!-- Uptrend arrow line -->
+        <polyline points="9,22 16,17 23,15" stroke="url(#lg1)" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".7"/>
       </svg>
       <div class="logo-text">
-        <div class="logo-name">NSE<span>EDGE</span></div>
-        <div class="logo-sub">SIGNAL SYSTEM · v5</div>
+        <div class="logo-name">STOCKR</div>
+        <div class="logo-sub">Intelligent Signal System</div>
       </div>
     </div>
     <div class="sep"></div>
@@ -1176,25 +1191,78 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   </div>
 
   <!-- TAB: SWING RADAR -->
-  <div class="tp" id="tp-swing">
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;flex-shrink:0">
-      <div style="padding:7px 10px;border-radius:3px;border:1px solid var(--go-b);background:var(--go-d)"><div style="font-size:8px;color:var(--go);letter-spacing:1.5px;margin-bottom:2px">★ HIGH CONVICTION</div><div style="font-size:10px;color:var(--t0)">Score ≥ 80 · R:R ≥ 1:2.5 · Delivery ≥ 55%</div></div>
-      <div style="padding:7px 10px;border-radius:3px;border:1px solid var(--am-b);background:var(--am-d)"><div style="font-size:8px;color:var(--am);letter-spacing:1.5px;margin-bottom:2px">MODERATE</div><div style="font-size:10px;color:var(--t0)">Score 65–79 · R:R ≥ 1:2 · Wait for entry zone</div></div>
-      <div style="padding:7px 10px;border-radius:3px;border:1px solid var(--b1);background:var(--s3)"><div style="font-size:8px;color:var(--t2);letter-spacing:1.5px;margin-bottom:2px">WATCH ONLY</div><div style="font-size:10px;color:var(--t0)">Score &lt;65 · Setup forming · Monitor daily</div></div>
+  <div class="tp" id="tp-swing" style="padding:0;gap:0;flex-direction:column;overflow:hidden">
+  <style>
+  /* ── SWING RADAR ────────────────────────────────────── */
+  #sw-topbar{display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--b1);flex-shrink:0;background:var(--s1)}
+  #sw-topbar .sw-title{font-family:var(--fh);font-size:11px;font-weight:700;letter-spacing:2px;color:var(--pu)}
+  #sw-topbar .sw-tag{font-family:var(--fn);font-size:7px;color:var(--t2);border:1px solid var(--b2);border-radius:10px;padding:1px 8px;letter-spacing:.5px}
+  .sw-legend{display:flex;gap:8px;margin-left:auto;align-items:center}
+  .sw-leg{display:flex;align-items:center;gap:4px;font-size:7px;color:var(--t2)}
+  .sw-leg-dot{width:8px;height:8px;border-radius:50%}
+  /* Carousel wrapper */
+  #sw-carousel-wrap{position:relative;flex:1;min-height:0;display:flex;align-items:stretch;overflow:hidden}
+  #sw-carousel{display:flex;gap:12px;overflow-x:auto;padding:14px 48px 14px 14px;scroll-behavior:smooth;align-items:flex-start;flex:1;scrollbar-width:none}
+  #sw-carousel::-webkit-scrollbar{display:none}
+  /* Hover scroll arrows */
+  .sw-arr{position:absolute;top:0;bottom:0;width:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:4;opacity:0;transition:opacity .2s;font-size:18px;color:var(--t0)}
+  .sw-arr.left{left:0;background:linear-gradient(90deg,var(--s1) 60%,transparent)}
+  .sw-arr.right{right:0;background:linear-gradient(270deg,var(--s1) 60%,transparent)}
+  #sw-carousel-wrap:hover .sw-arr{opacity:1}
+  /* Stock cards */
+  .sw-card{flex-shrink:0;width:220px;border-radius:6px;border:1px solid var(--b1);background:var(--s2);display:flex;flex-direction:column;overflow:hidden;transition:border-color .18s,transform .18s,box-shadow .18s;cursor:pointer}
+  .sw-card:hover{border-color:var(--b2);transform:translateY(-2px);box-shadow:0 6px 24px rgba(0,0,0,.35)}
+  .sw-card.high{border-color:rgba(0,232,122,.3);box-shadow:0 0 12px rgba(0,232,122,.08)}
+  .sw-card.mod{border-color:rgba(255,170,0,.25)}
+  /* Card header band */
+  .sw-card-hdr{padding:10px 12px 8px;border-bottom:1px solid var(--b1);display:flex;justify-content:space-between;align-items:flex-start}
+  .sw-card-sym{font-family:var(--fh);font-size:13px;font-weight:800;color:var(--t0)}
+  .sw-card-price{font-family:var(--fn);font-size:9px;color:var(--t2);margin-top:2px}
+  .sw-score-ring{position:relative;width:38px;height:38px;flex-shrink:0}
+  .sw-score-ring svg{width:38px;height:38px}
+  .sw-score-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--fh);font-size:10px;font-weight:800}
+  /* Card body */
+  .sw-card-body{padding:10px 12px;display:flex;flex-direction:column;gap:7px;flex:1}
+  .sw-row{display:flex;justify-content:space-between;align-items:center}
+  .sw-lbl{font-size:7px;letter-spacing:.8px;color:var(--t3);font-weight:600}
+  .sw-val{font-family:var(--fn);font-size:9px;color:var(--t1);font-weight:600}
+  .sw-val.go{color:var(--go)}.sw-val.st{color:var(--st)}.sw-val.am{color:var(--am)}
+  /* Setup chip */
+  .sw-setup{font-size:7px;font-weight:700;padding:2px 7px;border-radius:2px;letter-spacing:.5px}
+  /* Gate pip row */
+  .sw-gates{display:flex;gap:3px;align-items:center}
+  .sw-gate-pip{width:12px;height:4px;border-radius:2px}
+  /* Card footer */
+  .sw-card-foot{padding:6px 12px;border-top:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;background:var(--s3)}
+  .sw-hold{font-size:7px;color:var(--t2)}
+  .sw-sig{font-size:7px;font-weight:700;padding:1px 6px;border-radius:2px}
+  /* Empty state */
+  #sw-empty{display:none;flex:1;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:var(--t2);font-size:9px}
+  </style>
+
+  <!-- Top bar -->
+  <div id="sw-topbar">
+    <span class="sw-title">SWING RADAR</span>
+    <span class="sw-tag">POSITIONAL · 2–8 DAY HOLDS</span>
+    <span style="font-size:7px;color:var(--t3);border-left:1px solid var(--b1);padding-left:10px">Score ≥ 80 = High Conviction · Breakout / Pullback / Recovery setups · F&amp;O stocks only</span>
+    <div class="sw-legend">
+      <div class="sw-leg"><div class="sw-leg-dot" style="background:var(--go)"></div>HIGH</div>
+      <div class="sw-leg"><div class="sw-leg-dot" style="background:var(--am)"></div>MODERATE</div>
+      <div class="sw-leg"><div class="sw-leg-dot" style="background:var(--t3)"></div>WATCH</div>
     </div>
-    <div style="overflow-y:auto;flex:1;min-height:0">
-    <table class="xtbl">
-      <thead>
-        <tr>
-          <th>#  STOCK</th><th>SECTOR</th><th>PRICE</th><th>SETUP</th>
-          <th>ENTRY ZONE</th><th>TARGET</th><th>STOP</th>
-          <th>R:R</th><th>GATES</th><th>PC</th><th>SIGNAL</th>
-          <th>OUTCOME</th><th>HOLD</th><th>SCORE</th>
-        </tr>
-      </thead>
-      <tbody id="sw-body"></tbody>
-    </table>
+  </div>
+
+  <!-- Card carousel -->
+  <div id="sw-carousel-wrap">
+    <div class="sw-arr left" onclick="swScroll(-1)">&#8592;</div>
+    <div id="sw-carousel">
+      <div id="sw-empty" style="display:flex;min-width:100%;justify-content:center;align-items:center;color:var(--t2);font-size:9px">Waiting for live stock data…</div>
     </div>
+    <div class="sw-arr right" onclick="swScroll(1)">&#8594;</div>
+  </div>
+
+  <!-- hidden tbody kept for historical data compatibility -->
+  <table style="display:none"><tbody id="sw-body"></tbody></table>
   </div>
 
   <!-- TAB: SPIKE RADAR -->
@@ -2383,6 +2451,18 @@ entry_time    strike  type  entry  max   exit  return%
   .ses-conf-bar{width:100%;height:3px;background:var(--s3);border-radius:1.5px}
   .ses-conf-fill{height:100%;border-radius:1.5px}
   </style>
+
+  <!-- Mode distinction banner -->
+  <div style="display:flex;border-bottom:1px solid var(--b1);flex-shrink:0;background:var(--s2)">
+    <div style="flex:1;padding:4px 12px;border-right:1px solid var(--b1);display:flex;align-items:center;gap:8px">
+      <span style="font-size:7px;font-weight:700;letter-spacing:1.5px;color:var(--bl)">⚡ INTRADAY</span>
+      <span style="font-size:6.5px;color:var(--t3)">Same-day scalp · Entry at open · Exit before 3:20 PM · Tight SL (1.2%)</span>
+    </div>
+    <div style="flex:1;padding:4px 12px;display:flex;align-items:center;gap:8px">
+      <span style="font-size:7px;font-weight:700;letter-spacing:1.5px;color:var(--pu)">📈 POSITIONAL</span>
+      <span style="font-size:6.5px;color:var(--t3)">Swing trade · 2–5 day hold · Wider SL (2%) · Higher target (5%)</span>
+    </div>
+  </div>
 
   <div id="ses-header">
     <span class="ses-title">SE STOCKS</span>
@@ -4243,30 +4323,106 @@ function _topActiveStocks(stocks){
     setMini('rp-crude','rp-crude-chg', macro.crude, macro.crude_chg, '$');
   }
 
+  function swScroll(dir) {
+    const el = document.getElementById('sw-carousel');
+    if(el) el.scrollBy({left: dir * 260, behavior:'smooth'});
+  }
+
   function _renderSwingLive(){
-    const body = document.getElementById('sw-body');
-    if(!body) return;
+    const carousel = document.getElementById('sw-carousel');
+    if(!carousel) return;
     const stocks = (window._lastStocks || []).filter(s => s && s.symbol && s.symbol !== 'BANKNIFTY');
     if(!stocks.length) return;
-    const secM = {HDFCBANK:'Banking',ICICIBANK:'Banking',AXISBANK:'Banking',KOTAKBANK:'Banking',INDUSINDBK:'Banking',SBIN:'PSU Bank',TCS:'IT',INFY:'IT',MARUTI:'Auto',TATAMOTORS:'Auto',LT:'Infra',BAJFINANCE:'NBFC',RELIANCE:'Energy'};
+
     const picks = [...stocks]
       .map(s => {
         const score = _activeScore(s);
+        const price = Number(s.price || 0);
         const atrPct = Number(s.atr_pct || Math.max(Math.abs(Number(s.chg_pct||0))*0.8, 1.2));
-        const atr = Math.max(Number(s.price||0) * atrPct / 100, Number(s.price||0) * 0.004);
-        const entry = Number(s.price||0);
-        const stop = entry - atr * 1.2;
-        const target = entry + atr * 2.5;
-        const rr = atr > 0 ? ((target-entry)/(entry-stop)).toFixed(1) : '0.0';
+        const atr = Math.max(price * atrPct / 100, price * 0.006);
+        const dir = Number(s.chg_pct || 0) >= 0 ? 'LONG' : 'SHORT';
+        const entry = price;
+        const stop = dir === 'LONG' ? entry - atr * 1.5 : entry + atr * 1.5;
+        const target = dir === 'LONG' ? entry + atr * 3 : entry - atr * 3;
+        const rr = atr > 0 ? ((Math.abs(target - entry)) / Math.abs(entry - stop)).toFixed(1) : '0.0';
         const pc = Number(s.pc || 0);
-        const sigLbl = pc >= 3 ? 'EXECUTE' : pc >= 2 ? 'WATCH' : 'NO TRADE';
-        const sigCss = pc >= 3 ? 'color:var(--go);border:1px solid var(--go-b)' : pc >= 2 ? 'color:var(--am);border:1px solid var(--am-b)' : 'color:var(--t2);border:1px solid var(--b1)';
-        const outcome = (window._histData && Array.isArray(window._histData.stock_picks) ? (window._histData.stock_picks.find(p => p.sym === s.symbol) || {}).outcome : '') || 'LIVE';
-        return {sym:s.symbol, sector:secM[s.symbol]||'Market', price:Math.round(Number(s.price||0)), setup:Number(s.chg_pct||0)>=0?'MOMENTUM':'REVERSAL', entry:`${Math.round(entry-atr*0.3).toLocaleString('en-IN')}–${Math.round(entry+atr*0.2).toLocaleString('en-IN')}`, target:Math.round(target), stop:Math.round(stop), rr, pc, sigLbl, sigCss, outcome, hold:pc>=3?'1–3d':'Watch', score};
+        const gates = [s.g1,s.g2,s.g3,s.g4,s.g5].map(g => String(g||'').toLowerCase() === 'go' ? 'go' : String(g||'').toLowerCase() === 'am' ? 'am' : 'off');
+        const setup = Number(s.chg_pct||0) >= 0.3 ? 'Breakout' : Number(s.chg_pct||0) <= -0.3 ? 'Pullback' : 'Recovery';
+        const holdM = {Breakout:'3–5d', Pullback:'4–7d', Recovery:'5–8d'};
+        return { sym:s.symbol, price, chgPct:Number(s.chg_pct||0), dir, setup,
+          entryLo: Math.round(entry - atr*0.3), entryHi: Math.round(entry + atr*0.2),
+          target: Math.round(target), stop: Math.round(stop), rr,
+          pc, gates, hold: holdM[setup]||'5–7d', score };
       })
-      .sort((a,b)=>b.score-a.score)
-      .slice(0,8);
-    body.innerHTML = picks.map((d,i)=>`<tr style="${d.score>=80?'background:rgba(0,232,122,.03)':''}"><td><span style="color:var(--t2);font-size:8px;margin-right:3px">${i+1}</span><span class="tv-link" data-tvsym="${d.sym}" style="font-weight:600;color:var(--t0)">${d.sym}</span></td><td style="color:var(--t2);font-size:9px">${d.sector}</td><td style="font-weight:600">${d.price.toLocaleString('en-IN')}</td><td><span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:2px;${d.setup==='MOMENTUM'?'color:var(--bl);border:1px solid var(--bl-b)':'color:var(--am);border:1px solid var(--am-b)'}">${d.setup}</span></td><td style="color:var(--am)">${d.entry}</td><td style="color:var(--go);font-weight:600">${d.target.toLocaleString('en-IN')}</td><td style="color:var(--st)">${d.stop.toLocaleString('en-IN')}</td><td style="color:${Number(d.rr)>=2.5?'var(--go)':Number(d.rr)>=2?'var(--am)':'var(--st)'};font-weight:600">1:${d.rr}</td><td>${_gateDots('go', d.pc>=2?'go':'am', d.pc>=2?'go':'am', d.pc>=3?'go':'wt', d.pc>=3?'go':'st')}</td><td style="color:${d.pc>=3?'var(--go)':d.pc>=2?'var(--am)':'var(--t2)'};font-weight:700">${d.pc}/5</td><td><span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:2px;${d.sigCss}">${d.sigLbl}</span></td><td style="color:${d.outcome==='PROFIT'?'var(--go)':d.outcome==='LOSS'?'var(--st)':'var(--t2)'};font-size:9px">${d.outcome.replace('_',' ')}</td><td style="color:var(--t2)">${d.hold}</td><td><span style="font-size:10px;font-weight:700;color:${d.score>=80?'var(--go)':d.score>=65?'var(--am)':'var(--st)'}">${d.score}</span><div class="swbar"><div class="swbf" style="width:${Math.min(99,d.score)}%;background:${d.score>=80?'var(--go)':d.score>=65?'var(--am)':'var(--st)'}"></div></div></td></tr>`).join('');
+      .filter(d => d.price > 0)
+      .sort((a,b) => b.score - a.score)
+      .slice(0, 12);
+
+    if(!picks.length) return;
+
+    carousel.innerHTML = picks.map(d => {
+      const sc = d.score;
+      const scCol = sc >= 80 ? '#00e87a' : sc >= 65 ? '#ffaa00' : '#64748b';
+      const cardCls = sc >= 80 ? 'sw-card high' : sc >= 65 ? 'sw-card mod' : 'sw-card';
+      const sigLbl = d.pc >= 4 ? 'EXECUTE' : d.pc >= 3 ? 'WATCH' : 'SCAN';
+      const sigCss = d.pc >= 4 ? 'color:var(--go);background:var(--go-b)' : d.pc >= 3 ? 'color:var(--am);background:var(--am-b)' : 'color:var(--t2);background:var(--s3)';
+      const dirCol = d.dir === 'LONG' ? 'var(--go)' : 'var(--st)';
+      const chgSign = d.chgPct >= 0 ? '+' : '';
+      const setupCss = d.setup === 'Breakout' ? 'color:var(--go);background:rgba(0,232,122,.1);border:1px solid rgba(0,232,122,.2)'
+        : d.setup === 'Pullback' ? 'color:var(--am);background:rgba(255,170,0,.1);border:1px solid rgba(255,170,0,.2)'
+        : 'color:var(--st);background:rgba(255,51,85,.08);border:1px solid rgba(255,51,85,.15)';
+      const rrCol = Number(d.rr) >= 2.5 ? 'var(--go)' : Number(d.rr) >= 2 ? 'var(--am)' : 'var(--st)';
+      const gatePips = d.gates.map(g =>
+        `<div class="sw-gate-pip" style="background:${g==='go'?'var(--go)':g==='am'?'var(--am)':'rgba(255,255,255,.1)'}"></div>`
+      ).join('');
+      // Score ring SVG (r=16, circumference=100.5)
+      const cir = 100.5;
+      const off = cir - cir * Math.min(sc,100) / 100;
+      return `<div class="${cardCls}" onclick="openTVChart('${d.sym}')">
+        <div class="sw-card-hdr">
+          <div>
+            <div class="sw-card-sym">${d.sym}</div>
+            <div class="sw-card-price">₹${d.price.toLocaleString('en-IN')} <span style="color:${dirCol}">${chgSign}${d.chgPct.toFixed(2)}%</span></div>
+            <div style="margin-top:5px"><span class="sw-setup" style="${setupCss}">${d.setup.toUpperCase()}</span></div>
+          </div>
+          <div class="sw-score-ring">
+            <svg viewBox="0 0 38 38">
+              <circle cx="19" cy="19" r="16" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="3"/>
+              <circle cx="19" cy="19" r="16" fill="none" stroke="${scCol}" stroke-width="3"
+                stroke-dasharray="${cir}" stroke-dashoffset="${off.toFixed(1)}"
+                stroke-linecap="round" transform="rotate(-90 19 19)" opacity=".9"/>
+            </svg>
+            <div class="sw-score-num" style="color:${scCol}">${sc}</div>
+          </div>
+        </div>
+        <div class="sw-card-body">
+          <div class="sw-row">
+            <span class="sw-lbl">ENTRY ZONE</span>
+            <span class="sw-val am">₹${d.entryLo.toLocaleString('en-IN')} – ${d.entryHi.toLocaleString('en-IN')}</span>
+          </div>
+          <div class="sw-row">
+            <span class="sw-lbl">TARGET</span>
+            <span class="sw-val go">₹${d.target.toLocaleString('en-IN')}</span>
+          </div>
+          <div class="sw-row">
+            <span class="sw-lbl">STOP LOSS</span>
+            <span class="sw-val st">₹${d.stop.toLocaleString('en-IN')}</span>
+          </div>
+          <div class="sw-row">
+            <span class="sw-lbl">RISK : REWARD</span>
+            <span class="sw-val" style="color:${rrCol};font-size:10px;font-weight:800">1 : ${d.rr}</span>
+          </div>
+          <div class="sw-row">
+            <span class="sw-lbl">GATES</span>
+            <div class="sw-gates">${gatePips}<span style="font-size:7px;color:var(--t2);margin-left:4px">${d.pc}/5</span></div>
+          </div>
+        </div>
+        <div class="sw-card-foot">
+          <span class="sw-hold">⏱ Hold ${d.hold}</span>
+          <span class="sw-sig" style="${sigCss}">${sigLbl}</span>
+        </div>
+      </div>`;
+    }).join('');
   }
 
   function _renderVolumeRadarLive(){
@@ -5325,45 +5481,72 @@ async function tbDateChange(val) {
     const _sc   = s => s>=80?'var(--go)':s>=65?'var(--am)':'var(--st)';
 
     // ── [HIST] Swing Radar ───────────────────────────────────────────────────
-    const swBody = document.getElementById('sw-body');
-    const _isPos = (typeof curMode !== 'undefined' && curMode === 'positional');
-    if(swBody) {
+    // ── [HIST] Swing Radar — render as cards into carousel ───────────────────
+    const swCarousel = document.getElementById('sw-carousel');
+    if(swCarousel) {
       if(d.stock_picks && d.stock_picks.length) {
-        swBody.innerHTML = d.stock_picks.map((p, i) => {
-          const pr   = parseFloat(p.close)||0;
-          const entN = parseFloat(p.entry)||pr;
-          const atr  = parseFloat(p.atr)||(pr*0.015);
-          const ezLo = Math.round(entN - 0.3*atr).toLocaleString('en-IN');
-          const ezHi = Math.round(entN + 0.2*atr).toLocaleString('en-IN');
-          const tgt  = Math.round(parseFloat(_isPos ? (p.target_p||p.target) : p.target)||0);
-          const sl   = Math.round(parseFloat(p.sl)||0);
-          const rr   = parseFloat(_isPos ? (p.rr_p||p.rr) : p.rr)||0;
-          const sc   = p.score||0;
-          const ocMap = {PROFIT:'✓ PROFIT','color':'var(--go)',LOSS:'✗ LOSS',NOT_EXECUTED:'— NOT EXEC'};
+        swCarousel.innerHTML = d.stock_picks.map((p, i) => {
+          const pr  = parseFloat(p.close)||0;
+          const entN= parseFloat(p.entry)||pr;
+          const atr = parseFloat(p.atr)||(pr*0.015);
+          const tgt = Math.round(parseFloat(p.target_p||p.target)||0);
+          const sl  = Math.round(parseFloat(p.sl)||0);
+          const rr  = parseFloat(p.rr_p||p.rr)||0;
+          const sc  = p.score||0;
+          const pc  = [p.g1,p.g2,p.g3,p.g4,p.g5].filter(g=>g==='go').length;
           const ocColor = p.outcome==='PROFIT'?'var(--go)':p.outcome==='LOSS'?'var(--st)':'var(--t2)';
-          const ocLabel = p.outcome && p.outcome!=='NO_DATA' && p.outcome!=='UNKNOWN' ? p.outcome.replace('_',' ') : '—';
-          return `<tr style="${sc>=80?'background:rgba(0,232,122,.03)':''}">
-            <td><span style="color:var(--t2);font-size:8px;margin-right:3px">${i+1}</span><span class="tv-link" data-tvsym="${p.sym}" style="font-weight:600;color:var(--t0)">${p.sym}</span></td>
-            <td style="color:var(--t2);font-size:9px">${_secM[p.sym]||'Market'}</td>
-            <td style="font-weight:600">${Math.round(pr).toLocaleString('en-IN')}</td>
-            <td><span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:2px;${_sc2(p.setup)}">${(p.setup||'—').toUpperCase()}</span></td>
-            <td style="color:var(--am)">${ezLo}–${ezHi}</td>
-            <td style="color:var(--go);font-weight:600">${tgt.toLocaleString('en-IN')}</td>
-            <td style="color:var(--st)">${sl.toLocaleString('en-IN')}</td>
-            <td style="color:${rr>=2.5?'var(--go)':rr>=2?'var(--am)':'var(--st)'};font-weight:600">1:${rr.toFixed(1)}</td>
-            <td>${_gateDots(p.g1||'wt',p.g2||'wt',p.g3||'wt',p.g4||'wt',p.g5||'wt')}</td>
-            <td style="color:${(()=>{const pc=[p.g1,p.g2,p.g3,p.g4,p.g5].filter(g=>g==='go').length;return pc>=4?'var(--go)':pc>=3?'var(--am)':'var(--t2)'})()};font-weight:700">${[p.g1,p.g2,p.g3,p.g4,p.g5].filter(g=>g==='go').length}/5</td>
-            <td><span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:2px;${(()=>{const pc=[p.g1,p.g2,p.g3,p.g4,p.g5].filter(g=>g==='go').length;return pc>=4?'color:var(--go);border:1px solid var(--go-b)':pc>=3?'color:var(--am);border:1px solid var(--am-b)':'color:var(--t2);border:1px solid var(--b1)'})()}">${(()=>{const pc=[p.g1,p.g2,p.g3,p.g4,p.g5].filter(g=>g==='go').length;return pc>=4?'EXECUTE':pc>=3?'WAIT':'NO TRADE'})()}</span></td>
-            <td style="color:${ocColor};font-size:9px;font-weight:700">${ocLabel}${p.signal_time?'<br><span style="font-size:7px;color:var(--t2);font-weight:400">⏱ '+p.signal_time+'</span>':''}</td>
-            <td style="color:var(--t2)">${_holdM[p.setup]||'5–8d'}</td>
-            <td><span style="font-size:10px;font-weight:700;color:${_sc(sc)}">${sc}</span><div class="swbar"><div class="swbf" style="width:${sc}%;background:${_sc(sc)}"></div></div></td>
-          </tr>`;
+          const ocLabel = p.outcome && p.outcome!=='NO_DATA' && p.outcome!=='UNKNOWN' ? p.outcome.replace('_',' ') : 'LIVE';
+          const ocIcon  = p.outcome==='PROFIT'?'✓':p.outcome==='LOSS'?'✗':'—';
+          const scCol = sc>=80?'#00e87a':sc>=65?'#ffaa00':'#64748b';
+          const cardCls = sc>=80?'sw-card high':sc>=65?'sw-card mod':'sw-card';
+          const sigLbl = pc>=4?'EXECUTE':pc>=3?'WATCH':'SCAN';
+          const sigCss = pc>=4?'color:var(--go);background:var(--go-b)':pc>=3?'color:var(--am);background:var(--am-b)':'color:var(--t2);background:var(--s3)';
+          const rrCol = rr>=2.5?'var(--go)':rr>=2?'var(--am)':'var(--st)';
+          const setupCss = p.setup==='Breakout'?'color:var(--go);background:rgba(0,232,122,.1);border:1px solid rgba(0,232,122,.2)'
+            :p.setup==='Pullback'?'color:var(--am);background:rgba(255,170,0,.1);border:1px solid rgba(255,170,0,.2)'
+            :'color:var(--st);background:rgba(255,51,85,.08);border:1px solid rgba(255,51,85,.15)';
+          const gatePips = [p.g1,p.g2,p.g3,p.g4,p.g5].map(g=>
+            `<div class="sw-gate-pip" style="background:${g==='go'?'var(--go)':g==='am'?'var(--am)':'rgba(255,255,255,.1)'}"></div>`).join('');
+          const cir=100.5, off=(cir-cir*Math.min(sc,100)/100).toFixed(1);
+          const ezLo=Math.round(entN-0.3*atr).toLocaleString('en-IN');
+          const ezHi=Math.round(entN+0.2*atr).toLocaleString('en-IN');
+          return `<div class="${cardCls}" onclick="openTVChart('${p.sym}')">
+            <div class="sw-card-hdr">
+              <div>
+                <div class="sw-card-sym">${p.sym}</div>
+                <div class="sw-card-price">₹${Math.round(pr).toLocaleString('en-IN')} · ${val}</div>
+                <div style="margin-top:5px"><span class="sw-setup" style="${setupCss}">${(p.setup||'—').toUpperCase()}</span></div>
+              </div>
+              <div class="sw-score-ring">
+                <svg viewBox="0 0 38 38"><circle cx="19" cy="19" r="16" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="3"/>
+                <circle cx="19" cy="19" r="16" fill="none" stroke="${scCol}" stroke-width="3"
+                  stroke-dasharray="${cir}" stroke-dashoffset="${off}"
+                  stroke-linecap="round" transform="rotate(-90 19 19)"/></svg>
+                <div class="sw-score-num" style="color:${scCol}">${sc}</div>
+              </div>
+            </div>
+            <div class="sw-card-body">
+              <div class="sw-row"><span class="sw-lbl">ENTRY ZONE</span><span class="sw-val am">₹${ezLo}–${ezHi}</span></div>
+              <div class="sw-row"><span class="sw-lbl">TARGET</span><span class="sw-val go">₹${tgt.toLocaleString('en-IN')}</span></div>
+              <div class="sw-row"><span class="sw-lbl">STOP LOSS</span><span class="sw-val st">₹${sl.toLocaleString('en-IN')}</span></div>
+              <div class="sw-row"><span class="sw-lbl">RISK : REWARD</span><span class="sw-val" style="color:${rrCol};font-size:10px;font-weight:800">1 : ${rr.toFixed(1)}</span></div>
+              <div class="sw-row"><span class="sw-lbl">GATES</span><div class="sw-gates">${gatePips}<span style="font-size:7px;color:var(--t2);margin-left:4px">${pc}/5</span></div></div>
+              <div class="sw-row"><span class="sw-lbl">OUTCOME</span>
+                <span style="font-size:9px;font-weight:700;color:${ocColor}">${ocIcon} ${ocLabel}</span>
+              </div>
+            </div>
+            <div class="sw-card-foot">
+              <span class="sw-hold">⏱ Hold ${_holdM[p.setup]||'5–8d'}</span>
+              <span class="sw-sig" style="${sigCss}">${sigLbl}</span>
+            </div>
+          </div>`;
         }).join('');
       } else {
-        swBody.innerHTML = `<tr><td colspan="14" style="text-align:center;color:var(--am);padding:20px;font-size:9px;line-height:1.8">
-          No qualifying stock setups on ${val}<br>
-          <span style="color:var(--t2)">No stocks met minimum gate conditions (pc ≥ 2) on this date</span>
-        </td></tr>`;
+        swCarousel.innerHTML = `<div style="display:flex;min-width:100%;height:100%;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:var(--t2);font-size:9px">
+          <div style="font-size:22px;opacity:.3">📊</div>
+          No qualifying swing setups on ${val}<br>
+          <span style="color:var(--t3)">No stocks met minimum gate conditions on this date</span>
+        </div>`;
       }
     }
 
@@ -7261,8 +7444,8 @@ function _renderSESCards() {
         <th rowspan="2" class="sc-sig">SIGNAL</th>
         <th rowspan="2" class="sc-gates">GATES</th>
         <th rowspan="2" class="sc-conf">CONF</th>
-        <th colspan="4" class="hg-intra grp-hdr">── INTRADAY ──</th>
-        <th colspan="4" class="hg-pos grp-hdr">── POSITIONAL ──</th>
+        <th colspan="4" class="hg-intra grp-hdr">⚡ INTRADAY — DAY TRADE</th>
+        <th colspan="4" class="hg-pos grp-hdr">📈 POSITIONAL — SWING 2–5D</th>
         <th rowspan="2" class="sc-tk">TAKE</th>
       </tr>
       <tr>
