@@ -20,13 +20,12 @@ def _validate_config():
     """Validate all required configuration at startup."""
     errors = []
 
-    # Required credentials
+    # Required credentials — only API key/secret are hard required
+    # KITE_ACCESS_TOKEN can be missing; auto_token will refresh it at startup
     if not KITE_API_KEY:
-        errors.append("KITE_API_KEY missing in .env")
+        errors.append("KITE_API_KEY missing — set in Railway Variables tab")
     if not KITE_API_SECRET:
-        errors.append("KITE_API_SECRET missing in .env")
-    if not KITE_ACCESS_TOKEN:
-        errors.append("KITE_ACCESS_TOKEN missing in .env")
+        errors.append("KITE_API_SECRET missing — set in Railway Variables tab")
 
     # Port validation
     if not (1 <= PORT <= 65535):
@@ -37,6 +36,9 @@ def _validate_config():
         for err in errors:
             logger.error(f"  - {err}")
         sys.exit(1)
+
+    if not KITE_ACCESS_TOKEN:
+        logger.warning("KITE_ACCESS_TOKEN not set — will auto-refresh at startup")
 
 # ─── KITE CONNECT ─────────────────────────────────────────────────────────────
 KITE_API_KEY      = os.getenv("KITE_API_KEY", "").strip()
