@@ -138,9 +138,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
 /* RIGHT PANEL — collapsed + open states */
 #right{overflow:hidden;display:flex;flex-direction:column;transition:box-shadow .5s,border-left-color .5s;border-left:2px solid var(--b1)}
-#right.rp-execute{border-left-color:var(--go);box-shadow:-3px 0 20px rgba(0,232,122,.15)}
-#right.rp-watch{border-left-color:var(--am);box-shadow:-3px 0 14px rgba(255,185,0,.12)}
+#right.rp-execute{border-left-color:var(--go);box-shadow:-4px 0 24px rgba(0,232,122,.2)}
+#right.rp-watch{border-left-color:var(--am);box-shadow:-3px 0 16px rgba(255,185,0,.15)}
 #right.rp-notrade{border-left-color:var(--st);box-shadow:none}
+/* Right panel content — green/amber tinted dark bg */
+#right-content{background:linear-gradient(180deg,#0d1f12 0%,var(--s1) 80%)!important}
+#right.rp-watch #right-content{background:linear-gradient(180deg,#1a1400 0%,var(--s1) 80%)!important}
+#right.rp-notrade #right-content{background:var(--s1)!important}
 
 /* Collapsed strip */
 #right-strip{
@@ -209,7 +213,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 #left-content{
   display:none;flex-direction:column;width:260px;flex-shrink:0;
   min-height:0;overflow:hidden;
+  border-right:1px solid rgba(56,190,255,.18);
+  background:linear-gradient(180deg,#0d1a2a 0%,var(--s1) 100%);
 }
+/* Left panel blue accent header */
+#gate-header{background:linear-gradient(180deg,rgba(56,190,255,.12),rgba(56,190,255,.04))!important;border-bottom:1px solid rgba(56,190,255,.2)!important}
+#left-content #vd{border-left:2px solid var(--bl-b)}
 #gate-header{
   display:flex;align-items:center;justify-content:space-between;
   padding:0 10px;height:36px;flex-shrink:0;
@@ -875,10 +884,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 </div>
 
 <!-- TOKEN EXPIRY WARNING BANNER -->
-<div id="token-banner" style="display:none;background:#ff335522;border-bottom:1px solid #ff335566;padding:5px 14px;font-size:9px;color:#ff3355;letter-spacing:.5px;align-items:center;gap:8px;flex-shrink:0">
-  <span>⚠</span>
-  <span id="token-banner-msg">Kite access token may be expired — live data may be stale. Regenerate token and restart backend.</span>
-  <span style="margin-left:auto;cursor:pointer;opacity:.6" onclick="document.getElementById('token-banner').style.display='none'">✕</span>
+<div id="token-banner" style="display:none;border-bottom:1px solid #ff335544;padding:5px 14px;font-size:9px;letter-spacing:.5px;align-items:center;gap:8px;flex-shrink:0;background:linear-gradient(90deg,#ff335518,#ff335508)">
+  <span id="token-banner-icon">⚠</span>
+  <span id="token-banner-msg">Kite access token expired — auto-refreshing...</span>
+  <button id="token-banner-retry" onclick="tokenBannerRefresh()" style="padding:1px 8px;font-size:7.5px;font-family:var(--fn);font-weight:700;border:1px solid #ff335566;border-radius:2px;cursor:pointer;color:#ff3355;background:transparent;letter-spacing:.5px">↻ REFRESH NOW</button>
+  <span style="margin-left:auto;cursor:pointer;opacity:.5;color:#ff3355" onclick="document.getElementById('token-banner').style.display='none'">✕</span>
 </div>
 
 <!-- MAIN GRID -->
@@ -2493,14 +2503,33 @@ entry_time    strike  type  entry  max   exit  return%
     <span style="color:var(--t2);margin-left:6px">Click ◉ LIVE to return to live feed.</span>
   </div>
 
-  <div id="ses-summary">
+  <div id="ses-summary" style="display:flex;border-bottom:1px solid var(--b1);flex-shrink:0;background:var(--s2)">
+    <!-- Signal counts -->
     <div class="ses-stat"><div class="ses-stat-val cg" id="ses-s-execute">0</div><div class="ses-stat-lbl">EXECUTE</div></div>
     <div class="ses-stat"><div class="ses-stat-val ca" id="ses-s-watch">0</div><div class="ses-stat-lbl">WATCH</div></div>
     <div class="ses-stat"><div class="ses-stat-val" id="ses-s-scan" style="color:var(--t1)">0</div><div class="ses-stat-lbl">SCAN</div></div>
     <div class="ses-stat"><div class="ses-stat-val cg" id="ses-s-long">0</div><div class="ses-stat-lbl">LONG</div></div>
     <div class="ses-stat"><div class="ses-stat-val cr" id="ses-s-short">0</div><div class="ses-stat-lbl">SHORT</div></div>
-    <div class="ses-stat"><div class="ses-stat-val cb" id="ses-s-highconf">0</div><div class="ses-stat-lbl">HIGH CONF</div></div>
-    <div class="ses-stat"><div class="ses-stat-val cg" id="ses-s-win" style="font-size:10px">—</div><div class="ses-stat-lbl">WIN RATE</div></div>
+    <!-- Divider -->
+    <div style="width:1px;background:var(--b1);margin:4px 0;flex-shrink:0"></div>
+    <!-- INTRADAY backtest stats -->
+    <div class="ses-stat" style="background:rgba(56,190,255,.04);min-width:80px">
+      <div style="font-size:6px;letter-spacing:1.5px;color:var(--bl);font-weight:700;margin-bottom:2px">⚡ INTRADAY</div>
+      <div style="display:flex;align-items:baseline;gap:4px">
+        <div class="ses-stat-val" id="ses-s-iwin" style="color:var(--go);font-size:12px">—</div>
+        <div style="font-size:7px;color:var(--t3)">WIN</div>
+      </div>
+      <div style="font-size:7px;color:var(--t2);margin-top:1px" id="ses-s-iavg">avg — pts</div>
+    </div>
+    <!-- POSITIONAL backtest stats -->
+    <div class="ses-stat" style="background:rgba(167,139,250,.04);min-width:80px">
+      <div style="font-size:6px;letter-spacing:1.5px;color:var(--pu);font-weight:700;margin-bottom:2px">📈 POSITIONAL</div>
+      <div style="display:flex;align-items:baseline;gap:4px">
+        <div class="ses-stat-val" id="ses-s-pwin" style="color:var(--go);font-size:12px">—</div>
+        <div style="font-size:7px;color:var(--t3)">WIN</div>
+      </div>
+      <div style="font-size:7px;color:var(--t2);margin-top:1px" id="ses-s-pavg">avg — pts</div>
+    </div>
     <div class="ses-stat"><div class="ses-stat-val" id="ses-s-kz" style="color:#f0b429;font-size:9px;letter-spacing:0">—</div><div class="ses-stat-lbl">KILL ZONE</div></div>
   </div>
 
@@ -6252,15 +6281,51 @@ function dvRender(d) {
 }
 
 // ── Token expiry check — runs once on load ──
+let _tokenRefreshing = false;
+
+async function tokenBannerRefresh() {
+  if(_tokenRefreshing) return;
+  _tokenRefreshing = true;
+  const msg  = document.getElementById('token-banner-msg');
+  const icon = document.getElementById('token-banner-icon');
+  const btn  = document.getElementById('token-banner-retry');
+  if(msg)  msg.style.color  = 'var(--am)';
+  if(msg)  msg.textContent  = 'Refreshing token via headless browser login… (30–60 sec)';
+  if(icon) icon.textContent = '⟳';
+  if(btn)  btn.style.display = 'none';
+  try {
+    const r = await fetch(API+'/api/token-refresh', {method:'POST'});
+    const d = await r.json();
+    if(d.ok) {
+      if(msg)  msg.textContent = '✓ Token refreshed — live data resuming';
+      if(msg)  msg.style.color = 'var(--go)';
+      if(icon) icon.textContent = '✓';
+      setTimeout(() => { const b = document.getElementById('token-banner'); if(b) b.style.display='none'; }, 4000);
+    } else {
+      if(msg)  msg.textContent = 'Auto-refresh failed: ' + (d.msg||'unknown') + ' — check KITE_USER_ID / KITE_PASSWORD / KITE_TOTP_SECRET in Railway env vars';
+      if(msg)  msg.style.color = '#ff3355';
+      if(icon) icon.textContent = '⚠';
+      if(btn)  btn.style.display = 'inline';
+    }
+  } catch(e) {
+    if(msg)  msg.textContent = 'Could not reach backend for token refresh. Backend may be restarting.';
+    if(msg)  msg.style.color = '#ff3355';
+    if(btn)  btn.style.display = 'inline';
+  }
+  _tokenRefreshing = false;
+}
+
 (async function checkToken() {
   try {
     const r = await fetch(API+'/api/token-status');
     const d = await r.json();
     if(!d.valid) {
       const banner = document.getElementById('token-banner');
-      document.getElementById('token-banner-msg').textContent =
-        'Kite access token expired — live data is stale. Regenerate token and restart backend. Error: ' + (d.error||'unknown');
+      const msg    = document.getElementById('token-banner-msg');
+      if(msg) msg.textContent = 'Kite token expired — auto-refreshing now…';
       if(banner) banner.style.display = 'flex';
+      // Auto-trigger refresh immediately
+      tokenBannerRefresh();
     }
   } catch(e) {}
 })();
@@ -6736,6 +6801,48 @@ function toggleRightPanel(forceOpen) {
 
 // Start collapsed
 toggleRightPanel(false);
+
+// ── HOVER AUTO-SHOW/HIDE FOR BOTH PANELS ─────────────────────────────────────
+(function setupPanelHover() {
+  let _leftHideTimer = null;
+  let _rightHideTimer = null;
+  const HIDE_DELAY = 1800; // ms after mouse leaves before panel closes
+
+  // LEFT PANEL: hover on left-strip → expand, leave content → collapse
+  const leftStrip = document.getElementById('left-strip');
+  const leftContent = document.getElementById('left-content');
+  const leftEl = document.getElementById('left');
+
+  function leftShow() {
+    clearTimeout(_leftHideTimer);
+    if(!_gateOpen) toggleGatePanel();
+  }
+  function leftHide() {
+    clearTimeout(_leftHideTimer);
+    _leftHideTimer = setTimeout(() => { if(_gateOpen) toggleGatePanel(); }, HIDE_DELAY);
+  }
+
+  if(leftStrip) leftStrip.addEventListener('mouseenter', leftShow);
+  if(leftEl)    leftEl.addEventListener('mouseleave', leftHide);
+  if(leftEl)    leftEl.addEventListener('mouseenter', () => clearTimeout(_leftHideTimer));
+
+  // RIGHT PANEL: hover on right-strip → expand, leave → collapse
+  const rightStrip = document.getElementById('right-strip');
+  const rightEl    = document.getElementById('right');
+
+  function rightShow() {
+    clearTimeout(_rightHideTimer);
+    if(!_rightOpen) toggleRightPanel(true);
+  }
+  function rightHide() {
+    clearTimeout(_rightHideTimer);
+    _rightHideTimer = setTimeout(() => { if(_rightOpen) toggleRightPanel(false); }, HIDE_DELAY);
+  }
+
+  if(rightStrip) rightStrip.addEventListener('mouseenter', rightShow);
+  if(rightEl)    rightEl.addEventListener('mouseleave', rightHide);
+  if(rightEl)    rightEl.addEventListener('mouseenter', () => clearTimeout(_rightHideTimer));
+})();
 
 // ── RIGHT PANEL — GATE-DRIVEN AUTO-EXPAND ─────────────────────────────────────
 function _syncRightPanel(passCount, verdict) {
@@ -7310,23 +7417,38 @@ function sesGoLive() {
 }
 
 function _sesSummaryBar(kz) {
-  const _sv = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+  const _sv  = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+  const _sc  = (id, col) => { const el = document.getElementById(id); if(el) el.style.color = col; };
   const execN  = _sesCards.filter(c => c.verdict === 'EXECUTE').length;
   const watchN = _sesCards.filter(c => c.verdict === 'WATCH').length;
   const scanN  = _sesCards.filter(c => c.verdict === 'SCAN').length;
   const longN  = _sesCards.filter(c => c.dir === 'LONG').length;
   const shortN = _sesCards.filter(c => c.dir === 'SHORT').length;
-  const highN  = _sesCards.filter(c => c.confScore >= 70).length;
-  const withOutcome = _sesCards.filter(c => c.outcome);
-  const wins   = withOutcome.filter(c => c.outcome === 'WIN').length;
-  const winRate = withOutcome.length ? Math.round(wins / withOutcome.length * 100) : null;
   _sv('ses-s-execute', execN);
   _sv('ses-s-watch',   watchN);
   _sv('ses-s-scan',    scanN);
   _sv('ses-s-long',    longN);
   _sv('ses-s-short',   shortN);
-  _sv('ses-s-highconf', highN);
-  _sv('ses-s-win', winRate !== null ? winRate + '%' : '—');
+
+  // ── INTRADAY backtest stats ─────────────────────────────
+  const withI = _sesCards.filter(c => c.trade_i?.outcome);
+  const iWins = withI.filter(c => c.trade_i.outcome === 'WIN');
+  const iWR   = withI.length ? Math.round(iWins.length / withI.length * 100) : null;
+  const iAvg  = iWins.length ? Math.round(iWins.reduce((s,c)=>s+(c.trade_i.pnl||0),0)/iWins.length) : null;
+  _sv('ses-s-iwin', iWR !== null ? iWR + '%' : (withI.length ? '0%' : '—'));
+  _sv('ses-s-iavg', iAvg !== null ? `avg +${iAvg} pts` : withI.length ? `${withI.length} trades` : 'no data');
+  _sc('ses-s-iwin', iWR >= 55 ? 'var(--go)' : iWR >= 40 ? 'var(--am)' : iWR !== null ? 'var(--st)' : 'var(--t2)');
+
+  // ── POSITIONAL backtest stats ───────────────────────────
+  const withP = _sesCards.filter(c => c.trade_p?.outcome);
+  const pWins = withP.filter(c => c.trade_p.outcome === 'WIN');
+  const pWR   = withP.length ? Math.round(pWins.length / withP.length * 100) : null;
+  const pAvg  = pWins.length ? Math.round(pWins.reduce((s,c)=>s+(c.trade_p.pnl||0),0)/pWins.length) : null;
+  _sv('ses-s-pwin', pWR !== null ? pWR + '%' : (withP.length ? '0%' : '—'));
+  _sv('ses-s-pavg', pAvg !== null ? `avg +${pAvg} pts` : withP.length ? `${withP.length} trades` : 'no data');
+  _sc('ses-s-pwin', pWR >= 55 ? 'var(--go)' : pWR >= 40 ? 'var(--am)' : pWR !== null ? 'var(--st)' : 'var(--t2)');
+
+  // ── Kill zone + timestamp ────────────────────────────────
   _sv('ses-s-kz', kz?.lbl || '—');
   const updEl = document.getElementById('ses-updated');
   if(updEl) updEl.textContent = _sesHistoryMode ? 'HISTORY' : 'LIVE ' + new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
