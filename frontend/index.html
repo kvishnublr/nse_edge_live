@@ -3,7 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>NSE EDGE — Intelligent Trading System v5</title>
+<meta name="description" content="STOCKR.IN - AI-Powered Intraday Trading Signals. Real-time spike detection, 5-gate filter system, and automated trade signals for NSE F&O stocks.">
+<meta name="keywords" content="stock trading, intraday signals, NSE, F&O, spike detector, algo trading, zerodha, kite connect">
+<meta property="og:site_name" content="STOCKR.IN">
+<meta property="og:title" content="STOCKR.IN - AI Trading Signals">
+<meta property="og:description" content="AI-Powered Intraday Trading Signals with 70% Win Rate">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+<title>STOCKR.IN — AI-Powered Trading Signals</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0d1520">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
@@ -101,11 +107,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 /* TOPBAR */
 #tb{height:36px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:var(--s1);border-bottom:1px solid var(--b1);flex-shrink:0}
 .tbl{display:flex;align-items:center;gap:14px}
-.logo{display:flex;align-items:center;gap:10px;cursor:default;user-select:none}
-.logo-icon{flex-shrink:0;filter:drop-shadow(0 0 6px rgba(0,232,122,.35))}
-.logo-text{display:flex;flex-direction:column;line-height:1.1}
-.logo-name{font-family:var(--fh);font-size:16px;font-weight:900;letter-spacing:3px;background:linear-gradient(90deg,#00e87a 0%,#38beff 60%,#a78bfa 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.logo-sub{font-family:var(--fn);font-size:6.5px;font-weight:500;letter-spacing:2.5px;color:var(--t3);margin-top:2px;text-transform:uppercase}
+.logo{display:flex;align-items:center;gap:8px;cursor:default;user-select:none}
+.logo-icon{flex-shrink:0}
+.logo-text{display:flex;flex-direction:column;line-height:1.15}
+.logo-name{font-family:Georgia,'Times New Roman',serif;font-size:18px;font-weight:700;color:var(--t0);letter-spacing:0.5px}
+.arrow{stroke:#22c55e;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+:root.light .arrow{stroke:#16a34a}
 .sep{width:1px;height:16px;background:var(--b2)}
 .lpill{display:flex;align-items:center;gap:5px;font-size:9px;color:var(--go)}
 .ldot{width:5px;height:5px;border-radius:50%;background:var(--go);animation:pulse 1.5s ease-in-out infinite}
@@ -441,30 +448,79 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .xtbl tbody tr:hover td{background:rgba(255,255,255,.03)}
 
 /* KILL ZONES */
-.kzbar{display:flex;height:34px;border-radius:3px;overflow:hidden;border:1px solid var(--b1);flex-shrink:0}
-.kz{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:1px;font-size:8px;font-weight:600}
-.kzd{background:rgba(255,170,0,.09);color:var(--am);flex:1.5}
-.kzt{background:rgba(0,232,122,.09);color:var(--go);flex:3.5}
-.kzr{background:rgba(37,56,86,.35);color:var(--t2);flex:1.8}
-.kze{background:rgba(255,51,85,.09);color:var(--st);flex:1.8}
+.kzbar{display:flex;height:40px;border-radius:6px;overflow:hidden;border:1px solid var(--b1);flex-shrink:0}
+.kz{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2px;font-size:8px;font-weight:700;letter-spacing:.5px;transition:opacity .3s}
+.kzd{background:rgba(255,170,0,.10);color:var(--am);flex:1.5}
+.kzt{background:rgba(0,232,122,.10);color:var(--go);flex:3.5;border-left:1px solid rgba(0,232,122,.15);border-right:1px solid rgba(0,232,122,.15)}
+.kzr{background:rgba(37,56,86,.4);color:var(--t2);flex:1.8}
+.kze{background:rgba(255,51,85,.10);color:var(--st);flex:1.8}
+.kzbar-active .kzd,.kzbar-active .kzt,.kzbar-active .kzr,.kzbar-active .kze{opacity:.3}
+.kzbar .kz.zone-now{opacity:1!important;box-shadow:inset 0 0 0 2px currentColor}
 .kz2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.zcard{padding:8px 10px;border-radius:3px;border:1px solid}
+.zcard{padding:9px 11px;border-radius:5px;border:1px solid}
 .zcard.go{border-color:var(--go-b);background:var(--go-d)}
 .zcard.st{border-color:var(--st-b);background:var(--st-d)}
 .zcard.am{border-color:var(--am-b);background:var(--am-d)}
 .zcard.dm{border-color:var(--b1);background:var(--s3)}
-.zt{font-size:9px;font-weight:600;margin-bottom:2px}
+.zt{font-size:9px;font-weight:700;margin-bottom:3px;letter-spacing:.3px}
 .zcard.go .zt{color:var(--go)}.zcard.st .zt{color:var(--st)}
 .zcard.am .zt{color:var(--am)}.zcard.dm .zt{color:var(--t2)}
-.zd{font-size:9px;color:var(--t2);line-height:1.45}
-.oip{display:grid;grid-template-columns:30px 56px 44px 1fr;gap:6px;align-items:center;padding:4px 8px;border-radius:3px;background:var(--s2);border:1px solid var(--b1);font-size:9px;margin-bottom:3px}
+.zd{font-size:8.5px;color:var(--t2);line-height:1.5}
+.oip{display:grid;grid-template-columns:30px 56px 44px 1fr;gap:6px;align-items:center;padding:5px 9px;border-radius:4px;background:var(--s2);border:1px solid var(--b1);font-size:9px;margin-bottom:3px}
 .oip.go .oip-oi,.oip.go .oip-pt{color:var(--go)}
 .oip.am .oip-oi,.oip.am .oip-pt{color:var(--am)}
 .oip.st .oip-oi,.oip.st .oip-pt{color:var(--st)}
 .oip-t{color:var(--t2)}.oip-oi,.oip-pt{font-weight:600}.oip-lbl{font-size:8px;color:var(--t2)}
 .sks{display:flex;align-items:center;gap:8px}
-.sk{width:30px;height:30px;border-radius:50%;border:1px solid var(--b1);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;color:var(--t2);transition:all .2s}
+.sk{width:32px;height:32px;border-radius:50%;border:1px solid var(--b1);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;color:var(--t2);transition:all .2s}
+.sk:hover{border-color:var(--t2);background:var(--s3)}
 .sk.hit{border-color:var(--st-b);background:var(--st-d);color:var(--st)}
+/* CE/PE SCANNER */
+.kz-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+.cepe-card{border-radius:6px;border:1px solid;padding:12px 14px;position:relative;overflow:hidden}
+.cepe-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.cepe-card.ce{border-color:rgba(0,232,122,.22);background:rgba(0,232,122,.04)}
+.cepe-card.ce::before{background:linear-gradient(90deg,transparent,rgba(0,232,122,.6),transparent)}
+.cepe-card.pe{border-color:rgba(255,51,85,.2);background:rgba(255,51,85,.03)}
+.cepe-card.pe::before{background:linear-gradient(90deg,transparent,rgba(255,51,85,.5),transparent)}
+.cepe-card.avoid{border-color:var(--b1);background:var(--s2);opacity:.55}
+.cepe-card.avoid::before{display:none}
+.cepe-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.cepe-type{font-size:9px;font-weight:800;letter-spacing:1.2px}
+.cepe-type.ce{color:var(--go)}.cepe-type.pe{color:var(--st)}
+.cepe-badge{font-size:7px;padding:2px 8px;border-radius:10px;font-weight:700;letter-spacing:.5px}
+.cepe-badge.strong{background:rgba(0,232,122,.18);color:var(--go)}
+.cepe-badge.moderate{background:rgba(255,170,0,.16);color:var(--am)}
+.cepe-badge.weak{background:rgba(255,51,85,.14);color:var(--st)}
+.cepe-badge.avoid{background:var(--s3);color:var(--t2)}
+.cepe-badge.hedge{background:rgba(56,190,255,.14);color:var(--bl)}
+.cepe-strike{font-size:18px;font-weight:800;color:var(--t0);margin-bottom:6px;letter-spacing:-.5px}
+.cepe-divider{height:1px;background:var(--b1);margin:6px 0}
+.cepe-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+.cepe-lbl{font-size:8px;color:var(--t2)}
+.cepe-val{font-size:8.5px;font-weight:600;color:var(--t1)}
+.cepe-val.go{color:var(--go)}.cepe-val.st{color:var(--st)}.cepe-val.am{color:var(--am)}
+.cepe-pnl{margin-top:6px;padding:5px 8px;border-radius:4px;background:rgba(0,0,0,.15);display:flex;justify-content:space-between;align-items:center}
+.cepe-reason{font-size:7.5px;color:var(--t3);margin-top:6px;padding-top:6px;border-top:1px solid var(--b1);line-height:1.6}
+/* BIAS BAR */
+.kz-toprow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:stretch;margin-bottom:0}
+.bias-bar{display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:6px;border:1px solid var(--b1);background:var(--s2)}
+.bias-label{font-size:8px;color:var(--t2);letter-spacing:1.2px;min-width:75px;flex-shrink:0}
+.bias-val{font-size:12px;font-weight:800;letter-spacing:.5px}
+.bias-val.ce{color:var(--go)}.bias-val.pe{color:var(--st)}.bias-val.neutral{color:var(--am)}.bias-val.avoid{color:var(--st)}
+.bias-reason{font-size:8px;color:var(--t2);line-height:1.5;flex:1}
+.bias-meta{font-size:8px;color:var(--t2);margin-left:auto;text-align:right;flex-shrink:0}
+/* ZONE TIMER BLOCK */
+.zone-block{display:flex;flex-direction:column;justify-content:center;align-items:flex-end;padding:9px 14px;border-radius:6px;border:1px solid var(--b1);background:var(--s2);white-space:nowrap;min-width:130px}
+.zone-timer{font-size:13px;font-weight:800;color:var(--am);font-variant-numeric:tabular-nums;letter-spacing:1px}
+.zone-name{font-size:8px;font-weight:700;letter-spacing:.8px;color:var(--t1)}
+/* THETA WARNING */
+.theta-warn{display:flex;align-items:center;gap:7px;padding:6px 12px;border-radius:5px;font-size:8px}
+.theta-warn.bad{background:rgba(255,51,85,.07);border:1px solid rgba(255,51,85,.18);color:var(--st)}
+.theta-warn.ok{background:rgba(0,232,122,.06);border:1px solid rgba(0,232,122,.18);color:var(--go)}
+/* SECTION HEADERS */
+.kz-section-hdr{font-size:8px;color:var(--t2);letter-spacing:1.8px;text-transform:uppercase;margin-bottom:7px;display:flex;align-items:center;gap:6px}
+.kz-section-hdr::after{content:'';flex:1;height:1px;background:var(--b1)}
 
 /* LEVELS */
 .lv2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -812,38 +868,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 <div id="tb">
   <div class="tbl">
     <div class="logo">
-      <!-- STOCKR logomark: candlestick S-curve -->
-      <svg class="logo-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="lg1" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#00e87a"/>
-            <stop offset="100%" stop-color="#38beff"/>
-          </linearGradient>
-          <linearGradient id="lg2" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#38beff" stop-opacity=".9"/>
-            <stop offset="100%" stop-color="#a78bfa" stop-opacity=".9"/>
-          </linearGradient>
-        </defs>
-        <!-- Outer ring -->
-        <circle cx="16" cy="16" r="15" fill="rgba(0,232,122,.06)" stroke="url(#lg1)" stroke-width="1"/>
-        <!-- Candlestick 1 (green) -->
-        <rect x="7" y="18" width="4" height="8" rx=".8" fill="#00e87a" opacity=".9"/>
-        <line x1="9" y1="16" x2="9" y2="18" stroke="#00e87a" stroke-width="1.2"/>
-        <line x1="9" y1="26" x2="9" y2="28" stroke="#00e87a" stroke-width="1.2"/>
-        <!-- Candlestick 2 (blue) -->
-        <rect x="14" y="12" width="4" height="10" rx=".8" fill="url(#lg2)" opacity=".95"/>
-        <line x1="16" y1="8" x2="16" y2="12" stroke="#38beff" stroke-width="1.2"/>
-        <line x1="16" y1="22" x2="16" y2="25" stroke="#38beff" stroke-width="1.2"/>
-        <!-- Candlestick 3 (green bright) -->
-        <rect x="21" y="9" width="4" height="12" rx=".8" fill="#00e87a"/>
-        <line x1="23" y1="6" x2="23" y2="9" stroke="#00e87a" stroke-width="1.2"/>
-        <line x1="23" y1="21" x2="23" y2="24" stroke="#00e87a" stroke-width="1.2"/>
-        <!-- Uptrend arrow line -->
-        <polyline points="9,22 16,17 23,15" stroke="url(#lg1)" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".7"/>
+      <!-- STOCKR.IN - Arrow Up -->
+      <svg class="logo-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path class="arrow" d="M10 2 L10 18 M10 2 L6 6 M10 2 L14 6" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
       <div class="logo-text">
-        <div class="logo-name">STOCKR</div>
-        <div class="logo-sub">Intelligent Signal System</div>
+        <div class="logo-name">STOCKR.IN</div>
       </div>
     </div>
     <div class="sep"></div>
@@ -1064,38 +1094,84 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   <div id="ta">
 
   <!-- TAB: KILL ZONES -->
-  <div class="tp" id="tp-killzones">
-    <div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:5px">
-        <span style="font-size:8px;color:var(--t2);letter-spacing:1px">SESSION — NSE 9:15 TO 15:30 IST</span>
-        <span style="font-size:8px;font-weight:600" id="curzone">TREND ZONE ACTIVE</span>
+  <div class="tp" id="tp-killzones" style="flex-direction:column;gap:10px;overflow-y:auto">
+
+    <!-- Row 1: Zone Bar + Timer/Bias in one line -->
+    <div style="flex-shrink:0;display:flex;flex-direction:column;gap:8px">
+
+      <!-- Zone timeline bar -->
+      <div class="kzbar kzbar-active">
+        <div class="kz kzd" id="kzb-d">
+          <span style="font-size:8px;font-weight:700">DISCOVERY</span>
+          <span style="font-size:7px;opacity:.55">9:15 – 10:00</span>
+        </div>
+        <div class="kz kzt" id="kzb-t">
+          <span style="font-size:8.5px;font-weight:800">✦ TREND ZONE</span>
+          <span style="font-size:7px;opacity:.55">10:00 – 13:30</span>
+        </div>
+        <div class="kz kzr" id="kzb-r">
+          <span style="font-size:8px;font-weight:700">DRIFT</span>
+          <span style="font-size:7px;opacity:.55">13:30 – 14:30</span>
+        </div>
+        <div class="kz kze" id="kzb-e">
+          <span style="font-size:8px;font-weight:700">EXPIRY</span>
+          <span style="font-size:7px;opacity:.55">14:30 – 15:30</span>
+        </div>
       </div>
-      <div class="kzbar">
-        <div class="kz kzd"><span>DISCOVERY</span><span style="font-size:7px;opacity:.6">9:15–10:00</span></div>
-        <div class="kz kzt"><span>✦ TREND ZONE</span><span style="font-size:7px;opacity:.6">10:00–13:30</span></div>
-        <div class="kz kzr"><span>DRIFT</span><span style="font-size:7px;opacity:.6">13:30–14:30</span></div>
-        <div class="kz kze"><span>EXPIRY</span><span style="font-size:7px;opacity:.6">14:30–15:30</span></div>
+
+      <!-- Bias + Timer row -->
+      <div class="kz-toprow">
+        <div class="bias-bar">
+          <span class="bias-label">INTRADAY BIAS</span>
+          <span class="bias-val" id="kz-bias">—</span>
+          <span class="bias-reason" id="kz-bias-reason">Waiting for data…</span>
+          <span class="bias-meta" id="kz-bias-meta"></span>
+        </div>
+        <div class="zone-block">
+          <span class="zone-timer" id="zone-timer">--:--</span>
+          <span class="zone-name" id="curzone">MARKET CLOSED</span>
+        </div>
+      </div>
+
+      <!-- Theta warning -->
+      <div id="kz-theta" class="theta-warn ok">✓ Trend zone — option buying is supported, theta decay manageable</div>
+    </div>
+
+    <!-- Row 2: CE/PE Opportunity Scanner -->
+    <div style="flex-shrink:0">
+      <div class="kz-section-hdr">⚡ CE / PE OPPORTUNITY SCANNER</div>
+      <div class="kz-grid" id="kz-cepe">
+        <div class="cepe-card avoid" style="grid-column:1/-1;text-align:center;padding:20px;border-radius:6px">
+          <div style="font-size:16px;margin-bottom:6px;opacity:.4">📊</div>
+          <div style="font-size:8.5px;color:var(--t2)">Live option chain data needed</div>
+          <div style="font-size:8px;color:var(--t3);margin-top:3px">Available during market hours (9:15 – 15:30 IST)</div>
+        </div>
       </div>
     </div>
-    <div class="kz2">
-      <div id="kzcards" style="display:flex;flex-direction:column;gap:4px">
-        <div class="zcard am"><div class="zt">9:15–10:00 DISCOVERY</div><div class="zd">Watch only. Mark ORB high / low. No entries. Algo traps active. Spreads wide.</div></div>
-        <div class="zcard go"><div class="zt">10:00–13:30 ✦ TREND (BEST)</div><div class="zd">All 5 gates must pass. Full position size. Momentum entries only.</div></div>
-        <div class="zcard dm"><div class="zt">13:30–14:30 DRIFT</div><div class="zd">No new entries. Manage open trades. Book partial profits here.</div></div>
-        <div class="zcard st"><div class="zt">14:30–15:30 EXPIRY</div><div class="zd">Exit all positions. OI distortion. Max Pain gravity at 24,200.</div></div>
+
+    <!-- Row 3: Zone playbook + OI Pulse + 3-Strike -->
+    <div class="kz2" style="flex-shrink:0">
+      <div style="display:flex;flex-direction:column;gap:0">
+        <div class="kz-section-hdr">SESSION PLAYBOOK</div>
+        <div id="kzcards" style="display:flex;flex-direction:column;gap:4px">
+          <div class="zcard am"><div class="zt">9:15–10:00  DISCOVERY</div><div class="zd">Watch only. Mark ORB high / low. No entries. Algo traps active. Spreads wide.</div></div>
+          <div class="zcard go"><div class="zt">10:00–13:30  ✦ TREND (BEST)</div><div class="zd">All 5 gates must pass. Full position size. Momentum entries only.</div></div>
+          <div class="zcard dm"><div class="zt">13:30–14:30  DRIFT</div><div class="zd">No new entries. Manage open trades. Book partial profits here.</div></div>
+          <div class="zcard st"><div class="zt">14:30–15:30  EXPIRY</div><div class="zd">Exit all. OI distortion. Max Pain gravity. Avoid new CE/PE buys.</div></div>
+        </div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;flex-direction:column;gap:12px">
         <div>
-          <div style="font-size:8px;color:var(--t2);letter-spacing:1.5px;margin-bottom:5px">OI PULSE — 30-MIN BUILDUP</div>
+          <div class="kz-section-hdr">OI PULSE — 30-MIN BUILDUP</div>
           <div id="oip"></div>
         </div>
         <div>
-          <div style="font-size:8px;color:var(--t2);letter-spacing:1.5px;margin-bottom:6px">3-STRIKE TRACKER</div>
+          <div class="kz-section-hdr">3-STRIKE RULE</div>
           <div class="sks">
-            <div class="sk" id="sk1" onclick="hitSK(1)">○</div>
-            <div class="sk" id="sk2" onclick="hitSK(2)">○</div>
-            <div class="sk" id="sk3" onclick="hitSK(3)">○</div>
-            <span style="font-size:9px;color:var(--t2)" id="skmsg">No losses today</span>
+            <div class="sk" id="sk1" onclick="hitSK(1)" title="1 loss">○</div>
+            <div class="sk" id="sk2" onclick="hitSK(2)" title="2 losses">○</div>
+            <div class="sk" id="sk3" onclick="hitSK(3)" title="3 losses — STOP">○</div>
+            <span style="font-size:9px;color:var(--t2);margin-left:2px" id="skmsg">No losses today</span>
           </div>
         </div>
       </div>
@@ -1875,7 +1951,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <!-- Hero banner -->
     <div style="background:linear-gradient(135deg,#0f0a1e 0%,#13192e 60%,#0d2240 100%);border:1px solid rgba(167,139,250,.2);border-radius:8px;padding:18px 22px;margin-bottom:16px;position:relative;overflow:hidden">
       <div style="position:absolute;top:-20px;right:-20px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,rgba(167,139,250,.12),transparent 70%);pointer-events:none"></div>
-      <div style="font-size:7px;font-weight:700;letter-spacing:3px;color:rgba(167,139,250,.6);margin-bottom:6px">NSE EDGE v5</div>
+      <div style="font-size:7px;font-weight:700;letter-spacing:3px;color:rgba(167,139,250,.6);margin-bottom:6px">STOCKR.IN </div>
       <div style="font-family:var(--fh);font-size:17px;font-weight:900;letter-spacing:2px;color:#c4b5fd;margin-bottom:6px;line-height:1.1">OPTIONS BACKTEST<br>GUIDE</div>
       <div style="font-size:8.5px;color:var(--t1);line-height:1.6">Build, test, and validate intraday options strategies using Python and real 1-min data. Use the system's live backtest engine as the benchmark.</div>
     </div>
@@ -2360,7 +2436,7 @@ entry_time    strike  type  entry  max   exit  return%
             <div class="gpr"><span class="gpr-nm">G2 · SMART MONEY</span><div class="gpr-bk"><div class="gpr-bf" id="gpr2"></div></div><span class="gpr-vl" id="gprv2">—</span></div>
             <div class="gpr"><span class="gpr-nm">G3 · STRUCTURE</span><div class="gpr-bk"><div class="gpr-bf" id="gpr3"></div></div><span class="gpr-vl" id="gprv3">—</span></div>
             <div class="gpr"><span class="gpr-nm">G4 · TRIGGER</span><div class="gpr-bk"><div class="gpr-bf" id="gpr4"></div></div><span class="gpr-vl" id="gprv4">—</span></div>
-            <div class="gpr"><span class="gpr-nm">G5 · RISK VALID</span><div class="gpr-bk"><div class="gpr-bf" id="gpr5"></div></div><span class="gpr-vl" id="gprv5">—</span></div>
+            <div class="gpr"><span class="gpr-nm">G5 · RISK VALID</span><div class="gpr-bk"><div class="gpr-bf" id="gpr5"></div></div><span class="gpr-vl" id="gpr">—</span></div>
           </div>
           <div style="border-top:1px solid var(--b1);padding-top:6px;margin-top:4px">
             <div style="display:flex;align-items:center;gap:6px">
@@ -3470,6 +3546,246 @@ document.getElementById('gate-perf').innerHTML='<div style="color:var(--t2);font
 document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:9px;padding:8px 0;line-height:1.6">Timing confidence appears after live/backtest signals are available.</div>';
 
 // ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+// KILL ZONES — LIVE TIMER + CE/PE SCANNER
+// ═══════════════════════════════════════════════
+(function kzLive(){
+  const ZONES = [
+    {id:'kzb-d', start:555, end:600,  label:'DISCOVERY',  cls:'am',  theta:'bad', thetaMsg:'⚠ Discovery zone — wide spreads, avoid option buying'},
+    {id:'kzb-t', start:600, end:810,  label:'✦ TREND ZONE', cls:'go', theta:'ok',  thetaMsg:'✓ Best zone — momentum entries, manageable theta decay'},
+    {id:'kzb-r', start:810, end:870,  label:'DRIFT',       cls:'am',  theta:'bad', thetaMsg:'⚠ Drift zone — no new entries, theta accelerating'},
+    {id:'kzb-e', start:870, end:930,  label:'EXPIRY',      cls:'st',  theta:'bad', thetaMsg:'✗ Expiry zone — avoid buying CE/PE, theta crush active'},
+  ];
+
+  function istNow() {
+    return new Date(new Date().toLocaleString('en-US', {timeZone:'Asia/Kolkata'}));
+  }
+
+  function getZoneMin(d) { return d.getHours() * 60 + d.getMinutes(); }
+
+  function updateZoneTimer() {
+    const now = istNow();
+    const m   = getZoneMin(now);
+    const isOpen = now.getDay() >= 1 && now.getDay() <= 5 && m >= 555 && m < 930;
+
+    // Highlight active zone bar segment
+    ZONES.forEach(z => {
+      const el = document.getElementById(z.id);
+      if(el) el.classList.remove('zone-now');
+    });
+
+    const curZoneEl = document.getElementById('curzone');
+    const timerEl   = document.getElementById('zone-timer');
+    const thetaEl   = document.getElementById('kz-theta');
+
+    if(!isOpen) {
+      if(curZoneEl) curZoneEl.textContent = now.getDay() === 0 || now.getDay() === 6 ? 'WEEKEND' : m < 555 ? 'PRE-MARKET' : 'MARKET CLOSED';
+      if(timerEl)   timerEl.textContent = '';
+      if(thetaEl)   { thetaEl.className='theta-warn ok'; thetaEl.textContent='Market closed — review setups for tomorrow'; }
+      updateBias(null, null, null);
+      return;
+    }
+
+    let activeZone = null;
+    let nextZone   = null;
+    for(let i = 0; i < ZONES.length; i++) {
+      if(m >= ZONES[i].start && m < ZONES[i].end) { activeZone = ZONES[i]; nextZone = ZONES[i+1] || null; break; }
+    }
+
+    if(activeZone) {
+      const el = document.getElementById(activeZone.id);
+      if(el) el.classList.add('zone-now');
+      if(curZoneEl) curZoneEl.textContent = activeZone.label.replace('✦ ','✦ ');
+
+      // Countdown to next zone
+      if(nextZone && timerEl) {
+        const totalSecs = (nextZone.start - m) * 60 - now.getSeconds();
+        const mm = String(Math.floor(totalSecs / 60)).padStart(2,'0');
+        const ss = String(totalSecs % 60).padStart(2,'0');
+        timerEl.textContent = `${mm}:${ss}`;
+        if(curZoneEl) curZoneEl.textContent = activeZone.label.replace('✦ ','✦ ') + ' → ' + nextZone.label.replace('✦ ','');
+      } else if(timerEl) {
+        const totalSecs = (930 - m) * 60 - now.getSeconds();
+        const mm = String(Math.floor(totalSecs / 60)).padStart(2,'0');
+        const ss = String(totalSecs % 60).padStart(2,'0');
+        timerEl.textContent = `${mm}:${ss}`;
+        if(curZoneEl) curZoneEl.textContent = 'EXPIRY — CLOSE ALL';
+      }
+
+      if(thetaEl) {
+        thetaEl.className = 'theta-warn ' + activeZone.theta;
+        thetaEl.textContent = activeZone.thetaMsg;
+      }
+    }
+  }
+
+  function updateBias(vix, pcr, verdict) {
+    const biasEl  = document.getElementById('kz-bias');
+    const reasonEl = document.getElementById('kz-bias-reason');
+    const metaEl  = document.getElementById('kz-bias-meta');
+    if(!biasEl) return;
+
+    if(vix === null) {
+      biasEl.textContent = '—'; biasEl.className = 'bias-val neutral';
+      if(reasonEl) reasonEl.textContent = 'Market closed';
+      return;
+    }
+
+    let bias = 'NEUTRAL', cls = 'neutral', reason = '';
+    if(verdict === 'NO TRADE' || vix > 20) {
+      bias = 'AVOID'; cls = 'neutral';
+      reason = vix > 20 ? `VIX ${vix.toFixed(1)} — too high for option buying` : 'Gate fail — stand down';
+    } else if(pcr >= 1.2) {
+      bias = 'BUY CE'; cls = 'ce';
+      reason = `PCR ${pcr.toFixed(2)} bullish — put writers dominant`;
+    } else if(pcr <= 0.8) {
+      bias = 'BUY PE'; cls = 'pe';
+      reason = `PCR ${pcr.toFixed(2)} bearish — call writers dominant`;
+    } else if(pcr > 1.0) {
+      bias = 'CE BIAS'; cls = 'ce';
+      reason = `PCR ${pcr.toFixed(2)} — mild bullish lean`;
+    } else {
+      bias = 'PE BIAS'; cls = 'pe';
+      reason = `PCR ${pcr.toFixed(2)} — mild bearish lean`;
+    }
+
+    biasEl.textContent = bias;
+    biasEl.className = 'bias-val ' + cls;
+    if(reasonEl) reasonEl.textContent = reason;
+    if(metaEl)   metaEl.textContent = vix ? `VIX ${vix.toFixed(1)}` : '';
+  }
+
+  function renderCEPE(chain, indices, signals) {
+    const box = document.getElementById('kz-cepe');
+    if(!box) return;
+
+    const nifty    = indices?.nifty || 0;
+    const maxPain  = chain?.max_pain || 0;
+    const atm      = chain?.atm || 0;
+    const pcr      = chain?.pcr || 1;
+    const vix      = indices?.vix || 0;
+    const verdict  = signals?.verdict || 'WAIT';
+
+    if(!nifty || !atm) {
+      box.innerHTML = `<div class="cepe-card avoid" style="grid-column:1/-1;text-align:center;padding:16px">
+        <div style="font-size:11px;margin-bottom:4px">📊</div>
+        <div style="font-size:8px;color:var(--t2)">Waiting for live option chain data (market hours only)</div>
+      </div>`;
+      return;
+    }
+
+    const isAvoid  = verdict === 'NO TRADE' || vix > 20;
+    const lotSize  = 25; // Nifty lot
+    const premium  = 80; // assumed ATM premium
+
+    // CE Setup — 1 strike OTM above ATM
+    const ceStrike = atm + 50;
+    const ceEntry  = Math.round(premium * 0.95);
+    const ceSL     = Math.round(ceEntry * 0.7);
+    const ceT1     = Math.round(ceEntry * 1.4);
+    const ceT2     = Math.round(ceEntry * 1.9);
+    const ceRR     = ((ceT1 - ceEntry) / (ceEntry - ceSL)).toFixed(1);
+    const ceBias   = pcr >= 1.1 ? 'STRONG' : pcr >= 0.9 ? 'MODERATE' : 'WEAK';
+    const ceReason = `PCR ${pcr.toFixed(2)} · Nifty ${nifty > maxPain ? 'above' : 'below'} Max Pain ${maxPain} · VIX ${vix.toFixed(1)}`;
+
+    // PE Setup — 1 strike OTM below ATM
+    const peStrike = atm - 50;
+    const peEntry  = Math.round(premium * 0.95);
+    const peSL     = Math.round(peEntry * 0.7);
+    const peT1     = Math.round(peEntry * 1.4);
+    const peT2     = Math.round(peEntry * 1.9);
+    const peRR     = ((peT1 - peEntry) / (peEntry - peSL)).toFixed(1);
+    const peBias   = pcr <= 0.9 ? 'STRONG' : pcr <= 1.1 ? 'MODERATE' : 'WEAK';
+    const peReason = `PCR ${pcr.toFixed(2)} · ${nifty < maxPain ? 'Below' : 'Above'} Max Pain ${maxPain} · VIX ${vix.toFixed(1)}`;
+
+    // Straddle setup
+    const strEntry = ceEntry + peEntry;
+    const strBE_up = atm + strEntry;
+    const strBE_dn = atm - strEntry;
+
+    const rr_c = r => parseFloat(r) >= 1.5 ? 'go' : 'am';
+    box.innerHTML = `
+      ${isAvoid ? `<div style="grid-column:1/-1;padding:7px 12px;border-radius:5px;background:rgba(255,51,85,.07);border:1px solid rgba(255,51,85,.18);color:var(--st);font-size:8px;display:flex;align-items:center;gap:8px">
+        <span style="font-size:11px">⚠</span>
+        <span>${verdict === 'NO TRADE' ? 'Signal gates failing — avoid new CE/PE positions until gates clear' : `VIX ${vix.toFixed(1)} elevated — option buying is high-risk`}</span>
+      </div>` : ''}
+      <div class="cepe-card ce ${isAvoid ? 'avoid' : ''}">
+        <div class="cepe-hdr">
+          <span class="cepe-type ce">📈 BUY CE</span>
+          <span class="cepe-badge ${ceBias.toLowerCase()}">${ceBias} SIGNAL</span>
+        </div>
+        <div class="cepe-strike">${ceStrike} <span style="font-size:11px;font-weight:600;color:var(--t2)">CE</span></div>
+        <div class="cepe-divider"></div>
+        <div class="cepe-row"><span class="cepe-lbl">Entry (est.)</span><span class="cepe-val">₹${ceEntry}</span></div>
+        <div class="cepe-row"><span class="cepe-lbl">Stop Loss</span><span class="cepe-val st">₹${ceSL} <span style="opacity:.7;font-weight:400">(−30%)</span></span></div>
+        <div class="cepe-row"><span class="cepe-lbl">Target 1</span><span class="cepe-val go">₹${ceT1} <span style="opacity:.7;font-weight:400">(+40%)</span></span></div>
+        <div class="cepe-row"><span class="cepe-lbl">Target 2</span><span class="cepe-val go">₹${ceT2} <span style="opacity:.7;font-weight:400">(+90%)</span></span></div>
+        <div class="cepe-row"><span class="cepe-lbl">Risk:Reward</span><span class="cepe-val ${rr_c(ceRR)}">${ceRR}:1</span></div>
+        <div class="cepe-pnl">
+          <span style="font-size:7.5px;color:var(--t2)">1 LOT P&L at T1</span>
+          <span style="font-size:9px;font-weight:700;color:var(--go)">+₹${((ceT1-ceEntry)*lotSize).toLocaleString()}</span>
+        </div>
+        <div class="cepe-reason">${ceReason}</div>
+      </div>
+      <div class="cepe-card pe ${isAvoid ? 'avoid' : ''}">
+        <div class="cepe-hdr">
+          <span class="cepe-type pe">📉 BUY PE</span>
+          <span class="cepe-badge ${peBias.toLowerCase()}">${peBias} SIGNAL</span>
+        </div>
+        <div class="cepe-strike">${peStrike} <span style="font-size:11px;font-weight:600;color:var(--t2)">PE</span></div>
+        <div class="cepe-divider"></div>
+        <div class="cepe-row"><span class="cepe-lbl">Entry (est.)</span><span class="cepe-val">₹${peEntry}</span></div>
+        <div class="cepe-row"><span class="cepe-lbl">Stop Loss</span><span class="cepe-val st">₹${peSL} <span style="opacity:.7;font-weight:400">(−30%)</span></span></div>
+        <div class="cepe-row"><span class="cepe-lbl">Target 1</span><span class="cepe-val go">₹${peT1} <span style="opacity:.7;font-weight:400">(+40%)</span></span></div>
+        <div class="cepe-row"><span class="cepe-lbl">Target 2</span><span class="cepe-val go">₹${peT2} <span style="opacity:.7;font-weight:400">(+90%)</span></span></div>
+        <div class="cepe-row"><span class="cepe-lbl">Risk:Reward</span><span class="cepe-val ${rr_c(peRR)}">${peRR}:1</span></div>
+        <div class="cepe-pnl">
+          <span style="font-size:7.5px;color:var(--t2)">1 LOT P&L at T1</span>
+          <span style="font-size:9px;font-weight:700;color:var(--go)">+₹${((peT1-peEntry)*lotSize).toLocaleString()}</span>
+        </div>
+        <div class="cepe-reason">${peReason}</div>
+      </div>
+      <div class="cepe-card" style="border-color:rgba(56,190,255,.18);background:rgba(56,190,255,.03)">
+        <div class="cepe-hdr">
+          <span class="cepe-type" style="color:rgba(56,190,255,.9);font-size:9px;font-weight:800;letter-spacing:1px">⇄ ATM STRADDLE</span>
+          <span class="cepe-badge hedge">HEDGE</span>
+        </div>
+        <div class="cepe-strike" style="color:rgba(56,190,255,.85)">${atm}</div>
+        <div class="cepe-divider"></div>
+        <div class="cepe-row"><span class="cepe-lbl">Total cost</span><span class="cepe-val">₹${strEntry} / lot</span></div>
+        <div class="cepe-row"><span class="cepe-lbl">Break-even ↑</span><span class="cepe-val go">${strBE_up}</span></div>
+        <div class="cepe-row"><span class="cepe-lbl">Break-even ↓</span><span class="cepe-val st">${strBE_dn}</span></div>
+        <div class="cepe-row"><span class="cepe-lbl">Range needed</span><span class="cepe-val am">±${strEntry} pts</span></div>
+        <div class="cepe-reason">Use when direction is unclear. Profit if Nifty breaks beyond either break-even before expiry.</div>
+      </div>
+      <div class="cepe-card" style="border-color:var(--b1);background:var(--s2)">
+        <div style="font-size:8px;color:var(--t2);letter-spacing:1.2px;margin-bottom:9px;font-weight:700">📌 OPTION RULES</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          ${[
+            ['BUY ONLY','Trend zone 10:00 – 13:30'],
+            ['STRIKE','ATM or 1 strike OTM only'],
+            ['STOP','Exit if premium falls 30%'],
+            ['BOOK','50% at T1, trail rest to T2'],
+            ['VIX > 20','Reduce size by 50%'],
+            ['EXPIRY','Never hold CE/PE to close'],
+          ].map(([k,v])=>`<div class="cepe-row"><span style="font-size:7.5px;color:var(--t1);font-weight:700;min-width:62px">${k}</span><span style="font-size:7.5px;color:var(--t2)">${v}</span></div>`).join('')}
+        </div>
+      </div>
+    `;
+
+    updateBias(vix, pcr, verdict);
+  }
+
+  // Subscribe to live data
+  window._kzUpdate = function(chain, indices, signals) {
+    renderCEPE(chain, indices, signals);
+  };
+
+  // Zone timer — update every second
+  setInterval(updateZoneTimer, 1000);
+  updateZoneTimer();
+})();
+
 // 3-STRIKE SYSTEM
 // ═══════════════════════════════════════════════
 function hitSK(n){
@@ -3863,7 +4179,7 @@ function notify(msg){
 // INIT
 // ═══════════════════════════════════════════════
 setMode('intraday');
-setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
+setTimeout(()=>notify('STOCKR.IN  ready — Connecting to live data...'),400);
 
 // ═══════════════════════════════════════════════
 // LIVE DATA — WEBSOCKET CLIENT
@@ -4740,6 +5056,7 @@ function _topActiveStocks(stocks){
         _renderLivePicks();
         _renderMacroContext();
         _renderVolumeRadarLive();
+        if(window._kzUpdate) window._kzUpdate(d, window._lastMacro, window._lastGateSummary);
         break;
       }
 
@@ -4779,6 +5096,7 @@ function _topActiveStocks(stocks){
         _renderLiveLevels();
         _refreshPlaybookSummary();
         _renderMacroContext();
+        if(window._kzUpdate) window._kzUpdate(window._lastChain, d, window._lastGateSummary);
         break;
       }
 
@@ -7690,7 +8008,7 @@ function _renderSESCards() {
 
 <!-- PWA Install Banner -->
 <div id="pwa-banner" style="display:none;position:fixed;bottom:12px;right:12px;z-index:9997;background:var(--s1);border:1px solid var(--go-b);border-radius:6px;padding:10px 14px;align-items:center;gap:12px;box-shadow:0 4px 20px rgba(0,0,0,.4)">
-  <span style="font-size:9px;color:var(--t0)">📱 Install NSE EDGE as app</span>
+  <span style="font-size:9px;color:var(--t0)">📱 Install STOCKR.IN as app</span>
   <button id="pwa-install-btn" style="padding:3px 10px;font-family:var(--fn);font-size:8px;font-weight:700;border:1px solid var(--go-b);border-radius:3px;cursor:pointer;color:var(--go);background:var(--go-d)">INSTALL</button>
   <button onclick="document.getElementById('pwa-banner').style.display='none'" style="background:none;border:none;cursor:pointer;color:var(--t2);font-size:12px">✕</button>
 </div>

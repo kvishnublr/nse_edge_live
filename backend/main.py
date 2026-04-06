@@ -175,6 +175,16 @@ async def lifespan(app: FastAPI):
             import datetime as _dt
             today_str = _dt.date.today().isoformat()
             backfill = []
+            from config import GATE as _GATE
+            _t_start = _GATE.get("spike_time_start", 570)
+            _t_end   = _GATE.get("spike_time_end",   840)
+            _score_floor = 45
+            _vol_th = 2.5   # same as live detection — higher than 1.5× config
+            _dedup_window = 20  # minutes — one signal per symbol+dir per 20 min
+
+            # Track last signal time per (symbol, direction) for deduplication
+            _last_sig_min = {}  # {(sym, sp_type): minute}
+
             for sym in FNO_SYMBOLS[2:]:
                 tok = KITE_TOKENS.get(sym)
                 if not tok:
@@ -191,24 +201,35 @@ async def lifespan(app: FastAPI):
                     for i, c in enumerate(candles):
                         t = c['date']
                         cm = t.hour * 60 + t.minute
-                        if not ((570 <= cm < 660) or (780 <= cm <= 840)):
+                        if not (_t_start <= cm <= _t_end):
                             continue
                         price   = c['close']
                         vol     = c['volume'] or 0
                         vm      = vol / avg_vol if avg_vol else 0
+                        # chg_pct = candle move from open (cumulative intraday)
                         chg_pct = (price - open_px) / open_px * 100 if open_px else 0
-                        if abs(chg_pct) < 0.2 or vm < 1.5:
+                        # Price threshold: relaxed for very high volume (4×+)
+                        price_min = 0.5 if vm < 4.0 else 0.2
+                        if abs(chg_pct) < price_min or vm < _vol_th:
+                            continue
+                        # OI unavailable in backfill — require price>=1.0% or vol>=4×
+                        if vm < 4.0 and abs(chg_pct) < 1.0:
                             continue
                         score = _score_spike(vm, chg_pct, sym, cm)
-                        if score < 50:
+                        if score < _score_floor:
                             continue
                         sp_type = "buy" if chg_pct > 0 else "sell"
+                        # 20-min deduplication — skip if same symbol+dir fired recently
+                        key = (sym, sp_type)
+                        if key in _last_sig_min and cm - _last_sig_min[key] < _dedup_window:
+                            continue
+                        _last_sig_min[key] = cm
                         sig     = "LONG" if chg_pct > 0 else "SHORT"
                         trigger = f"Price {'+' if chg_pct>0 else ''}{chg_pct:.2f}% | Vol {vm:.1f}x"
-                        # Determine outcome: did price hit T1 (+0.3%) or SL (-0.25%) within 30 min?
+                        # Outcome: T1=+0.5% buy / −0.5% sell; SL=−0.5% buy / +0.5% sell
                         entry = price
-                        t1_px = entry * 1.005 if sp_type == "buy" else entry * 0.995  # 0.5% T1
-                        sl_px = entry * 0.995  if sp_type == "buy" else entry * 1.005  # 0.5% SL
+                        t1_px = entry * 1.005 if sp_type == "buy" else entry * 0.995
+                        sl_px = entry * 0.995  if sp_type == "buy" else entry * 1.005
                         outcome = None
                         for j in range(i + 1, min(i + 31, len(candles))):
                             fc = candles[j]

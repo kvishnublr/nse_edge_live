@@ -496,8 +496,9 @@ def detect_spikes(stocks: list, prev: dict, gates: dict | None = None, verdict: 
     candle_min = now_dt.hour * 60 + now_dt.minute
     spikes   = []
 
-    # Spike radar is fully independent of gates — fires on price/vol/OI merit only
-    gate_score_floor = 50
+    # Spike radar is FULLY independent of gates — fires on price/vol/OI merit only.
+    # Score floor: 45. Strict vol threshold (2.5×) to avoid low-quality signals.
+    gate_score_floor = 45
 
     try:
         acc_filters = bd.get_signal_accuracy_filters()
@@ -513,36 +514,41 @@ def detect_spikes(stocks: list, prev: dict, gates: dict | None = None, verdict: 
     else:
         time_bucket = "late_1300_plus"
 
-    if time_bucket in acc_filters.get("weak_buckets", set()):
+    # Only skip if the accuracy filter explicitly marks this bucket as weak AND has data
+    weak_buckets = acc_filters.get("weak_buckets", set())
+    if weak_buckets and time_bucket in weak_buckets:
         return []
 
     for s in stocks:
-        sym      = s.get("symbol", "")
-        price    = s.get("price", 0)
-        chg_pct  = s.get("chg_pct", 0)
-        oi_pct   = s.get("oi_chg_pct", 0)
-        vol      = s.get("volume", 1) or 1
-        prev_vol = prev.get(sym, {}).get("volume", vol) or vol
-        vm       = vol / prev_vol if prev_vol else 1.0
-        stock_pc = int(s.get("pc", 0) or 0)
-        stock_verdict = str(s.get("verdict", "WAIT") or "WAIT")
+        sym       = s.get("symbol", "")
+        price     = s.get("price", 0)
+        chg_pct   = s.get("chg_pct", 0)
+        oi_pct    = s.get("oi_chg_pct", 0)
+        vol       = s.get("volume", 1) or 1
+        prev_vol  = prev.get(sym, {}).get("volume", vol) or vol
+        vm        = vol / prev_vol if prev_vol else 1.0
+        stock_pc  = int(s.get("pc", 0) or 0)
         if sym in acc_filters.get("weak_symbols", set()):
             continue
 
         sp_type = sig = trigger = ""
 
-        # Time window filter: 9:30-11:00 (570-660) + 13:00-14:00 (780-840)
-        # SKIP 11:00-13:00 — lunch-hour chop has <15% accuracy (data-validated)
-        in_window = (570 <= candle_min < 660) or (780 <= candle_min <= 840)
-        if not in_window:
+        # Time window: use GATE config (spike_time_start–spike_time_end = 9:30–14:00)
+        t_start = TH.get("spike_time_start", 570)
+        t_end   = TH.get("spike_time_end",   840)
+        if not (t_start <= candle_min <= t_end):
             continue
 
         price_th = TH.get("spike_price_pct", 0.2)
-        vol_th   = TH.get("spike_vol_mult", 1.5)
+        # Live vol_th raised to 2.5× — the GATE 1.5× is calibrated for 1-min candles
+        # in backtest; live vol is cumulative intraday so 2.5× filters noise better.
+        vol_th   = 2.5
         oi_th    = TH.get("spike_oi_pct", 12.0)
 
-        # Detect spike type — price+vol spike takes priority, then OI-only, then vol-only
-        if abs(chg_pct) >= price_th and vm >= vol_th:
+        # Detect spike type — price+vol spike takes priority, then OI-only
+        # Require strong price move (>=0.5%) when vol is only 2.5-3×; relax for vol>=4×
+        price_min = 0.5 if vm < 4.0 else price_th
+        if abs(chg_pct) >= price_min and vm >= vol_th:
             sp_type = "buy" if chg_pct > 0 else "sell"
             sig     = "LONG" if chg_pct > 0 else "SHORT"
             trigger = f"Price {'+' if chg_pct > 0 else ''}{chg_pct:.2f}% | Vol {vm:.1f}×"
@@ -554,31 +560,23 @@ def detect_spikes(stocks: list, prev: dict, gates: dict | None = None, verdict: 
             sp_type = "buy" if oi_pct > 0 else "sell"
             sig     = "OI BUILD" if oi_pct > 0 else "OI UNWIND"
             trigger = f"OI {'+' if oi_pct > 0 else ''}{oi_pct:.1f}%"
-        elif vm >= vol_th and abs(chg_pct) >= price_th * 0.5:
-            sp_type = "vol"
-            sig     = "VOL SPIKE"
-            trigger = f"Vol {vm:.1f}×"
 
         if not sp_type:
             continue
 
-        # Score the spike — threshold rises when gates are stopped
+        # Score and floor — spikes fire on merit regardless of gate state
         score = _score_spike(vm, chg_pct, sym, candle_min)
         if score < gate_score_floor:
             continue
 
-        # Gate quality filter — require pc>=2 (allows signals during moderate gate failures)
-        if stock_pc < 2 or stock_verdict not in ("EXECUTE", "WATCH", "MONITOR"):
-            continue
-
-        # Confirmation proxy — OI-aware: skip OI check if data is likely stale (near-zero)
+        # Confirmation — OI-aware: if OI data is stale, require stronger price or vol
         oi_available = abs(oi_pct) >= 1.0
         if oi_available:
             same_dir_oi  = (chg_pct > 0 and oi_pct > 0) or (chg_pct < 0 and oi_pct < 0)
-            has_confirmation = same_dir_oi or vm >= 3.0
+            has_confirmation = same_dir_oi or vm >= 4.0
         else:
-            # OI data stale / unavailable — rely on price + volume alone
-            has_confirmation = vm >= 2.5 or abs(chg_pct) >= 0.8
+            # OI stale — need strong price (>=1.0%) OR very high volume (>=4×)
+            has_confirmation = vm >= 4.0 or abs(chg_pct) >= 1.0
         if not has_confirmation:
             continue
 
@@ -673,10 +671,34 @@ def run_signal_engine(indices: dict, chain: dict, fii: dict,
         # New trading day — start fresh
         merged_spikes = new_spikes
     else:
-        # Same day — merge: add new spikes not already in the list
+        # Same day — merge with 20-min deduplication per symbol+direction.
+        # Prevents same stock re-triggering on the same sustained move.
+        def _to_min(t):
+            """Convert HH:MM string to minutes-from-midnight."""
+            try:
+                h, m = t.split(":")
+                return int(h) * 60 + int(m)
+            except Exception:
+                return 0
+
+        dedup_window = 20  # minutes — same symbol+direction won't fire again within this window
         existing_keys = {(s["symbol"], s["time"], s["type"]) for s in prev_spikes}
-        merged_spikes = prev_spikes + [s for s in new_spikes
-                                       if (s["symbol"], s["time"], s["type"]) not in existing_keys]
+        to_add = []
+        for ns in new_spikes:
+            if (ns["symbol"], ns["time"], ns["type"]) in existing_keys:
+                continue
+            ns_min = _to_min(ns["time"])
+            ns_dir = ns.get("type", "")
+            # Check if same symbol+direction fired within dedup_window
+            recent = any(
+                ps.get("symbol") == ns["symbol"]
+                and ps.get("type") == ns_dir
+                and abs(_to_min(ps["time"]) - ns_min) < dedup_window
+                for ps in prev_spikes
+            )
+            if not recent:
+                to_add.append(ns)
+        merged_spikes = prev_spikes + to_add
         # Keep latest 30, sorted by score
         merged_spikes.sort(key=lambda x: -x.get("score", 0))
         merged_spikes = merged_spikes[:30]
