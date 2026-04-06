@@ -318,12 +318,13 @@ def job_fii():
 
 # ─── INDEX SPIKE DETECTION ────────────────────────────────────────────────────
 def _detect_index_signals(chain, indices):
-    """Detect NIFTY/BANKNIFTY directional moves ≥0.3% over 5 min and recommend CE/PE."""
+    """Detect NIFTY/BANKNIFTY directional moves ≥0.20% in 5-min with quality filters."""
     import time as _t
     now_ts = _t.time()
     now_dt = datetime.now(IST)
     cm = now_dt.hour * 60 + now_dt.minute
-    if not (570 <= cm <= 840):
+    # Filter 3: Skip first 45 min (9:15-10:00) — opening whipsaw kills accuracy
+    if not (600 <= cm <= 840):   # 10:00 AM to 14:00
         return []
 
     nifty_px = float(indices.get("nifty", 0) or 0)
@@ -353,7 +354,9 @@ def _detect_index_signals(chain, indices):
         if not old_px:
             continue
         chg = (px - old_px) / old_px * 100
-        if abs(chg) < 0.20:          # must move ≥0.20% in 5 min
+
+        # Filter 2: Cap at 0.30% — moves >0.30% are overextended, momentum exhausted
+        if abs(chg) < 0.20 or abs(chg) > 0.30:
             continue
         is_ce = chg > 0
 
@@ -362,7 +365,6 @@ def _detect_index_signals(chain, indices):
         one_entry = next((e for e in reversed(hist) if e[0] <= one_ago), None)
         if one_entry:
             one_chg = (px - one_entry[px_idx]) / one_entry[px_idx] * 100
-            # 1-min move must be in same direction (momentum still active)
             if is_ce and one_chg <= 0:
                 continue
             if not is_ce and one_chg >= 0:
@@ -373,10 +375,16 @@ def _detect_index_signals(chain, indices):
         trend_entry = next((e for e in reversed(hist) if e[0] <= thirty_ago), None)
         if trend_entry:
             trend_chg = (px - trend_entry[px_idx]) / trend_entry[px_idx] * 100
-            # Allow only trades WITH the 30-min trend; skip counter-trend
-            if is_ce and trend_chg < -0.3:   # strong 30-min downtrend → skip CE
+            if is_ce and trend_chg < -0.3:
                 continue
-            if not is_ce and trend_chg > 0.3:  # strong 30-min uptrend → skip PE
+            if not is_ce and trend_chg > 0.3:
+                continue
+
+        # Filter 1: PE only when PCR > 1.4 (strong put-heavy sentiment required)
+        # Data shows CE WR=66%, PE WR=33% — PE needs strong bearish OI confirmation
+        if not is_ce:
+            pcr = float((chain or {}).get("pcr", 1.0) or 1.0)
+            if pcr < 1.4:   # raised from 1.2 → 1.4 for tighter PE filter
                 continue
 
         # Find ATM and real option premium from chain (NIFTY only; BN estimated)

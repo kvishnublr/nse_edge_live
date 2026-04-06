@@ -567,8 +567,8 @@ async def index_signals_backtest(request: Request):
             by_date[d].append(c)
 
         for day, day_c in sorted(by_date.items()):
-            # Filter market hours 9:15–14:00
-            mkt = [c for c in day_c if 555 <= c["date"].hour*60+c["date"].minute <= 840]
+            # Filter 3: Start from 10:00 AM only (skip opening whipsaw 9:15-10:00)
+            mkt = [c for c in day_c if 600 <= c["date"].hour*60+c["date"].minute <= 840]
             if len(mkt) < 15:
                 continue
 
@@ -590,7 +590,8 @@ async def index_signals_backtest(request: Request):
                 if not old_px:
                     continue
                 chg = (px - old_px) / old_px * 100
-                if abs(chg) < 0.20:
+                # Filter 2: 0.20–0.30% only — overextended moves (>0.30%) are exhausted
+                if abs(chg) < 0.20 or abs(chg) > 0.30:
                     continue
                 is_ce = chg > 0
 
@@ -612,6 +613,17 @@ async def index_signals_backtest(request: Request):
                         continue
                     if not is_ce and trend_chg > 0.3:
                         continue
+
+                # Filter 1: PE requires day to be down AND last 30-min also down
+                # Proxy for PCR > 1.4 (put-heavy bearish sentiment)
+                if not is_ce:
+                    day_open = mkt[0]["close"]
+                    day_chg  = (px - day_open) / day_open * 100
+                    if day_chg > 0:   # Day is net positive → skip PE
+                        continue
+                    # Also require the last 30 min to be down (not just a spike)
+                    if thirty_i is None:
+                        continue   # not enough history → skip PE
 
                 # ── 15-min dedup ──────────────────────────
                 sig_type = "CE" if is_ce else "PE"
