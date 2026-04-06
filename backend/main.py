@@ -267,6 +267,29 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Spike backfill failed (non-critical): {e}")
 
+    # Restore today's index signals from DB so TODAY tab is never blank after restart
+    try:
+        import sqlite3 as _sq, datetime as _dt, json as _json
+        _db = os.path.join(os.path.dirname(__file__), "data", "backtest.db")
+        _today = _dt.date.today().isoformat()
+        _conn = _sq.connect(_db)
+        _conn.row_factory = _sq.Row
+        _rows = _conn.execute(
+            "SELECT * FROM index_signal_history WHERE trade_date=? ORDER BY ts ASC",
+            (_today,)
+        ).fetchall()
+        _conn.close()
+        if _rows:
+            _ix = [dict(r) for r in _rows]
+            # Remap DB column names back to in-memory signal keys
+            for s in _ix:
+                s.setdefault("time", s.get("signal_time", ""))
+            signals.state["index_signals"]      = _ix
+            signals.state["index_signals_date"] = _today
+            logger.info(f"  Restored {len(_ix)} index signals from DB")
+    except Exception as _e:
+        logger.warning(f"Index signal restore failed (non-critical): {_e}")
+
     # Start scheduler
     job_scheduler = sched.build_scheduler()
     job_scheduler.start()

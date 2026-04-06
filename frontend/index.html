@@ -3972,12 +3972,13 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
       if(liveList)  liveList.style.display  = 'none';
       if(histPanel) histPanel.style.display = 'flex';
       if(filterBar) filterBar.style.display = 'none';
-      // Pre-fill dates to today (don't auto-load — user clicks LOAD)
+      // Pre-fill dates to today and auto-load
       const today = new Date().toISOString().slice(0,10);
       const fromEl = document.getElementById('ir-hist-from');
       const toEl   = document.getElementById('ir-hist-to');
       if(fromEl && !fromEl.value) fromEl.value = today;
       if(toEl   && !toEl.value)   toEl.value   = today;
+      irLoadHistory();
     } else {
       if(liveList)  liveList.style.display  = 'flex';
       if(histPanel) histPanel.style.display = 'none';
