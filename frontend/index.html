@@ -430,6 +430,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .tab.analytics-tab{color:var(--bl)}
 .tab.analytics-tab.on{color:var(--bl);border-bottom-color:var(--bl);background:rgba(56,190,255,.04)}
 .tab.tab-spike{color:var(--go)}
+.tab.tab-idxr{color:#38beff}
 .tab.tab-signal{color:#f0b429;font-weight:700}
 .tab.tab-bt{color:var(--bl)}
 .tab.tab-btg{color:#a78bfa}
@@ -751,6 +752,44 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .sr-st-sl{background:rgba(255,51,85,.1);color:var(--st);border:1px solid rgba(255,51,85,.3)}
 .sr-st-exp{background:var(--s3);color:var(--t2);border:1px solid var(--b1)}
 .sr-legend{display:flex;gap:5px;flex-wrap:wrap;padding:5px 10px;border-bottom:1px solid var(--b1);flex-shrink:0}
+
+/* INDEX RADAR TAB */
+.ir-statsbar{display:flex;gap:0;padding:7px 12px;background:var(--s2);border-bottom:1px solid var(--b1);flex-shrink:0;align-items:center;flex-wrap:wrap;gap:8px}
+.ir-stat{display:flex;flex-direction:column;align-items:center;min-width:55px}
+.ir-stat-val{font-size:14px;font-weight:700}
+.ir-stat-lbl{font-size:7px;color:var(--t2);letter-spacing:.5px;margin-top:1px}
+.ir-card{border-radius:6px;border:1px solid var(--b1);background:var(--s2);padding:12px 14px;margin-bottom:8px;position:relative;overflow:hidden}
+.ir-card.ir-ce{border-color:rgba(0,232,122,.22);background:rgba(0,232,122,.03)}
+.ir-card.ir-ce::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--go)}
+.ir-card.ir-pe{border-color:rgba(255,51,85,.2);background:rgba(255,51,85,.03)}
+.ir-card.ir-pe::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--st)}
+.ir-card.ir-resolved{opacity:.55}
+.ir-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;padding-left:6px}
+.ir-sym{font-size:11px;font-weight:800;letter-spacing:.5px;color:var(--t0)}
+.ir-dir{font-size:9px;font-weight:800;letter-spacing:1px}
+.ir-dir.ce{color:var(--go)}.ir-dir.pe{color:var(--st)}
+.ir-strike{font-size:16px;font-weight:800;letter-spacing:-.5px;padding-left:6px;margin-bottom:8px}
+.ir-strike .ir-type{font-size:10px;font-weight:600;color:var(--t2);margin-left:4px}
+.ir-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px;padding-left:6px}
+.ir-box{border-radius:4px;padding:5px 8px;background:rgba(0,0,0,.15);text-align:center}
+.ir-box-lbl{font-size:7px;color:var(--t2);letter-spacing:.5px;display:block;margin-bottom:2px}
+.ir-box-val{font-size:10px;font-weight:700}
+.ir-box.entry .ir-box-val{color:var(--t0)}
+.ir-box.sl .ir-box-val{color:var(--st)}
+.ir-box.t1 .ir-box-val{color:var(--go)}
+.ir-box.t2 .ir-box-val{color:var(--go);opacity:.7}
+.ir-meta{display:flex;justify-content:space-between;align-items:center;padding-left:6px;margin-top:4px}
+.ir-reason{font-size:7.5px;color:var(--t3);line-height:1.5;flex:1}
+.ir-pnl{text-align:right;flex-shrink:0}
+.ir-pnl-val{font-size:10px;font-weight:800;color:var(--go)}
+.ir-pnl-lbl{font-size:7px;color:var(--t2)}
+.ir-outcome{display:inline-flex;align-items:center;font-size:8px;font-weight:700;padding:2px 8px;border-radius:10px;letter-spacing:.5px}
+.ir-outcome.live{background:rgba(0,140,255,.12);color:var(--bl);border:1px solid rgba(0,140,255,.3)}
+.ir-outcome.t1{background:rgba(0,232,122,.1);color:var(--go);border:1px solid rgba(0,232,122,.3)}
+.ir-outcome.sl{background:rgba(255,51,85,.1);color:var(--st);border:1px solid rgba(255,51,85,.3)}
+.ir-outcome.exp{background:var(--s3);color:var(--t2);border:1px solid var(--b1)}
+.ir-idx-chg{font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px}
+.ir-idx-chg.up{color:var(--go)}.ir-idx-chg.dn{color:var(--st)}
 
 /* BACKTEST CONTROLS */
 .btctrl{background:var(--s2);border-bottom:1px solid var(--b1);padding:8px 10px;flex-shrink:0}
@@ -1081,6 +1120,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <div class="tab" onclick="sw('stocks',this)">STOCK OI</div>
     <div class="tab" onclick="sw('swing',this)">SWING RADAR</div>
     <div class="tab tab-spike" onclick="sw('spikescanner',this)" id="sr-tab">SPIKE RADAR ⚡</div>
+    <div class="tab tab-idxr" onclick="sw('idxradar',this)" id="ir-tab">INDEX RADAR 📡</div>
     <div class="tab" onclick="sw('journal',this)">JOURNAL</div>
     <div class="tab" onclick="sw('stats',this)">STATS</div>
     <div class="tab analytics-tab" onclick="sw('analytics',this)">EDGE ANALYTICS</div>
@@ -1490,6 +1530,52 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
   </div>
   <!-- /tp-spikescanner -->
+
+  <!-- TAB: INDEX RADAR -->
+  <div class="tp" id="tp-idxradar" style="flex-direction:column;gap:0;overflow:hidden">
+
+    <!-- Stats bar -->
+    <div class="ir-statsbar">
+      <div style="font-size:9px;font-weight:800;color:#38beff;letter-spacing:1px;margin-right:4px">📡 INDEX RADAR</div>
+      <div style="width:1px;background:var(--b1);height:24px;margin:0 4px"></div>
+      <div class="ir-stat"><span class="ir-stat-val" id="ir-cnt-total" style="color:var(--t0)">0</span><span class="ir-stat-lbl">SIGNALS</span></div>
+      <div class="ir-stat"><span class="ir-stat-val" id="ir-cnt-live"  style="color:var(--bl)">0</span><span class="ir-stat-lbl">LIVE</span></div>
+      <div class="ir-stat"><span class="ir-stat-val" id="ir-cnt-t1"    style="color:var(--go)">0</span><span class="ir-stat-lbl">HIT T1</span></div>
+      <div class="ir-stat"><span class="ir-stat-val" id="ir-cnt-sl"    style="color:var(--st)">0</span><span class="ir-stat-lbl">HIT SL</span></div>
+      <div class="ir-stat"><span class="ir-stat-val" id="ir-cnt-wr"    style="color:var(--go)">—</span><span class="ir-stat-lbl">WIN RATE</span></div>
+      <div style="margin-left:auto;font-size:7.5px;color:var(--t2);text-align:right;line-height:1.6">
+        CE when index moves ↑0.3% in 5 min · PE when ↓0.3% in 5 min<br>
+        T1 = +50% · SL = −30% · Expires 45 min after signal
+      </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div style="display:flex;gap:6px;padding:6px 10px;border-bottom:1px solid var(--b1);flex-shrink:0;align-items:center">
+      <div class="sfbar" style="margin:0">
+        <button class="sf on" onclick="irFilter('all',this)">ALL</button>
+        <button class="sf" onclick="irFilter('live',this)">● LIVE</button>
+        <button class="sf" onclick="irFilter('ce',this)">↑ BUY CE</button>
+        <button class="sf" onclick="irFilter('pe',this)">↓ BUY PE</button>
+        <button class="sf" onclick="irFilter('nifty',this)">NIFTY</button>
+        <button class="sf" onclick="irFilter('banknifty',this)">BANKNIFTY</button>
+        <button class="sf" onclick="irFilter('hit',this)">✓ HIT T1</button>
+        <button class="sf" onclick="irFilter('sl',this)">✗ HIT SL</button>
+      </div>
+      <span style="margin-left:auto;font-size:7.5px;color:var(--t2)">Real-time premiums from live option chain · NIFTY lot 25 · BANKNIFTY lot 15</span>
+    </div>
+
+    <!-- Signal cards -->
+    <div style="overflow-y:auto;flex:1;min-height:0;padding:10px" id="ir-list">
+      <div style="text-align:center;padding:50px 16px;color:var(--t2);font-size:9px;line-height:2" id="ir-empty">
+        <div style="font-size:28px;opacity:.25;margin-bottom:10px">📡</div>
+        <div style="font-size:10px;font-weight:700;margin-bottom:4px">Waiting for index spike signals...</div>
+        <div style="font-size:8px;color:var(--t3)">Fires when NIFTY or BANKNIFTY moves ≥0.3% in any 5-minute window</div>
+        <div style="font-size:8px;color:var(--t3)">CE recommended on up moves · PE recommended on down moves</div>
+      </div>
+    </div>
+
+  </div>
+  <!-- /tp-idxradar -->
 
   <!-- TAB: JOURNAL -->
   <div class="tp" id="tp-journal">
@@ -3676,26 +3762,39 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
 
     const isAvoid  = verdict === 'NO TRADE' || vix > 20;
     const lotSize  = 25; // Nifty lot
-    const premium  = 80; // assumed ATM premium
 
-    // CE Setup — 1 strike OTM above ATM
+    // Get real option premiums from chain strikes
+    const strikes  = chain?.strikes || [];
     const ceStrike = atm + 50;
-    const ceEntry  = Math.round(premium * 0.95);
-    const ceSL     = Math.round(ceEntry * 0.7);
-    const ceT1     = Math.round(ceEntry * 1.4);
-    const ceT2     = Math.round(ceEntry * 1.9);
-    const ceRR     = ((ceT1 - ceEntry) / (ceEntry - ceSL)).toFixed(1);
+    const peStrike = atm - 50;
+    let ceEntry = 0, peEntry = 0;
+    for(const s of strikes) {
+      if(s.strike === ceStrike) ceEntry = Math.round(s.call_ltp || 0);
+      if(s.strike === peStrike) peEntry = Math.round(s.put_ltp  || 0);
+    }
+    // Fallback: ATM premium if OTM not found
+    if(!ceEntry || !peEntry) {
+      for(const s of strikes) {
+        if(s.is_atm) {
+          if(!ceEntry) ceEntry = Math.round((s.call_ltp || 0));
+          if(!peEntry) peEntry = Math.round((s.put_ltp  || 0));
+        }
+      }
+    }
+    if(!ceEntry) ceEntry = 100;
+    if(!peEntry) peEntry = 100;
+
+    // CE Setup
+    const ceSL     = Math.round(ceEntry * 0.70);
+    const ceT1     = Math.round(ceEntry * 1.50);
+    const ceT2     = Math.round(ceEntry * 2.00);
+    const ceRR     = ((ceT1 - ceEntry) / Math.max(ceEntry - ceSL, 1)).toFixed(1);
     const ceBias   = pcr >= 1.1 ? 'STRONG' : pcr >= 0.9 ? 'MODERATE' : 'WEAK';
     const ceReason = `PCR ${pcr.toFixed(2)} · Nifty ${nifty > maxPain ? 'above' : 'below'} Max Pain ${maxPain} · VIX ${vix.toFixed(1)}`;
 
-    // PE Setup — 1 strike OTM below ATM
-    const peStrike = atm - 50;
-    const peEntry  = Math.round(premium * 0.95);
-    const peSL     = Math.round(peEntry * 0.7);
-    const peT1     = Math.round(peEntry * 1.4);
-    const peT2     = Math.round(peEntry * 1.9);
-    const peRR     = ((peT1 - peEntry) / (peEntry - peSL)).toFixed(1);
-    const peBias   = pcr <= 0.9 ? 'STRONG' : pcr <= 1.1 ? 'MODERATE' : 'WEAK';
+    const peT1     = Math.round(peEntry * 1.50);
+    const peT2     = Math.round(peEntry * 2.00);
+    const peRR     = ((peT1 - peEntry) / Math.max(peEntry - peSL, 1)).toFixed(1);
     const peReason = `PCR ${pcr.toFixed(2)} · ${nifty < maxPain ? 'Below' : 'Above'} Max Pain ${maxPain} · VIX ${vix.toFixed(1)}`;
 
     // Straddle setup
@@ -3784,6 +3883,127 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
   // Zone timer — update every second
   setInterval(updateZoneTimer, 1000);
   updateZoneTimer();
+})();
+
+// ═══════════════════════════════════════════════
+// INDEX RADAR
+// ═══════════════════════════════════════════════
+(function irLive(){
+  let _allSignals = [];
+  let _filter = 'all';
+
+  function irFilter(f, btn) {
+    _filter = f;
+    document.querySelectorAll('#tp-idxradar .sfbar .sf').forEach(b => b.classList.remove('on'));
+    if(btn) btn.classList.add('on');
+    renderSignals(_allSignals);
+  }
+  window.irFilter = irFilter;
+
+  function outcomeClass(o) {
+    if(!o) return 'live';
+    if(o === 'HIT_T1' || o === 'HIT_T2') return 't1';
+    if(o === 'HIT_SL') return 'sl';
+    return 'exp';
+  }
+  function outcomeLabel(o) {
+    if(!o) return '● LIVE';
+    if(o === 'HIT_T1') return '✓ HIT T1';
+    if(o === 'HIT_T2') return '✓✓ HIT T2';
+    if(o === 'HIT_SL') return '✗ HIT SL';
+    return '— EXPIRED';
+  }
+
+  function renderSignals(sigs) {
+    const list = document.getElementById('ir-list');
+    const empty = document.getElementById('ir-empty');
+    if(!list) return;
+
+    let filtered = sigs;
+    if(_filter === 'live')     filtered = sigs.filter(s => !s.outcome);
+    else if(_filter === 'ce')  filtered = sigs.filter(s => s.type === 'CE');
+    else if(_filter === 'pe')  filtered = sigs.filter(s => s.type === 'PE');
+    else if(_filter === 'nifty')    filtered = sigs.filter(s => s.symbol === 'NIFTY');
+    else if(_filter === 'banknifty') filtered = sigs.filter(s => s.symbol === 'BANKNIFTY');
+    else if(_filter === 'hit') filtered = sigs.filter(s => s.outcome && s.outcome.includes('T1'));
+    else if(_filter === 'sl')  filtered = sigs.filter(s => s.outcome === 'HIT_SL');
+
+    if(!filtered.length) {
+      if(empty) empty.style.display = '';
+      const existing = list.querySelectorAll('.ir-card');
+      existing.forEach(e => e.remove());
+      return;
+    }
+    if(empty) empty.style.display = 'none';
+
+    const f = n => n >= 1000 ? Math.round(n).toLocaleString('en-IN') : n.toFixed(n < 10 ? 1 : 0);
+    const fc = n => n > 0 ? `<span style="color:var(--go)">+${n.toFixed(2)}%</span>` : `<span style="color:var(--st)">${n.toFixed(2)}%</span>`;
+
+    list.innerHTML = filtered.map(s => {
+      const isCE = s.type === 'CE';
+      const oc   = outcomeClass(s.outcome);
+      const ol   = outcomeLabel(s.outcome);
+      const rr_c = parseFloat(s.rr) >= 1.5 ? 'var(--go)' : 'var(--am)';
+      const sym_icon = s.symbol === 'NIFTY' ? 'N' : 'BN';
+      return `
+      <div class="ir-card ir-${isCE?'ce':'pe'} ${s.outcome?'ir-resolved':''}">
+        <div class="ir-top">
+          <div>
+            <div class="ir-dir ${isCE?'ce':'pe'}">${isCE ? '▲ BUY CE' : '▼ BUY PE'} &nbsp;·&nbsp; ${s.symbol}</div>
+            <div class="ir-strike">
+              ${s.strike.toLocaleString('en-IN')}
+              <span class="ir-type">${s.type}</span>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">
+            <span class="ir-outcome ${oc}">${ol}</span>
+            <span class="ir-idx-chg ${s.chg_pct>0?'up':'dn'}">${s.chg_pct>0?'↑':'↓'} ${Math.abs(s.chg_pct).toFixed(2)}% in 5 min</span>
+            <span style="font-size:7.5px;color:var(--t2)">${s.time} &nbsp;·&nbsp; ${s.symbol} @ ${s.index_px?.toLocaleString('en-IN')}</span>
+          </div>
+        </div>
+        <div class="ir-grid">
+          <div class="ir-box entry"><span class="ir-box-lbl">ENTRY</span><span class="ir-box-val">₹${f(s.entry)}</span></div>
+          <div class="ir-box sl"><span class="ir-box-lbl">STOP (−30%)</span><span class="ir-box-val">₹${f(s.sl)}</span></div>
+          <div class="ir-box t1"><span class="ir-box-lbl">TARGET 1 (+50%)</span><span class="ir-box-val">₹${f(s.t1)}</span></div>
+          <div class="ir-box t2"><span class="ir-box-lbl">TARGET 2 (+100%)</span><span class="ir-box-val">₹${f(s.t2)}</span></div>
+        </div>
+        <div class="ir-meta">
+          <div class="ir-reason">
+            R:R <span style="color:${rr_c};font-weight:700">${s.rr}:1</span> &nbsp;·&nbsp;
+            VIX ${s.vix ? s.vix.toFixed(1) : '—'} &nbsp;·&nbsp;
+            ${s.lot_sz} lot size
+          </div>
+          <div class="ir-pnl">
+            <div class="ir-pnl-val">+₹${s.lot_pnl_t1?.toLocaleString('en-IN') || '—'}</div>
+            <div class="ir-pnl-lbl">1 LOT at T1</div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function updateStats(sigs) {
+    const live     = sigs.filter(s => !s.outcome).length;
+    const t1       = sigs.filter(s => s.outcome && s.outcome.includes('T1')).length;
+    const sl       = sigs.filter(s => s.outcome === 'HIT_SL').length;
+    const resolved = t1 + sl;
+    const wr       = resolved ? Math.round(t1/resolved*100) + '%' : '—';
+    const el = id => document.getElementById(id);
+    if(el('ir-cnt-total')) el('ir-cnt-total').textContent = sigs.length;
+    if(el('ir-cnt-live'))  el('ir-cnt-live').textContent  = live;
+    if(el('ir-cnt-t1'))    el('ir-cnt-t1').textContent    = t1;
+    if(el('ir-cnt-sl'))    el('ir-cnt-sl').textContent    = sl;
+    if(el('ir-cnt-wr'))    el('ir-cnt-wr').textContent    = wr;
+    const wrEl = el('ir-cnt-wr');
+    if(wrEl) wrEl.style.color = resolved === 0 ? 'var(--t2)' : t1/resolved >= 0.6 ? 'var(--go)' : t1/resolved >= 0.45 ? 'var(--am)' : 'var(--st)';
+  }
+
+  window._irUpdate = function(signals) {
+    if(!Array.isArray(signals)) return;
+    _allSignals = signals;
+    updateStats(signals);
+    renderSignals(signals);
+  };
 })();
 
 // 3-STRIKE SYSTEM
@@ -4315,6 +4535,7 @@ setTimeout(()=>notify('STOCKR.IN  ready — Connecting to live data...'),400);
         try { _renderSwingLive(); } catch(e){}
         try { _renderLivePicks(); } catch(e){}
         try { _syncRightPanel(pass, state.verdict || ''); } catch(e){}
+        try { if(state.index_signals && window._irUpdate) window._irUpdate(state.index_signals); } catch(e){}
       })
       .catch(()=>{});
   }
@@ -5259,6 +5480,18 @@ function _topActiveStocks(stocks){
         // Feed into Spike Radar tracker
         if(typeof srIngestSpikes === 'function') srIngestSpikes(d);
         if(document.getElementById('an-history') && document.getElementById('an-history').classList.contains('on')) loadSignalHistory();
+        break;
+      }
+
+      // ── INDEX SPIKE RADAR ─────────────────────────
+      case 'index_spikes': {
+        if(!d) break;
+        window._lastIndexSpikes = d;
+        if(window._irUpdate) window._irUpdate(d);
+        // Flash tab badge if new live signal
+        const liveCount = d.filter(s => !s.outcome).length;
+        const irTab = document.getElementById('ir-tab');
+        if(irTab) irTab.textContent = liveCount > 0 ? `INDEX RADAR 📡 (${liveCount})` : 'INDEX RADAR 📡';
         break;
       }
 

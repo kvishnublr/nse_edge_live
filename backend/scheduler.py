@@ -18,7 +18,8 @@ _fetcher = None
 _signals = None
 _ws      = None
 _cache   = {"indices": None, "chain": None, "fii": None,
-            "stocks": [], "mode": "intraday"}
+            "stocks": [], "mode": "intraday",
+            "ix_px_hist": []}   # [(ts, nifty_px, bn_px), ...] for index spike detection
 
 # ─── CIRCUIT BREAKER (prevent cascading failures) ──────────────────────────────
 _job_errors = {}  # Track consecutive errors per job
@@ -128,6 +129,34 @@ def job_chain():
                 mode    = _cache["mode"],
             )
 
+        # ── Index Spike Radar ──────────────────────────────────────────────
+        if chain and indices:
+            new_ix = _detect_index_signals(chain, indices)
+            today_str = datetime.now(IST).strftime("%Y-%m-%d")
+            existing_ix = _signals.state.get("index_signals", [])
+            # Roll over at new day
+            if _signals.state.get("index_signals_date") != today_str:
+                existing_ix = new_ix
+            else:
+                _update_index_outcomes(existing_ix, indices)
+                # Dedup: skip same symbol+type within 15 min
+                def _ixmin(t):
+                    try: h,m=t.split(":"); return int(h)*60+int(m)
+                    except: return 0
+                for ns in new_ix:
+                    nm = _ixmin(ns["time"])
+                    already = any(
+                        ps["symbol"] == ns["symbol"] and ps["type"] == ns["type"]
+                        and abs(_ixmin(ps["time"]) - nm) < 15
+                        for ps in existing_ix
+                    )
+                    if not already:
+                        existing_ix.append(ns)
+                existing_ix.sort(key=lambda x: x.get("ts", 0), reverse=True)
+                existing_ix = existing_ix[:25]
+            _signals.state["index_signals"]      = existing_ix
+            _signals.state["index_signals_date"] = today_str
+
         if _ws:
             _ws({"type": "gates", "data": {
                 "gates":       {str(k): v for k, v in _signals.state["gates"].items()},
@@ -139,6 +168,8 @@ def job_chain():
                 _ws({"type": "chain",  "data": chain,              "timestamp": time.time()})
             if indices:
                 _ws({"type": "macro",  "data": indices,            "timestamp": time.time()})
+            ix_sigs = _signals.state.get("index_signals", [])
+            _ws({"type": "index_spikes", "data": ix_sigs, "ts": time.time()})
 
         _record_success("job_chain")
     except Exception as e:
@@ -207,6 +238,121 @@ def job_fii():
     except Exception as e:
         logger.error(f"job_fii: {e}")
         _record_error("job_fii")
+
+
+# ─── INDEX SPIKE DETECTION ────────────────────────────────────────────────────
+def _detect_index_signals(chain, indices):
+    """Detect NIFTY/BANKNIFTY directional moves ≥0.3% over 5 min and recommend CE/PE."""
+    import time as _t
+    now_ts = _t.time()
+    now_dt = datetime.now(IST)
+    cm = now_dt.hour * 60 + now_dt.minute
+    if not (570 <= cm <= 840):
+        return []
+
+    nifty_px = float(indices.get("nifty", 0) or 0)
+    bn_px    = float(indices.get("banknifty", 0) or 0)
+    if not nifty_px:
+        return []
+
+    # Store in 5-min rolling price history
+    hist = _cache["ix_px_hist"]
+    hist.append((now_ts, nifty_px, bn_px))
+    if len(hist) > 120:
+        hist.pop(0)
+    if len(hist) < 5:
+        return []
+
+    results = []
+    for sym, px, lot_sz, px_idx in [("NIFTY", nifty_px, 25, 1), ("BANKNIFTY", bn_px, 15, 2)]:
+        if not px:
+            continue
+        # Price 5 minutes ago
+        five_ago = now_ts - 300
+        old_entry = next((e for e in reversed(hist) if e[0] <= five_ago), None)
+        if not old_entry:
+            old_entry = hist[0]
+        old_px = old_entry[px_idx]
+        if not old_px:
+            continue
+        chg = (px - old_px) / old_px * 100
+        if abs(chg) < 0.3:
+            continue
+        is_ce = chg > 0
+
+        # Find ATM and real option premium from chain (NIFTY only; BN estimated)
+        if sym == "NIFTY" and chain:
+            atm = chain.get("atm", 0) or round(px / 50) * 50
+            step = 50
+            target = atm + step if is_ce else atm - step
+            entry_px = 0.0
+            for s in (chain.get("strikes") or []):
+                if s["strike"] == target:
+                    entry_px = float(s.get("call_ltp" if is_ce else "put_ltp", 0) or 0)
+                    break
+            if not entry_px:
+                # fallback: ATM itself
+                for s in (chain.get("strikes") or []):
+                    if s.get("is_atm"):
+                        entry_px = float(s.get("call_ltp" if is_ce else "put_ltp", 0) or 0)
+                        break
+        else:
+            atm    = round(px / 100) * 100
+            step   = 100
+            target = atm + step if is_ce else atm - step
+            entry_px = round(px * 0.007, 1)   # ~0.7% estimate for BN OTM
+
+        if not entry_px:
+            continue
+
+        sl         = round(entry_px * 0.70, 2)   # −30%
+        t1         = round(entry_px * 1.50, 2)   # +50%
+        t2         = round(entry_px * 2.00, 2)   # +100%
+        rr         = round((t1 - entry_px) / max(entry_px - sl, 0.01), 1)
+        lot_pnl_t1 = round((t1 - entry_px) * lot_sz)
+
+        results.append({
+            "id":            f"{sym}_{now_dt.strftime('%H%M')}_{'CE' if is_ce else 'PE'}",
+            "symbol":        sym,
+            "time":          now_dt.strftime("%H:%M"),
+            "ts":            now_ts,
+            "index_px":      round(px, 2),
+            "entry_index_px":round(px, 2),
+            "chg_pct":       round(chg, 2),
+            "type":          "CE" if is_ce else "PE",
+            "strike":        target,
+            "entry":         round(entry_px, 2),
+            "sl":            sl,
+            "t1":            t1,
+            "t2":            t2,
+            "rr":            rr,
+            "lot_sz":        lot_sz,
+            "lot_pnl_t1":    lot_pnl_t1,
+            "strength":      "hi" if abs(chg) >= 0.5 else "md",
+            "outcome":       None,
+            "vix":           float(indices.get("vix", 0) or 0),
+        })
+    return results
+
+
+def _update_index_outcomes(signals, indices):
+    """Resolve live index signals: HIT_T1 / HIT_SL / EXPIRED."""
+    import time as _t
+    now_ts  = _t.time()
+    nifty   = float((indices or {}).get("nifty", 0) or 0)
+    bn      = float((indices or {}).get("banknifty", 0) or 0)
+    for sig in signals:
+        if sig.get("outcome") is not None:
+            continue
+        entry_idx = sig.get("entry_index_px", 0)
+        cur       = nifty if sig["symbol"] == "NIFTY" else bn
+        if not entry_idx or not cur:
+            continue
+        mv    = (cur - entry_idx) / entry_idx * 100
+        is_ce = sig["type"] == "CE"
+        if   (is_ce and mv >= 0.25) or (not is_ce and mv <= -0.25): sig["outcome"] = "HIT_T1"
+        elif (is_ce and mv <= -0.25) or (not is_ce and mv >= 0.25): sig["outcome"] = "HIT_SL"
+        elif now_ts - sig.get("ts", now_ts) > 2700:                  sig["outcome"] = "EXPIRED"
 
 
 # ─── JOB: SPIKES + TICKER (every 10 seconds) ─────────────────────────────────

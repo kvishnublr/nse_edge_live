@@ -441,7 +441,8 @@ async def get_state():
         "macro":       signals.state.get("last_macro"),
         "stocks":      signals.state.get("last_stocks"),
         "fii":         signals.state.get("last_fii"),
-        "spikes":      signals.state.get("spikes", []),
+        "spikes":        signals.state.get("spikes", []),
+        "index_signals": signals.state.get("index_signals", []),
         "position_size_lots": signals.state.get("position_size_lots", 0),
         "position_size_rupees": signals.state.get("position_size_rupees", 0),
     })
