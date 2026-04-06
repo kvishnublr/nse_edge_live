@@ -773,33 +773,39 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .ir-card.ir-pe{border-color:rgba(255,51,85,.15);background:rgba(255,51,85,.02)}
 .ir-card.ir-pe::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--st)}
 .ir-card.ir-resolved{opacity:.8;filter:saturate(.7)}
-@keyframes ir-pulse{0%,100%{opacity:.5}50%{opacity:1}}
-.ir-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;padding-left:6px}
-.ir-sym{font-size:11px;font-weight:800;letter-spacing:.5px;color:var(--t0)}
-.ir-dir{font-size:9px;font-weight:800;letter-spacing:1px}
-.ir-dir.ce{color:var(--go)}.ir-dir.pe{color:var(--st)}
-.ir-strike{font-size:16px;font-weight:800;letter-spacing:-.5px;padding-left:6px;margin-bottom:8px}
-.ir-strike .ir-type{font-size:10px;font-weight:600;color:var(--t2);margin-left:4px}
-.ir-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px;padding-left:6px}
-.ir-box{border-radius:4px;padding:5px 8px;background:rgba(0,0,0,.15);text-align:center}
-.ir-box-lbl{font-size:7px;color:var(--t2);letter-spacing:.5px;display:block;margin-bottom:2px}
-.ir-box-val{font-size:10px;font-weight:700}
-.ir-box.entry .ir-box-val{color:var(--t0)}
-.ir-box.sl .ir-box-val{color:var(--st)}
-.ir-box.t1 .ir-box-val{color:var(--go)}
-.ir-box.t2 .ir-box-val{color:var(--go);opacity:.7}
-.ir-meta{display:flex;justify-content:space-between;align-items:center;padding-left:6px;margin-top:4px}
-.ir-reason{font-size:7.5px;color:var(--t3);line-height:1.5;flex:1}
-.ir-pnl{text-align:right;flex-shrink:0}
-.ir-pnl-val{font-size:10px;font-weight:800;color:var(--go)}
-.ir-pnl-lbl{font-size:7px;color:var(--t2)}
-.ir-outcome{display:inline-flex;align-items:center;font-size:8px;font-weight:700;padding:2px 8px;border-radius:10px;letter-spacing:.5px}
-.ir-outcome.live{background:rgba(0,140,255,.12);color:var(--bl);border:1px solid rgba(0,140,255,.3)}
-.ir-outcome.t1{background:rgba(0,232,122,.1);color:var(--go);border:1px solid rgba(0,232,122,.3)}
-.ir-outcome.sl{background:rgba(255,51,85,.1);color:var(--st);border:1px solid rgba(255,51,85,.3)}
+@keyframes ir-pulse{0%,100%{opacity:.4}50%{opacity:1}}
+/* Card layout — horizontal row style */
+.ir-card{border-radius:7px;border:1px solid var(--b1);background:var(--s2);padding:10px 14px 10px 18px;position:relative;overflow:hidden;transition:box-shadow .2s}
+.ir-card-row{display:flex;align-items:center;gap:0;width:100%}
+/* Direction badge column */
+.ir-col-dir{flex:0 0 120px}
+.ir-dir-badge{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:800;letter-spacing:.8px;padding:3px 8px;border-radius:4px}
+.ir-dir-badge.ce{background:rgba(0,232,122,.12);color:var(--go);border:1px solid rgba(0,232,122,.3)}
+.ir-dir-badge.pe{background:rgba(255,51,85,.1);color:var(--st);border:1px solid rgba(255,51,85,.25)}
+.ir-col-sym{flex:0 0 90px;font-size:11px;font-weight:800;color:var(--t0);letter-spacing:.5px}
+.ir-col-strike{flex:0 0 80px;font-size:15px;font-weight:800;color:var(--t0);letter-spacing:-.5px}
+.ir-col-strike span{font-size:8px;color:var(--t2);font-weight:500;margin-left:2px}
+/* Price boxes inline */
+.ir-cols-px{display:flex;gap:2px;flex:1}
+.ir-px{display:flex;flex-direction:column;align-items:center;padding:4px 10px;border-radius:4px;background:rgba(0,0,0,.18);min-width:56px}
+.ir-px-lbl{font-size:6.5px;color:var(--t2);letter-spacing:.5px;text-transform:uppercase;margin-bottom:1px}
+.ir-px-val{font-size:10px;font-weight:700}
+.ir-px.entry .ir-px-val{color:var(--t1)}
+.ir-px.sl .ir-px-val{color:var(--st)}
+.ir-px.t1 .ir-px-val{color:var(--go)}
+.ir-px.t2 .ir-px-val{color:#8af;opacity:.75}
+/* Meta right side */
+.ir-col-meta{flex:0 0 140px;display:flex;flex-direction:column;align-items:flex-end;gap:3px;padding-left:10px}
+.ir-col-pnl{flex:0 0 100px;text-align:right;padding-left:8px}
+.ir-pnl-val{font-size:12px;font-weight:800}
+.ir-pnl-lbl{font-size:6.5px;color:var(--t2);letter-spacing:.3px;margin-top:1px}
+.ir-outcome{display:inline-flex;align-items:center;font-size:7.5px;font-weight:700;padding:2px 8px;border-radius:10px;letter-spacing:.5px;white-space:nowrap}
+.ir-outcome.live{background:rgba(0,140,255,.15);color:var(--bl);border:1px solid rgba(0,140,255,.35)}
+.ir-outcome.t1{background:rgba(0,232,122,.12);color:var(--go);border:1px solid rgba(0,232,122,.35)}
+.ir-outcome.sl{background:rgba(255,51,85,.12);color:var(--st);border:1px solid rgba(255,51,85,.3)}
 .ir-outcome.exp{background:var(--s3);color:var(--t2);border:1px solid var(--b1)}
-.ir-idx-chg{font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px}
-.ir-idx-chg.up{color:var(--go)}.ir-idx-chg.dn{color:var(--st)}
+.ir-chg-badge{font-size:8px;font-weight:700;color:var(--t2)}
+.ir-time-lbl{font-size:7px;color:var(--t3)}
 
 /* BACKTEST CONTROLS */
 .btctrl{background:var(--s2);border-bottom:1px solid var(--b1);padding:8px 10px;flex-shrink:0}
@@ -4160,65 +4166,42 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
     }
     if(empty) empty.style.display = 'none';
 
-    const f = n => (n||0) >= 1000 ? Math.round(n).toLocaleString('en-IN') : (n||0).toFixed(1);
+    const f = n => (n||0) >= 1000 ? Math.round(n).toLocaleString('en-IN') : (n||0).toFixed(0);
 
     list.innerHTML = filtered.map(s => {
-      const isCE = s.type === 'CE';
-      const oc   = outcomeClass(s.outcome);
-      const ol   = outcomeLabel(s.outcome);
-      const rr_c = parseFloat(s.rr) >= 1.5 ? 'var(--go)' : 'var(--am)';
+      const isCE  = s.type === 'CE';
+      const oc    = outcomeClass(s.outcome);
+      const ol    = outcomeLabel(s.outcome);
       const lotSz = s.lot_sz || (s.symbol === 'NIFTY' ? 25 : 15);
+      const chg   = s.chg_pct || 0;
+      const stime = s.time || s.signal_time || '';
 
-      // Actual P&L per lot based on outcome
-      let pnlVal, pnlLbl, pnlColor;
-      if(!s.outcome) {
-        // LIVE — show potential T1 profit
-        pnlVal = '+₹' + Math.round((s.t1 - s.entry) * lotSz).toLocaleString('en-IN');
-        pnlLbl = 'potential at T1';
-        pnlColor = 'var(--t2)';
-      } else if(s.outcome === 'HIT_T1' || s.outcome === 'HIT_T2') {
-        pnlVal = '+₹' + Math.round((s.t1 - s.entry) * lotSz).toLocaleString('en-IN');
-        pnlLbl = '1 LOT PROFIT';
-        pnlColor = 'var(--go)';
-      } else if(s.outcome === 'HIT_SL') {
-        pnlVal = '−₹' + Math.round((s.entry - s.sl) * lotSz).toLocaleString('en-IN');
-        pnlLbl = '1 LOT LOSS';
-        pnlColor = 'var(--st)';
-      } else {
-        pnlVal = '₹0'; pnlLbl = 'EXPIRED'; pnlColor = 'var(--t2)';
-      }
+      let pnlVal, pnlColor;
+      if(!s.outcome)                                     { pnlVal = '+₹'+Math.round((s.t1-s.entry)*lotSz).toLocaleString('en-IN'); pnlColor='var(--t3)'; }
+      else if(s.outcome==='HIT_T1'||s.outcome==='HIT_T2'){ pnlVal = '+₹'+Math.round((s.t1-s.entry)*lotSz).toLocaleString('en-IN'); pnlColor='var(--go)'; }
+      else if(s.outcome==='HIT_SL')                      { pnlVal = '−₹'+Math.round((s.entry-s.sl)*lotSz).toLocaleString('en-IN'); pnlColor='var(--st)'; }
+      else                                               { pnlVal = '—'; pnlColor='var(--t2)'; }
 
-      return `
-      <div class="ir-card ir-${isCE?'ce':'pe'} ${s.outcome?'ir-resolved':'ir-live'}">
-        <div class="ir-top">
-          <div>
-            <div class="ir-dir ${isCE?'ce':'pe'}">${isCE ? '▲ BUY CE' : '▼ BUY PE'} &nbsp;·&nbsp; ${s.symbol}</div>
-            <div class="ir-strike">
-              ${(s.strike||0).toLocaleString('en-IN')}
-              <span class="ir-type">${s.type}</span>
-            </div>
+      return `<div class="ir-card ir-${isCE?'ce':'pe'} ${s.outcome?'ir-resolved':'ir-live'}">
+        <div class="ir-card-row">
+          <div class="ir-col-dir">
+            <div class="ir-dir-badge ${isCE?'ce':'pe'}">${isCE?'▲ BUY CE':'▼ BUY PE'}</div>
+            <div class="ir-time-lbl" style="margin-top:4px;padding-left:2px">${stime} · ${s.symbol}</div>
           </div>
-          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">
+          <div class="ir-col-strike">${(s.strike||0).toLocaleString('en-IN')}<span>${s.type}</span></div>
+          <div class="ir-cols-px">
+            <div class="ir-px entry"><span class="ir-px-lbl">ENTRY</span><span class="ir-px-val">₹${f(s.entry)}</span></div>
+            <div class="ir-px sl"><span class="ir-px-lbl">SL −30%</span><span class="ir-px-val">₹${f(s.sl)}</span></div>
+            <div class="ir-px t1"><span class="ir-px-lbl">T1 +50%</span><span class="ir-px-val">₹${f(s.t1)}</span></div>
+            <div class="ir-px t2"><span class="ir-px-lbl">T2 +100%</span><span class="ir-px-val">₹${f(s.t2)}</span></div>
+          </div>
+          <div class="ir-col-meta">
             <span class="ir-outcome ${oc}">${ol}</span>
-            <span class="ir-idx-chg ${(s.chg_pct||0)>0?'up':'dn'}">${(s.chg_pct||0)>0?'↑':'↓'} ${Math.abs(s.chg_pct||0).toFixed(2)}% in 5 min</span>
-            <span style="font-size:7.5px;color:var(--t2)">${s.time||s.signal_time} &nbsp;·&nbsp; ${s.symbol} @ ${(s.index_px||0).toLocaleString('en-IN')}</span>
+            <span class="ir-chg-badge">${chg>0?'↑':'↓'} ${Math.abs(chg).toFixed(2)}% · R:R ${s.rr}:1</span>
           </div>
-        </div>
-        <div class="ir-grid">
-          <div class="ir-box entry"><span class="ir-box-lbl">ENTRY</span><span class="ir-box-val">₹${f(s.entry)}</span></div>
-          <div class="ir-box sl"><span class="ir-box-lbl">STOP (−30%)</span><span class="ir-box-val">₹${f(s.sl)}</span></div>
-          <div class="ir-box t1"><span class="ir-box-lbl">TARGET 1 (+50%)</span><span class="ir-box-val">₹${f(s.t1)}</span></div>
-          <div class="ir-box t2"><span class="ir-box-lbl">TARGET 2 (+100%)</span><span class="ir-box-val">₹${f(s.t2)}</span></div>
-        </div>
-        <div class="ir-meta">
-          <div class="ir-reason">
-            R:R <span style="color:${rr_c};font-weight:700">${s.rr}:1</span> &nbsp;·&nbsp;
-            VIX ${s.vix ? s.vix.toFixed(1) : '—'} &nbsp;·&nbsp;
-            ${lotSz} lot size
-          </div>
-          <div class="ir-pnl">
+          <div class="ir-col-pnl">
             <div class="ir-pnl-val" style="color:${pnlColor}">${pnlVal}</div>
-            <div class="ir-pnl-lbl">${pnlLbl}</div>
+            <div class="ir-pnl-lbl">${lotSz} lot · ${s.vix?s.vix.toFixed(1):'—'} VIX</div>
           </div>
         </div>
       </div>`;
