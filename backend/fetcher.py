@@ -580,16 +580,23 @@ def fetch_fii_dii() -> Optional[dict]:
     if not raw:
         return None
     try:
-        data   = raw if isinstance(raw, list) else raw.get("data", [])
-        latest = data[0] if data else {}
+        rows = raw if isinstance(raw, list) else raw.get("data", [])
+        # API returns one row per category: "FII/FPI" and "DII"
+        fii_row = next((r for r in rows if "FII" in str(r.get("category", ""))), {})
+        dii_row = next((r for r in rows if "DII" in str(r.get("category", ""))), {})
+
+        def _f(row, key):
+            try: return round(float(row.get(key, 0) or 0), 2)
+            except: return 0.0
+
         return {
-            "fii_net":  round(float(latest.get("fiiNet",  0)), 2),
-            "dii_net":  round(float(latest.get("diiNet",  0)), 2),
-            "fii_buy":  round(float(latest.get("fiiBuy",  0)), 2),
-            "fii_sell": round(float(latest.get("fiiSell", 0)), 2),
-            "dii_buy":  round(float(latest.get("diiBuy",  0)), 2),
-            "dii_sell": round(float(latest.get("diiSell", 0)), 2),
-            "date":     latest.get("date", ""),
+            "fii_net":  _f(fii_row, "netValue"),
+            "fii_buy":  _f(fii_row, "buyValue"),
+            "fii_sell": _f(fii_row, "sellValue"),
+            "dii_net":  _f(dii_row, "netValue"),
+            "dii_buy":  _f(dii_row, "buyValue"),
+            "dii_sell": _f(dii_row, "sellValue"),
+            "date":     fii_row.get("date") or dii_row.get("date", ""),
         }
     except Exception as e:
         logger.error(f"FII/DII parse error: {e}")
