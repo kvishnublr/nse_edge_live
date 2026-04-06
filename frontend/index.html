@@ -758,54 +758,53 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .ir-stat{display:flex;flex-direction:column;align-items:center;min-width:55px}
 .ir-stat-val{font-size:14px;font-weight:700}
 .ir-stat-lbl{font-size:7px;color:var(--t2);letter-spacing:.5px;margin-top:1px}
-.ir-card{border-radius:8px;border:1px solid var(--b1);background:var(--s2);padding:12px 14px;margin-bottom:8px;position:relative;overflow:hidden;transition:box-shadow .3s}
-/* LIVE CE — glossy green glow */
-.ir-card.ir-ce.ir-live{border-color:rgba(0,232,122,.55);background:linear-gradient(135deg,rgba(0,232,122,.07) 0%,rgba(0,232,122,.02) 60%,rgba(0,180,255,.04) 100%);box-shadow:0 0 0 1px rgba(0,232,122,.3),0 4px 20px rgba(0,232,122,.15),inset 0 1px 0 rgba(255,255,255,.06)}
-.ir-card.ir-ce.ir-live::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(180deg,#00e87a,#00c864);border-radius:4px 0 0 4px}
-.ir-card.ir-ce.ir-live::after{content:'LIVE';position:absolute;top:8px;right:8px;font-size:7px;font-weight:800;color:#00e87a;letter-spacing:1.5px;opacity:.6;animation:ir-pulse 2s ease-in-out infinite}
-/* LIVE PE — glossy red glow */
-.ir-card.ir-pe.ir-live{border-color:rgba(255,51,85,.5);background:linear-gradient(135deg,rgba(255,51,85,.07) 0%,rgba(255,51,85,.02) 60%,rgba(255,120,0,.03) 100%);box-shadow:0 0 0 1px rgba(255,51,85,.28),0 4px 20px rgba(255,51,85,.12),inset 0 1px 0 rgba(255,255,255,.05)}
-.ir-card.ir-pe.ir-live::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(180deg,#ff3355,#cc1133);border-radius:4px 0 0 4px}
-.ir-card.ir-pe.ir-live::after{content:'LIVE';position:absolute;top:8px;right:8px;font-size:7px;font-weight:800;color:#ff3355;letter-spacing:1.5px;opacity:.6;animation:ir-pulse 2s ease-in-out infinite}
-/* Resolved CE/PE — faded */
-.ir-card.ir-ce{border-color:rgba(0,232,122,.18);background:rgba(0,232,122,.02)}
-.ir-card.ir-ce::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--go)}
-.ir-card.ir-pe{border-color:rgba(255,51,85,.15);background:rgba(255,51,85,.02)}
-.ir-card.ir-pe::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--st)}
-.ir-card.ir-resolved{opacity:.8;filter:saturate(.7)}
-@keyframes ir-pulse{0%,100%{opacity:.4}50%{opacity:1}}
-/* Card layout — horizontal row style */
-.ir-card{border-radius:7px;border:1px solid var(--b1);background:var(--s2);padding:10px 14px 10px 18px;position:relative;overflow:hidden;transition:box-shadow .2s}
-.ir-card-row{display:flex;align-items:center;gap:0;width:100%}
-/* Direction badge column */
-.ir-col-dir{flex:0 0 120px}
-.ir-dir-badge{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:800;letter-spacing:.8px;padding:3px 8px;border-radius:4px}
-.ir-dir-badge.ce{background:rgba(0,232,122,.12);color:var(--go);border:1px solid rgba(0,232,122,.3)}
-.ir-dir-badge.pe{background:rgba(255,51,85,.1);color:var(--st);border:1px solid rgba(255,51,85,.25)}
-.ir-col-sym{flex:0 0 90px;font-size:11px;font-weight:800;color:var(--t0);letter-spacing:.5px}
-.ir-col-strike{flex:0 0 80px;font-size:15px;font-weight:800;color:var(--t0);letter-spacing:-.5px}
-.ir-col-strike span{font-size:8px;color:var(--t2);font-weight:500;margin-left:2px}
-/* Price boxes inline */
-.ir-cols-px{display:flex;gap:2px;flex:1}
-.ir-px{display:flex;flex-direction:column;align-items:center;padding:4px 10px;border-radius:4px;background:rgba(0,0,0,.18);min-width:56px}
-.ir-px-lbl{font-size:6.5px;color:var(--t2);letter-spacing:.5px;text-transform:uppercase;margin-bottom:1px}
-.ir-px-val{font-size:10px;font-weight:700}
-.ir-px.entry .ir-px-val{color:var(--t1)}
-.ir-px.sl .ir-px-val{color:var(--st)}
-.ir-px.t1 .ir-px-val{color:var(--go)}
-.ir-px.t2 .ir-px-val{color:#8af;opacity:.75}
-/* Meta right side */
-.ir-col-meta{flex:0 0 140px;display:flex;flex-direction:column;align-items:flex-end;gap:3px;padding-left:10px}
-.ir-col-pnl{flex:0 0 100px;text-align:right;padding-left:8px}
-.ir-pnl-val{font-size:12px;font-weight:800}
-.ir-pnl-lbl{font-size:6.5px;color:var(--t2);letter-spacing:.3px;margin-top:1px}
-.ir-outcome{display:inline-flex;align-items:center;font-size:7.5px;font-weight:700;padding:2px 8px;border-radius:10px;letter-spacing:.5px;white-space:nowrap}
-.ir-outcome.live{background:rgba(0,140,255,.15);color:var(--bl);border:1px solid rgba(0,140,255,.35)}
-.ir-outcome.t1{background:rgba(0,232,122,.12);color:var(--go);border:1px solid rgba(0,232,122,.35)}
-.ir-outcome.sl{background:rgba(255,51,85,.12);color:var(--st);border:1px solid rgba(255,51,85,.3)}
-.ir-outcome.exp{background:var(--s3);color:var(--t2);border:1px solid var(--b1)}
-.ir-chg-badge{font-size:8px;font-weight:700;color:var(--t2)}
-.ir-time-lbl{font-size:7px;color:var(--t3)}
+/* === INDEX RADAR CARDS === */
+@keyframes ir-pulse{0%,100%{opacity:.5}50%{opacity:1}}
+.ir-card{display:flex;align-items:center;gap:10px;border-radius:5px;border:1px solid var(--b1);background:var(--s2);padding:8px 12px;margin-bottom:5px;position:relative;transition:opacity .2s,box-shadow .2s}
+/* Left color accent */
+.ir-card.ir-ce{border-left:3px solid var(--go);background:rgba(0,232,122,.025)}
+.ir-card.ir-pe{border-left:3px solid var(--st);background:rgba(255,51,85,.025)}
+/* Live glow */
+.ir-card.ir-ce.ir-live{box-shadow:0 0 14px rgba(0,232,122,.13),inset 0 0 0 1px rgba(0,232,122,.18)}
+.ir-card.ir-pe.ir-live{box-shadow:0 0 14px rgba(255,51,85,.1),inset 0 0 0 1px rgba(255,51,85,.16)}
+.ir-card.ir-resolved{opacity:.72}
+/* LIVE dot */
+.ir-live-dot{position:absolute;top:7px;right:8px;width:5px;height:5px;border-radius:50%}
+.ir-ce.ir-live .ir-live-dot{background:var(--go);box-shadow:0 0 4px var(--go);animation:ir-pulse 1.8s infinite}
+.ir-pe.ir-live .ir-live-dot{background:var(--st);box-shadow:0 0 4px var(--st);animation:ir-pulse 1.8s infinite}
+/* Col: Direction badge */
+.irc-dir{flex:0 0 82px}
+.irc-badge{display:inline-block;font-size:8.5px;font-weight:800;letter-spacing:.7px;padding:3px 8px;border-radius:3px;white-space:nowrap}
+.irc-badge.ce{background:rgba(0,232,122,.14);color:var(--go);border:1px solid rgba(0,232,122,.32)}
+.irc-badge.pe{background:rgba(255,51,85,.12);color:var(--st);border:1px solid rgba(255,51,85,.28)}
+.irc-time{font-size:7.5px;color:var(--t1);margin-top:4px;font-weight:500}
+/* Col: Instrument */
+.irc-inst{flex:0 0 120px}
+.irc-sym{font-size:7.5px;font-weight:700;color:var(--t2);letter-spacing:.8px}
+.irc-strike{font-size:17px;font-weight:800;color:var(--t0);letter-spacing:-1px;line-height:1.15}
+.irc-typ{font-size:8px;font-weight:700;margin-left:3px;vertical-align:middle}
+.irc-typ.ce{color:var(--go)}.irc-typ.pe{color:var(--st)}
+/* Col: Price strip */
+.irc-prices{flex:1;display:flex;align-items:stretch;border-radius:4px;overflow:hidden;background:rgba(0,0,0,.22);gap:1px;min-width:0}
+.irc-p{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:5px 0;flex:1;min-width:0}
+.irc-p-lbl{font-size:6px;color:rgba(255,255,255,.35);letter-spacing:.7px;text-transform:uppercase}
+.irc-p-val{font-size:11px;font-weight:700;margin-top:1px;white-space:nowrap}
+.irc-p.ep .irc-p-val{color:#c8dce8}
+.irc-p.sl .irc-p-val{color:#ff6680}
+.irc-p.t1 .irc-p-val{color:#00e87a}
+/* Col: Chg + RR */
+.irc-chg{flex:0 0 76px;text-align:center}
+.irc-chg-pct{font-size:12px;font-weight:800;color:var(--t1)}
+.irc-chg-rr{font-size:7px;color:var(--t2);margin-top:2px;letter-spacing:.3px}
+/* Col: Status */
+.irc-status{flex:0 0 108px;text-align:right}
+.irc-outcome{display:inline-block;font-size:7.5px;font-weight:700;padding:2px 8px;border-radius:3px;letter-spacing:.5px;white-space:nowrap}
+.irc-outcome.live{background:rgba(56,190,255,.12);color:var(--bl);border:1px solid rgba(56,190,255,.28)}
+.irc-outcome.t1{background:rgba(0,232,122,.12);color:var(--go);border:1px solid rgba(0,232,122,.3)}
+.irc-outcome.sl{background:rgba(255,51,85,.12);color:var(--st);border:1px solid rgba(255,51,85,.28)}
+.irc-outcome.exp{background:rgba(255,255,255,.04);color:var(--t2);border:1px solid var(--b1)}
+.irc-pnl{font-size:13px;font-weight:800;margin-top:4px;white-space:nowrap}
+.irc-lot{font-size:6.5px;color:var(--t2);margin-top:2px;letter-spacing:.2px}
 
 /* BACKTEST CONTROLS */
 .btctrl{background:var(--s2);border-bottom:1px solid var(--b1);padding:8px 10px;flex-shrink:0}
@@ -4166,7 +4165,10 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
     }
     if(empty) empty.style.display = 'none';
 
-    const f = n => (n||0) >= 1000 ? Math.round(n).toLocaleString('en-IN') : (n||0).toFixed(0);
+    const fp = n => {
+      if(!n && n !== 0) return '—';
+      return n >= 100 ? Math.round(n).toLocaleString('en-IN') : n.toFixed(1);
+    };
 
     list.innerHTML = filtered.map(s => {
       const isCE  = s.type === 'CE';
@@ -4177,32 +4179,36 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
       const stime = s.time || s.signal_time || '';
 
       let pnlVal, pnlColor;
-      if(!s.outcome)                                     { pnlVal = '+₹'+Math.round((s.t1-s.entry)*lotSz).toLocaleString('en-IN'); pnlColor='var(--t3)'; }
-      else if(s.outcome==='HIT_T1'||s.outcome==='HIT_T2'){ pnlVal = '+₹'+Math.round((s.t1-s.entry)*lotSz).toLocaleString('en-IN'); pnlColor='var(--go)'; }
-      else if(s.outcome==='HIT_SL')                      { pnlVal = '−₹'+Math.round((s.entry-s.sl)*lotSz).toLocaleString('en-IN'); pnlColor='var(--st)'; }
-      else                                               { pnlVal = '—'; pnlColor='var(--t2)'; }
+      if(!s.outcome)                                      { pnlVal = '+₹'+Math.round((s.t1-s.entry)*lotSz).toLocaleString('en-IN'); pnlColor='var(--t2)'; }
+      else if(s.outcome==='HIT_T1'||s.outcome==='HIT_T2') { pnlVal = '+₹'+Math.round((s.t1-s.entry)*lotSz).toLocaleString('en-IN'); pnlColor='var(--go)'; }
+      else if(s.outcome==='HIT_SL')                       { pnlVal = '−₹'+Math.round((s.entry-s.sl)*lotSz).toLocaleString('en-IN'); pnlColor='var(--st)'; }
+      else                                                { pnlVal = 'EXPIRED'; pnlColor='var(--t2)'; }
+
+      const liveDot = s.outcome ? '' : '<div class="ir-live-dot"></div>';
 
       return `<div class="ir-card ir-${isCE?'ce':'pe'} ${s.outcome?'ir-resolved':'ir-live'}">
-        <div class="ir-card-row">
-          <div class="ir-col-dir">
-            <div class="ir-dir-badge ${isCE?'ce':'pe'}">${isCE?'▲ BUY CE':'▼ BUY PE'}</div>
-            <div class="ir-time-lbl" style="margin-top:4px;padding-left:2px">${stime} · ${s.symbol}</div>
-          </div>
-          <div class="ir-col-strike">${(s.strike||0).toLocaleString('en-IN')}<span>${s.type}</span></div>
-          <div class="ir-cols-px">
-            <div class="ir-px entry"><span class="ir-px-lbl">ENTRY</span><span class="ir-px-val">₹${f(s.entry)}</span></div>
-            <div class="ir-px sl"><span class="ir-px-lbl">SL −30%</span><span class="ir-px-val">₹${f(s.sl)}</span></div>
-            <div class="ir-px t1"><span class="ir-px-lbl">T1 +50%</span><span class="ir-px-val">₹${f(s.t1)}</span></div>
-            <div class="ir-px t2"><span class="ir-px-lbl">T2 +100%</span><span class="ir-px-val">₹${f(s.t2)}</span></div>
-          </div>
-          <div class="ir-col-meta">
-            <span class="ir-outcome ${oc}">${ol}</span>
-            <span class="ir-chg-badge">${chg>0?'↑':'↓'} ${Math.abs(chg).toFixed(2)}% · R:R ${s.rr}:1</span>
-          </div>
-          <div class="ir-col-pnl">
-            <div class="ir-pnl-val" style="color:${pnlColor}">${pnlVal}</div>
-            <div class="ir-pnl-lbl">${lotSz} lot · ${s.vix?s.vix.toFixed(1):'—'} VIX</div>
-          </div>
+        ${liveDot}
+        <div class="irc-dir">
+          <div class="irc-badge ${isCE?'ce':'pe'}">${isCE?'▲ BUY CE':'▼ BUY PE'}</div>
+          <div class="irc-time">${stime}</div>
+        </div>
+        <div class="irc-inst">
+          <div class="irc-sym">${s.symbol}</div>
+          <div><span class="irc-strike">${(s.strike||0).toLocaleString('en-IN')}</span><span class="irc-typ ${isCE?'ce':'pe'}">${s.type}</span></div>
+        </div>
+        <div class="irc-prices">
+          <div class="irc-p ep"><div class="irc-p-lbl">ENTRY</div><div class="irc-p-val">₹${fp(s.entry)}</div></div>
+          <div class="irc-p sl"><div class="irc-p-lbl">SL</div><div class="irc-p-val">₹${fp(s.sl)}</div></div>
+          <div class="irc-p t1"><div class="irc-p-lbl">TARGET</div><div class="irc-p-val">₹${fp(s.t1)}</div></div>
+        </div>
+        <div class="irc-chg">
+          <div class="irc-chg-pct">${chg>0?'↑':'↓'}${Math.abs(chg).toFixed(2)}%</div>
+          <div class="irc-chg-rr">R:R ${s.rr||'—'}:1</div>
+        </div>
+        <div class="irc-status">
+          <div class="irc-outcome ${oc}">${ol}</div>
+          <div class="irc-pnl" style="color:${pnlColor}">${pnlVal}</div>
+          <div class="irc-lot">${lotSz} lot${s.vix&&s.vix>0?' · '+s.vix.toFixed(1)+' VIX':''}</div>
         </div>
       </div>`;
     }).join('');
