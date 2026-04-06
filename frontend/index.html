@@ -8,7 +8,7 @@
 <meta property="og:site_name" content="STOCKR.IN">
 <meta property="og:title" content="STOCKR.IN - AI Trading Signals">
 <meta property="og:description" content="AI-Powered Intraday Trading Signals with 70% Win Rate">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' stroke='%2300ff88' stroke-width='2' fill='none' opacity='0.3'/><path d='M8 12h8M12 8v8M9 10l3-4 3 4' stroke='%2300ff88' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' fill='none'/></svg>">
 <title>STOCKR.IN — AI-Powered Trading Signals</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0d1520">
@@ -107,15 +107,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 /* TOPBAR */
 #tb{height:36px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:var(--s1);border-bottom:1px solid var(--b1);flex-shrink:0}
 .tbl{display:flex;align-items:center;gap:14px}
-.logo{display:flex;align-items:center;gap:8px;cursor:default;user-select:none}
-.logo-icon{flex-shrink:0}
+.logo{display:flex;align-items:center;gap:10px;cursor:default;user-select:none}
+.logo-icon{flex-shrink:0;filter:drop-shadow(0 0 6px rgba(0,255,136,0.4))}
 .logo-text{display:flex;flex-direction:column;line-height:1.15}
-.logo-name{font-family:Georgia,'Times New Roman',serif;font-size:18px;font-weight:700;color:var(--t0);letter-spacing:0.5px}
+.logo-name{font-family:'Syne',sans-serif;font-size:17px;font-weight:800;background:linear-gradient(135deg,#00ff88,#00cc6a);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:1px}
 .arrow{stroke:#22c55e;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
 :root.light .arrow{stroke:#16a34a}
 .sep{width:1px;height:16px;background:var(--b2)}
-.lpill{display:flex;align-items:center;gap:5px;font-size:9px;color:var(--go)}
-.ldot{width:5px;height:5px;border-radius:50%;background:var(--go);animation:pulse 1.5s ease-in-out infinite}
+.lpill{display:flex;align-items:center;gap:5px;font-size:9px;font-weight:600;color:var(--go);padding:3px 10px;background:rgba(0,232,122,0.1);border:1px solid rgba(0,232,122,0.3);border-radius:12px}
+.ldot{width:6px;height:6px;border-radius:50%;background:var(--go);animation:pulse 1.5s ease-in-out infinite;box-shadow:0 0 8px var(--go)}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(0,232,122,.5)}60%{box-shadow:0 0 0 5px rgba(0,232,122,0)}}
 @keyframes dot-execute{0%,100%{box-shadow:0 0 0 0 rgba(0,232,122,.8)}70%{box-shadow:0 0 0 6px rgba(0,232,122,0)}}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -125,9 +125,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .zlbl{font-size:9px;color:var(--t2)}
 .tbr{display:flex;align-items:center;gap:12px}
 .clk{font-size:10px;color:var(--t1);font-weight:500;letter-spacing:.5px}
-.mtog{display:flex;background:var(--s2);border:1px solid var(--b1);border-radius:3px;overflow:hidden}
-.mb{padding:4px 12px;font-family:var(--fn);font-size:9px;font-weight:600;letter-spacing:1.5px;border:none;cursor:pointer;color:var(--t2);background:transparent;transition:all .15s}
-.mb.on{background:var(--go);color:#000}
+.mtog{display:flex;background:linear-gradient(180deg,var(--s2),var(--s1));border:1px solid var(--b1);border-radius:6px;overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,0.2)}
+.mb{padding:5px 14px;font-family:var(--fn);font-size:9px;font-weight:600;letter-spacing:1.5px;border:none;cursor:pointer;color:var(--t2);background:transparent;transition:all .2s ease}
+.mb.on{background:linear-gradient(135deg,#00e87a,#00c463);color:#04110a;box-shadow:0 2px 12px rgba(0,232,122,0.3)}
 .tbdate-wrap{display:flex;align-items:center;gap:7px;padding:3px 8px;border:1px solid var(--b1);border-radius:5px;background:linear-gradient(180deg,var(--s2),var(--s1))}
 .tbdate-label{font-size:9px;color:var(--bl);letter-spacing:1.2px;font-weight:700;text-transform:uppercase}
 #tb-date{background:var(--s3);border:1px solid var(--bl-b);color:var(--t0);font-family:var(--fn);font-size:10px;font-weight:600;padding:4px 8px;border-radius:4px;outline:none;cursor:pointer;width:124px;box-shadow:inset 0 0 0 1px rgba(56,190,255,.05)}
@@ -458,11 +458,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .kzbar-active .kzd,.kzbar-active .kzt,.kzbar-active .kzr,.kzbar-active .kze{opacity:.3}
 .kzbar .kz.zone-now{opacity:1!important;box-shadow:inset 0 0 0 2px currentColor}
 .kz2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.zcard{padding:9px 11px;border-radius:5px;border:1px solid}
-.zcard.go{border-color:var(--go-b);background:var(--go-d)}
-.zcard.st{border-color:var(--st-b);background:var(--st-d)}
-.zcard.am{border-color:var(--am-b);background:var(--am-d)}
-.zcard.dm{border-color:var(--b1);background:var(--s3)}
+.zcard{padding:9px 11px;border-radius:8px;border:1px solid;transition:all .25s ease}
+.zcard.go{border-color:rgba(0,232,122,0.5);background:linear-gradient(135deg,rgba(0,232,122,0.12),rgba(0,232,122,0.04));box-shadow:0 2px 12px rgba(0,232,122,0.1)}
+.zcard.st{border-color:rgba(255,51,85,0.5);background:linear-gradient(135deg,rgba(255,51,85,0.12),rgba(255,51,85,0.04));box-shadow:0 2px 12px rgba(255,51,85,0.1)}
+.zcard.am{border-color:rgba(255,170,0,0.5);background:linear-gradient(135deg,rgba(255,170,0,0.12),rgba(255,170,0,0.04));box-shadow:0 2px 12px rgba(255,170,0,0.1)}
+.zcard.dm{border-color:var(--b1);background:linear-gradient(180deg,var(--s3),var(--s2))}
 .zt{font-size:9px;font-weight:700;margin-bottom:3px;letter-spacing:.3px}
 .zcard.go .zt{color:var(--go)}.zcard.st .zt{color:var(--st)}
 .zcard.am .zt{color:var(--am)}.zcard.dm .zt{color:var(--t2)}
@@ -582,9 +582,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .gck{padding:3px 7px;border-radius:2px;font-size:8px;font-weight:600;background:var(--s2);border:1px solid var(--b1);cursor:pointer;color:var(--t2);font-family:var(--fn);transition:all .14s;user-select:none}
 .gck.on{background:var(--go-d);border-color:var(--go-b);color:var(--go)}
 .jbtns{display:flex;gap:6px;margin-top:2px}
-.btn{padding:5px 14px;border-radius:3px;cursor:pointer;font-family:var(--fn);font-size:10px;font-weight:600;border:none;transition:all .15s}
-.btn-g{background:var(--go);color:#000}.btn-g:hover{opacity:.85}
-.btn-d{background:transparent;color:var(--t2);border:1px solid var(--b1)}.btn-d:hover{color:var(--t0)}
+.btn{padding:5px 14px;border-radius:6px;cursor:pointer;font-family:var(--fn);font-size:10px;font-weight:600;border:none;transition:all .2s ease;box-shadow:0 2px 8px rgba(0,0,0,0.2)}
+.btn-g{background:linear-gradient(135deg,#00e87a,#00c463);color:#04110a}.btn-g:hover{box-shadow:0 4px 16px rgba(0,232,122,0.35);transform:translateY(-1px)}
+.btn-d{background:linear-gradient(180deg,var(--s3),var(--s2));color:var(--t2);border:1px solid var(--b1)}.btn-d:hover{color:var(--t0);border-color:var(--t2)}
 .jlog{display:flex;flex-direction:column;gap:4px;overflow-y:auto}
 .je{padding:7px 9px;border-radius:3px;background:var(--s2);border:1px solid var(--b1)}
 .jer1{display:flex;align-items:center;gap:7px;margin-bottom:3px}
@@ -703,18 +703,18 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .ahdrow{display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0;gap:12px}
 .atitle{font-family:var(--fh);font-size:15px;font-weight:800;color:var(--t0);margin-bottom:3px;letter-spacing:.4px}
 .asub{font-size:10px;color:var(--t1);line-height:1.45}
-.acard{background:var(--s3);border:1px solid var(--b1);border-radius:4px;padding:10px}
+.acard{background:linear-gradient(180deg,var(--s3),var(--s2));border:1px solid var(--b1);border-radius:8px;padding:12px;box-shadow:0 4px 16px rgba(0,0,0,0.2)}
 .acardt{font-size:9px;color:var(--bl);letter-spacing:1.2px;font-weight:700;margin-bottom:7px;text-transform:uppercase}
 .atbl{width:100%;border-collapse:collapse;font-size:10px}
-.atbl th{padding:6px 12px;text-align:right;color:var(--t2);font-weight:600;letter-spacing:.5px;border-bottom:1px solid var(--b1);background:var(--s3);position:sticky;top:0}
+.atbl th{padding:8px 12px;text-align:right;color:var(--t2);font-weight:600;letter-spacing:.5px;border-bottom:1px solid var(--b1);background:linear-gradient(180deg,var(--s3),var(--s2));position:sticky;top:0}
 .atbl th:first-child,.atbl td:first-child{text-align:left}
-.atbl td{padding:7px 12px;text-align:right;border-bottom:1px solid rgba(37,56,86,.4)}
+.atbl td{padding:8px 12px;text-align:right;border-bottom:1px solid rgba(37,56,86,.4)}
 .atbl tr:hover td{background:var(--s3)}
-.atbl tr.sbuy td{background:rgba(0,232,122,.04)!important}
-.atbl tr.ssell td{background:rgba(255,51,85,.04)!important}
-.atbl tr.soi td{background:rgba(255,170,0,.04)!important}
-.strpill{display:inline-flex;align-items:center;justify-content:center;width:50px;height:14px;border-radius:2px;font-size:8px;font-weight:700}
-.strhi{background:var(--go);color:#000}.strmd{background:var(--am-d);color:var(--am);border:1px solid var(--am-b)}.strlo{background:var(--st-d);color:var(--st);border:1px solid var(--st-b)}
+.atbl tr.sbuy td{background:linear-gradient(90deg,rgba(0,232,122,.08),transparent)!important}
+.atbl tr.ssell td{background:linear-gradient(90deg,rgba(255,51,85,.08),transparent)!important}
+.atbl tr.soi td{background:linear-gradient(90deg,rgba(255,170,0,.08),transparent)!important}
+.strpill{display:inline-flex;align-items:center;justify-content:center;width:50px;height:14px;border-radius:4px;font-size:8px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,0.2)}
+.strhi{background:linear-gradient(135deg,#00e87a,#00c463);color:#000}.strmd{background:linear-gradient(180deg,rgba(255,170,0,0.15),rgba(255,170,0,0.05));color:var(--am);border:1px solid rgba(255,170,0,0.4)}.strlo{background:linear-gradient(180deg,rgba(255,51,85,0.15),rgba(255,51,85,0.05));color:var(--st);border:1px solid rgba(255,51,85,0.4)}
 .afoot{display:flex;gap:16px;border-top:1px solid var(--b1);padding:6px 0;flex-shrink:0}
 .afk{font-size:8px;color:var(--t2);letter-spacing:.5px}
 .afv{font-size:9px;font-weight:600}
@@ -917,9 +917,16 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 <div id="tb">
   <div class="tbl">
     <div class="logo">
-      <!-- STOCKR.IN - Arrow Up -->
-      <svg class="logo-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path class="arrow" d="M10 2 L10 18 M10 2 L6 6 M10 2 L14 6" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <!-- STOCKR.IN - Modern Pulse Arrow -->
+      <svg class="logo-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#00ff88"/>
+            <stop offset="100%" style="stop-color:#00cc6a"/>
+          </linearGradient>
+        </defs>
+        <circle cx="12" cy="12" r="10" stroke="url(#logoGrad)" stroke-width="2" fill="none" opacity="0.3"/>
+        <path d="M8 12h8M12 8v8M9 10l3-4 3 4" stroke="url(#logoGrad)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
       </svg>
       <div class="logo-text">
         <div class="logo-name">STOCKR.IN</div>
@@ -1471,7 +1478,18 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
         <input type="date" id="srbt-to" class="jfi" style="font-size:8px;padding:3px 6px;background:var(--s2);border:1px solid var(--b1);color:var(--t0);border-radius:3px">
         <button onclick="srBtRun()" style="padding:4px 12px;font-family:var(--fn);font-size:8px;font-weight:700;letter-spacing:1px;border:1px solid var(--bl);color:var(--bl);background:var(--bl-d);border-radius:3px;cursor:pointer">▶ RUN</button>
         <span id="srbt-status" style="font-size:7.5px;color:var(--t2)"></span>
-        <span style="margin-left:auto;font-size:7px;color:var(--t3)">Max 30 days · 1-min candles</span>
+        <span style="margin-left:auto;font-size:7px;color:var(--t3)">Max 30 days/run</span>
+      </div>
+      <!-- Quick date presets -->
+      <div style="display:flex;align-items:center;gap:4px;padding:3px 10px;background:var(--s2);border-bottom:1px solid var(--b1);flex-shrink:0">
+        <span style="font-size:7px;color:var(--t2)">Quick:</span>
+        <button class="btpre" onclick="srbtSetRange(7)" style="padding:2px 6px;font-size:7px">7D</button>
+        <button class="btpre" onclick="srbtSetRange(14)" style="padding:2px 6px;font-size:7px">14D</button>
+        <button class="btpre" onclick="srbtSetRange(30)" style="padding:2px 6px;font-size:7px">30D</button>
+        <button class="btpre" onclick="srbtSetRange(60)" style="padding:2px 6px;font-size:7px">60D</button>
+        <button class="btpre" onclick="srbtSetRange(90)" style="padding:2px 6px;font-size:7px">90D</button>
+        <button class="btpre" onclick="srbtSetRange(180)" style="padding:2px 6px;font-size:7px">180D</button>
+        <span style="font-size:6.5px;color:var(--t3);margin-left:4px">(runs in 30-day chunks)</span>
       </div>
       <!-- Controls row 2: filter params -->
       <div style="display:flex;align-items:center;gap:10px;padding:5px 10px;border-bottom:1px solid var(--b1);flex-shrink:0;flex-wrap:wrap;background:var(--s2)">
@@ -1598,6 +1616,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
         <span style="font-size:7.5px;color:var(--t2);letter-spacing:1px">TO</span>
         <input type="date" id="ir-hist-to" class="jfi" style="font-size:8px;padding:3px 6px;background:var(--s2);border:1px solid var(--b1);color:var(--t0);border-radius:3px">
         <button onclick="irLoadHistory()" style="padding:3px 14px;font-family:var(--fn);font-size:8px;font-weight:700;letter-spacing:1px;border:1px solid var(--bl);color:var(--bl);background:rgba(0,140,255,.08);border-radius:3px;cursor:pointer">▶ LOAD</button>
+        <button onclick="irRunBacktest()" id="ir-bt-btn" style="padding:3px 12px;font-family:var(--fn);font-size:8px;font-weight:700;letter-spacing:.5px;border:1px solid #f0a500;color:#f0a500;background:rgba(240,165,0,.08);border-radius:3px;cursor:pointer">⚡ BACKTEST</button>
         <div id="ir-hist-stats" style="font-size:8px;color:var(--t2);margin-left:4px"></div>
       </div>
       <div style="overflow-y:auto;flex:1;min-height:0" id="ir-hist-list">
@@ -4002,6 +4021,7 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
     fetch(`/api/index-signals/history?from_date=${from}&to_date=${to}`)
       .then(r => r.json())
       .then(data => {
+        if(data.error) { if(hl) hl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--st);font-size:9px">Error: '+data.error+'</div>'; return; }
         const sigs = data.signals || [];
         const statsEl = document.getElementById('ir-hist-stats');
         const np = data.net_pnl || 0;
@@ -4058,6 +4078,43 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
       .catch(() => { if(hl) hl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--st);font-size:9px">Failed to load history</div>'; });
   }
   window.irLoadHistory = irLoadHistory;
+
+  function irRunBacktest() {
+    const today = new Date().toISOString().slice(0,10);
+    const fromEl = document.getElementById('ir-hist-from');
+    const toEl   = document.getElementById('ir-hist-to');
+    if(fromEl && !fromEl.value) fromEl.value = today;
+    if(toEl   && !toEl.value)   toEl.value   = today;
+    const from = fromEl?.value || today;
+    const to   = toEl?.value   || today;
+
+    const btn = document.getElementById('ir-bt-btn');
+    if(btn) { btn.textContent = '⏳ Running...'; btn.disabled = true; }
+    const hl = document.getElementById('ir-hist-list');
+    if(hl) hl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t2);font-size:9px;line-height:2">⚡ Running backtest on Kite historical data...<br><span style="font-size:8px;color:var(--t3)">Fetching NIFTY & BANKNIFTY 1-min candles · Applying strategy filters</span></div>';
+
+    fetch('/api/index-signals/backtest', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({from_date: from, to_date: to})
+    })
+    .then(r => r.json())
+    .then(data => {
+      if(btn) { btn.textContent = '⚡ BACKTEST'; btn.disabled = false; }
+      if(data.error) {
+        if(hl) hl.innerHTML = `<div style="text-align:center;padding:30px;color:var(--st);font-size:9px">Error: ${data.error}</div>`;
+        return;
+      }
+      const statsEl = document.getElementById('ir-hist-stats');
+      if(statsEl) statsEl.innerHTML = `Backtest done: <span style="color:var(--go)">${data.wins} T1</span> · <span style="color:var(--st)">${data.losses} SL</span> · <span style="color:${data.win_rate>=55?'var(--go)':data.win_rate>=40?'var(--am)':'var(--st)'}">${data.win_rate}% WR</span> · ${data.inserted} signals inserted`;
+      irLoadHistory();  // auto-load table with new data
+    })
+    .catch(e => {
+      if(btn) { btn.textContent = '⚡ BACKTEST'; btn.disabled = false; }
+      if(hl) hl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--st);font-size:9px">Backtest failed</div>';
+    });
+  }
+  window.irRunBacktest = irRunBacktest;
 
   function irFilter(f, btn) {
     _filter = f;
@@ -6851,10 +6908,140 @@ function srSubTab(tab) {
   }
 }
 
+function srbtSetRange(days) {
+  const to = _lastTradingDay();
+  const from = _nTradingDaysAgo(days);
+  document.getElementById('srbt-from').value = from;
+  document.getElementById('srbt-to').value = to;
+  srBtRun();
+}
+
+function srBtRenderTable(results) {
+  if(!results || !results.length) {
+    document.getElementById('srbt-empty').innerHTML = '<div style="text-align:center;padding:20px;color:var(--t2)">No spikes found</div>';
+    return;
+  }
+  const rows = results.slice(0, 200).map(r => {
+    const oc = r.outcome === 'HIT_T1' ? 'var(--go)' : r.outcome === 'HIT_T2' ? 'var(--bl)' : r.outcome === 'HIT_SL' ? 'var(--st)' : 'var(--am)';
+    const ot = r.outcome === 'HIT_T1' ? '✓ T1' : r.outcome === 'HIT_T2' ? '✓ T2' : r.outcome === 'HIT_SL' ? '✗ SL' : '— EXP';
+    const pc = r.pnl_pct >= 0 ? 'var(--go)' : 'var(--st)';
+    return `<tr>
+      <td style="font-weight:600;color:var(--t0)">${r.symbol}</td>
+      <td style="font-size:8px;color:var(--t2)">${r.time}</td>
+      <td style="color:${r.type==='CE'?'var(--go)':'var(--st)'};font-weight:700">${r.type}</td>
+      <td style="font-family:var(--fn);font-size:9px">${r.vol_x}</td>
+      <td style="font-family:var(--fn);font-size:9px;color:${r.chg_pct>=0?'var(--go)':'var(--st)'}">${r.chg_pct}%</td>
+      <td style="font-family:var(--fn);font-size:9px">${r.entry}</td>
+      <td style="color:var(--st);font-family:var(--fn);font-size:9px">${r.sl}</td>
+      <td style="color:var(--bl);font-family:var(--fn);font-size:9px">${r.t1}</td>
+      <td style="color:var(--go);font-family:var(--fn);font-size:9px">${r.t2}</td>
+      <td style="color:${oc};font-size:8px;font-weight:600">${ot}</td>
+      <td style="color:${pc};font-weight:700;font-size:10px">${r.pnl_pct >= 0 ? '+' : ''}${r.pnl_pct}%</td>
+      <td style="color:${r.score>=60?'var(--go)':r.score>=45?'var(--am)':'var(--st)'};font-weight:700">${r.score||'—'}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('srbt-tbody').innerHTML = rows;
+  document.getElementById('srbt-tbl').style.display = 'table';
+  document.getElementById('srbt-empty').style.display = 'none';
+}
+
+async function srBtRunChunks(from, to) {
+  const status = document.getElementById('srbt-status');
+  status.textContent = `Running ${from} → ${to} in 30-day chunks…`;
+  status.style.color = 'var(--am)';
+  document.getElementById('srbt-empty').style.display = 'block';
+  document.getElementById('srbt-empty').innerHTML = `<div style="font-size:14px;opacity:.4;margin-bottom:8px">⏳</div>Running in chunks…`;
+  document.getElementById('srbt-tbl').style.display = 'none';
+  
+  const volMin = parseFloat(document.getElementById('srbt-volmin')?.value) || 1.5;
+  const priceMin = parseFloat(document.getElementById('srbt-pricemin')?.value) || 0.2;
+  const tfrom = document.getElementById('srbt-tfrom')?.value || '09:30';
+  const tto = document.getElementById('srbt-tto')?.value || '14:00';
+  const trendF = document.getElementById('srbt-trend')?.checked !== false;
+  const minScore = parseInt(document.getElementById('srbt-minscore')?.value) || 45;
+  
+  let currFrom = new Date(from);
+  const endDate = new Date(to);
+  let allResults = [];
+  let chunk = 1;
+  
+  while(currFrom < endDate) {
+    const currTo = new Date(currFrom);
+    currTo.setDate(currTo.getDate() + 29); // 30 days max
+    if(currTo > endDate) currTo = endDate;
+    
+    const fStr = currFrom.toISOString().slice(0, 10);
+    const tStr = currTo.toISOString().slice(0, 10);
+    status.textContent = `Chunk ${chunk}: ${fStr} → ${tStr}…`;
+    
+    try {
+      const url = `${API}/api/spikes/backtest?from_date=${fStr}&to_date=${tStr}`
+        + `&vol_min=${volMin}&price_min=${priceMin}`
+        + `&time_from=${encodeURIComponent(tfrom)}&time_to=${encodeURIComponent(tto)}`
+        + `&trend_filter=${trendF}&min_score=${minScore}`;
+      const r = await fetch(url);
+      const d = await r.json();
+      if(d.results) {
+        // Map backend field names to frontend
+        const mapped = d.results.map(x => ({
+          symbol: x.symbol, time: x.time, type: x.type,
+          vol_x: x.vol_mult, chg_pct: x.chg_pct,
+          entry: x.entry, sl: x.sl, t1: x.t1, t2: x.t2,
+          result: x.result, pnl_pct: x.pnl_pct, score: x.score,
+          outcome: x.result === 'Target 1 hit' ? 'HIT_T1' : x.result === 'Target 2 hit' ? 'HIT_T2' : x.result === 'SL hit' ? 'HIT_SL' : 'EXPIRED'
+        }));
+        allResults = allResults.concat(mapped);
+      }
+    } catch(e) { console.error('Chunk error:', e); }
+    
+    currFrom.setDate(currFrom.getDate() + 30);
+    chunk++;
+    await new Promise(r => setTimeout(r, 500)); // Rate limit
+  }
+  
+  // Aggregate results
+  const summary = { total: 0, hit_t1: 0, hit_t2: 0, hit_sl: 0, expired: 0 };
+  allResults.forEach(r => {
+    summary.total++;
+    if(r.outcome === 'HIT_T1') summary.hit_t1++;
+    else if(r.outcome === 'HIT_T2') summary.hit_t2++;
+    else if(r.outcome === 'HIT_SL') summary.hit_sl++;
+    else summary.expired++;
+  });
+  summary.win_rate = summary.total ? Math.round((summary.hit_t1 + summary.hit_t2) / summary.total * 100) : 0;
+  
+  document.getElementById('srbt-total').textContent = summary.total;
+  document.getElementById('srbt-wr').textContent = summary.win_rate + '%';
+  document.getElementById('srbt-t1').textContent = summary.hit_t1;
+  document.getElementById('srbt-t2').textContent = summary.hit_t2;
+  document.getElementById('srbt-sl').textContent = summary.hit_sl;
+  document.getElementById('srbt-exp').textContent = summary.expired;
+  
+  status.textContent = `Done: ${summary.total} signals · WR ${summary.win_rate}%`;
+  status.style.color = 'var(--go)';
+  document.getElementById('srbt-empty').style.display = 'none';
+  document.getElementById('srbt-tbl').style.display = 'block';
+  
+  // Store results for table display
+  window._srbtChunkResults = allResults;
+  srBtRenderTable(allResults);
+}
+
 async function srBtRun(retryCount = 0) {
   const from = document.getElementById('srbt-from').value;
   const to   = document.getElementById('srbt-to').value;
   if(!from || !to) { alert('Select date range'); return; }
+  
+  const fd = new Date(from);
+  const td = new Date(to);
+  const days = Math.ceil((td - fd) / (1000*60*60*24));
+  
+  // If range > 30 days, run in chunks
+  if(days > 30) {
+    await srBtRunChunks(from, to);
+    return;
+  }
+  
   const status = document.getElementById('srbt-status');
   status.textContent = `Loading ${from === to ? from : from + ' → ' + to}…`;
   status.style.color = 'var(--am)';

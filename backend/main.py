@@ -517,6 +517,176 @@ async def index_signals_history(
         return JSONResponse({"signals": [], "error": str(e)})
 
 
+@app.post("/api/index-signals/backtest")
+async def index_signals_backtest(request: Request):
+    """
+    Run Index Radar strategy on Kite 1-min historical data and populate DB.
+    Strategy: NIFTY/BANKNIFTY moves ≥0.20% in 5-min + 1-min momentum confirm + 30-min trend filter.
+    Outcome: T1 = index +0.25% in signal direction within 45 min; SL = index −0.25%.
+    Option entry estimated as 0.7% of index price (OTM ±1 strike).
+    """
+    import sqlite3 as _sq, datetime as _dt, time as _t
+    body = await request.json()
+    from_date = body.get("from_date", (_dt.date.today() - _dt.timedelta(days=30)).isoformat())
+    to_date   = body.get("to_date",   _dt.date.today().isoformat())
+
+    try:
+        from feed import get_kite
+        kite = get_kite()
+        if not kite:
+            return JSONResponse({"error": "Kite not available"}, status_code=503)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=503)
+
+    NIFTY_TOK = 256265
+    BN_TOK    = 260105
+    CONFIGS = [
+        ("NIFTY",     NIFTY_TOK, 25,  50),
+        ("BANKNIFTY", BN_TOK,    15, 100),
+    ]
+
+    db_path = os.path.join(os.path.dirname(__file__), "data", "backtest.db")
+    conn = _sq.connect(db_path)
+
+    total_inserted = 0
+    results = []
+
+    for sym, tok, lot_sz, step in CONFIGS:
+        try:
+            candles = kite.historical_data(tok, from_date, to_date, "minute")
+        except Exception as e:
+            continue
+        if not candles:
+            continue
+
+        # Group by date
+        from collections import defaultdict
+        by_date = defaultdict(list)
+        for c in candles:
+            d = c["date"].date().isoformat()
+            by_date[d].append(c)
+
+        for day, day_c in sorted(by_date.items()):
+            # Filter market hours 9:15–14:00
+            mkt = [c for c in day_c if 555 <= c["date"].hour*60+c["date"].minute <= 840]
+            if len(mkt) < 15:
+                continue
+
+            prices = [c["close"] for c in mkt]
+            last_sig_min = {}  # (sym, type): minute
+
+            for i, c in enumerate(mkt):
+                cm = c["date"].hour*60 + c["date"].minute
+                px = c["close"]
+
+                # ── 5-min momentum ────────────────────────
+                five_ago_idx = max(0, i - 10)  # ~10 candles = 10 min, but find closest to 5min
+                target_cm = cm - 5
+                five_ago_i = next((j for j in range(i-1, -1, -1)
+                                   if mkt[j]["date"].hour*60+mkt[j]["date"].minute <= target_cm), None)
+                if five_ago_i is None:
+                    continue
+                old_px = mkt[five_ago_i]["close"]
+                if not old_px:
+                    continue
+                chg = (px - old_px) / old_px * 100
+                if abs(chg) < 0.20:
+                    continue
+                is_ce = chg > 0
+
+                # ── 1-min confirmation ────────────────────
+                if i >= 1:
+                    one_chg = (px - mkt[i-1]["close"]) / mkt[i-1]["close"] * 100
+                    if is_ce and one_chg <= 0:
+                        continue
+                    if not is_ce and one_chg >= 0:
+                        continue
+
+                # ── 30-min trend filter ───────────────────
+                thirty_ago_cm = cm - 30
+                thirty_i = next((j for j in range(i-1, -1, -1)
+                                 if mkt[j]["date"].hour*60+mkt[j]["date"].minute <= thirty_ago_cm), None)
+                if thirty_i is not None:
+                    trend_chg = (px - mkt[thirty_i]["close"]) / mkt[thirty_i]["close"] * 100
+                    if is_ce and trend_chg < -0.3:
+                        continue
+                    if not is_ce and trend_chg > 0.3:
+                        continue
+
+                # ── 15-min dedup ──────────────────────────
+                sig_type = "CE" if is_ce else "PE"
+                key = sig_type
+                if key in last_sig_min and cm - last_sig_min[key] < 15:
+                    continue
+                last_sig_min[key] = cm
+
+                # ── Entry / SL / T1 (option premium estimate) ─
+                atm   = round(px / step) * step
+                strike = atm + step if is_ce else atm - step
+                entry  = round(px * 0.007, 1)   # ~0.7% OTM estimate
+                if entry < 20:
+                    entry = 20.0
+                sl  = round(entry * 0.70, 2)
+                t1  = round(entry * 1.50, 2)
+                t2  = round(entry * 2.00, 2)
+                rr  = round((t1 - entry) / max(entry - sl, 0.01), 1)
+
+                # ── Outcome: watch next 45 candles ────────
+                outcome = None
+                entry_idx_px = px
+                for j in range(i+1, min(i+46, len(mkt))):
+                    fc = mkt[j]
+                    fmv = (fc["close"] - entry_idx_px) / entry_idx_px * 100
+                    if (is_ce and fmv >= 0.25) or (not is_ce and fmv <= -0.25):
+                        outcome = "HIT_T1"; break
+                    if (is_ce and fmv <= -0.25) or (not is_ce and fmv >= 0.25):
+                        outcome = "HIT_SL"; break
+                if outcome is None:
+                    outcome = "EXPIRED"
+
+                sig_id  = f"{sym}_{day.replace('-','')}_{c['date'].strftime('%H%M')}_{sig_type}"
+                sig_time = c["date"].strftime("%H:%M")
+                lot_pnl = round((t1 - entry) * lot_sz)
+                now_ts  = _t.time()
+
+                try:
+                    conn.execute("""
+                        INSERT OR REPLACE INTO index_signal_history
+                          (sig_id, trade_date, symbol, type, signal_time, ts,
+                           index_px, strike, entry, sl, t1, t2, rr, lot_sz, lot_pnl_t1,
+                           chg_pct, strength, vix, outcome, created_ts, updated_ts)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, (
+                        sig_id, day, sym, sig_type, sig_time, c["date"].timestamp(),
+                        round(px, 2), strike, entry, sl, t1, t2, rr, lot_sz, lot_pnl,
+                        round(chg, 2), "hi" if abs(chg) >= 0.4 else "md",
+                        0.0, outcome, now_ts, now_ts
+                    ))
+                    total_inserted += 1
+                    results.append({"sig_id": sig_id, "date": day, "symbol": sym,
+                                    "type": sig_type, "time": sig_time,
+                                    "chg": round(chg,2), "outcome": outcome})
+                except Exception:
+                    pass
+
+        conn.commit()
+
+    conn.close()
+
+    resolved = [r for r in results if r["outcome"] in ("HIT_T1","HIT_SL")]
+    wins = sum(1 for r in resolved if r["outcome"] == "HIT_T1")
+    wr = round(wins/len(resolved)*100) if resolved else 0
+    return JSONResponse({
+        "inserted": total_inserted,
+        "total": len(results),
+        "wins": wins,
+        "losses": len(resolved)-wins,
+        "win_rate": wr,
+        "from": from_date,
+        "to": to_date,
+    })
+
+
 @app.get("/api/state")
 async def get_state():
     return JSONResponse({
