@@ -3916,18 +3916,23 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
 
   function irView(v, btn) {
     _view = v;
-    document.querySelectorAll('#tp-idxradar .sfbar:first-child .sf').forEach(b => b.classList.remove('on'));
-    if(btn) btn.classList.add('on');
-    const liveList   = document.getElementById('ir-list');
-    const histPanel  = document.getElementById('ir-hist-panel');
-    const filterBar  = document.getElementById('ir-filterbar');
+    // Toggle TODAY/HISTORY buttons by ID
+    const btnLive = document.getElementById('irv-live');
+    const btnHist = document.getElementById('irv-hist');
+    if(btnLive) btnLive.classList.toggle('on', v === 'live');
+    if(btnHist) btnHist.classList.toggle('on', v === 'history');
+
+    const liveList  = document.getElementById('ir-list');
+    const histPanel = document.getElementById('ir-hist-panel');
+    const filterBar = document.getElementById('ir-filterbar');
+
     if(v === 'history') {
-      if(liveList)  liveList.style.display = 'none';
-      if(histPanel){ histPanel.style.display = 'flex'; }
+      if(liveList)  liveList.style.display  = 'none';
+      if(histPanel) histPanel.style.display = 'flex';
       if(filterBar) filterBar.style.display = 'none';
       irLoadHistory();
     } else {
-      if(liveList)  liveList.style.display = '';
+      if(liveList)  liveList.style.display  = 'flex';
       if(histPanel) histPanel.style.display = 'none';
       if(filterBar) filterBar.style.display = '';
     }
