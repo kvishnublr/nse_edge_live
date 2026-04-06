@@ -1591,16 +1591,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
     <!-- History panel (hidden by default) -->
     <div style="display:none;flex-direction:column;flex:1;min-height:0" id="ir-hist-panel">
-      <div style="padding:8px 12px;border-bottom:1px solid var(--b1);display:flex;gap:12px;align-items:center;flex-shrink:0">
-        <span style="font-size:8px;color:var(--t2)">Last</span>
-        <select id="ir-hist-days" onchange="irLoadHistory()" style="background:var(--s2);color:var(--t0);border:1px solid var(--b1);border-radius:4px;padding:2px 6px;font-size:9px">
-          <option value="1">1 day</option>
-          <option value="3">3 days</option>
-          <option value="7" selected>7 days</option>
-          <option value="30">30 days</option>
-        </select>
+      <div style="padding:7px 12px;border-bottom:1px solid var(--b1);display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap">
+        <span style="font-size:7.5px;color:var(--t2);letter-spacing:1px">FROM</span>
+        <input type="date" id="ir-hist-from" class="jfi" style="font-size:8px;padding:3px 6px;background:var(--s2);border:1px solid var(--b1);color:var(--t0);border-radius:3px"
+          oninput="const t=document.getElementById('ir-hist-to'); if(!t.value||t.value<this.value) t.value=this.value;">
+        <span style="font-size:7.5px;color:var(--t2);letter-spacing:1px">TO</span>
+        <input type="date" id="ir-hist-to" class="jfi" style="font-size:8px;padding:3px 6px;background:var(--s2);border:1px solid var(--b1);color:var(--t0);border-radius:3px">
+        <button onclick="irLoadHistory()" style="padding:3px 14px;font-family:var(--fn);font-size:8px;font-weight:700;letter-spacing:1px;border:1px solid var(--bl);color:var(--bl);background:rgba(0,140,255,.08);border-radius:3px;cursor:pointer">▶ LOAD</button>
         <div id="ir-hist-stats" style="font-size:8px;color:var(--t2);margin-left:4px"></div>
-        <button onclick="irLoadHistory()" style="margin-left:auto;background:var(--s2);color:var(--bl);border:1px solid var(--b1);border-radius:4px;padding:3px 10px;font-size:8px;cursor:pointer">Refresh</button>
       </div>
       <div style="overflow-y:auto;flex:1;min-height:0" id="ir-hist-list">
         <div style="text-align:center;padding:30px;color:var(--t2);font-size:9px">Loading history...</div>
@@ -3919,6 +3917,38 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
 })();
 
 // ═══════════════════════════════════════════════
+// INDEX RADAR DESKTOP NOTIFICATION
+// ═══════════════════════════════════════════════
+(function(){
+  // Request permission on first user interaction
+  function _reqNotif() {
+    if('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+    document.removeEventListener('click', _reqNotif);
+  }
+  document.addEventListener('click', _reqNotif);
+
+  window._ixNotify = function(sig) {
+    if(!('Notification' in window)) return;
+    if(Notification.permission !== 'granted') return;
+    const isCE = sig.type === 'CE';
+    const dir = isCE ? '▲ BUY CE' : '▼ BUY PE';
+    const body = `${sig.symbol} ${sig.strike} ${sig.type}  |  Entry ₹${sig.entry}  |  T1 ₹${sig.t1}  SL ₹${sig.sl}\n${Math.abs(sig.chg_pct||0).toFixed(2)}% move  ·  VIX ${(sig.vix||0).toFixed(1)}`;
+    try {
+      const n = new Notification(`📡 INDEX RADAR — ${dir} ${sig.symbol}`, {
+        body,
+        icon: '/favicon.ico',
+        tag:  sig.id,          // prevents duplicate toasts
+        requireInteraction: false,
+        silent: false,
+      });
+      setTimeout(() => n.close(), 12000);  // auto-close after 12s
+    } catch(e) {}
+  };
+})();
+
+// ═══════════════════════════════════════════════
 // INDEX RADAR
 // ═══════════════════════════════════════════════
 (function irLive(){
@@ -3942,7 +3972,12 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
       if(liveList)  liveList.style.display  = 'none';
       if(histPanel) histPanel.style.display = 'flex';
       if(filterBar) filterBar.style.display = 'none';
-      irLoadHistory();
+      // Pre-fill dates to today (don't auto-load — user clicks LOAD)
+      const today = new Date().toISOString().slice(0,10);
+      const fromEl = document.getElementById('ir-hist-from');
+      const toEl   = document.getElementById('ir-hist-to');
+      if(fromEl && !fromEl.value) fromEl.value = today;
+      if(toEl   && !toEl.value)   toEl.value   = today;
     } else {
       if(liveList)  liveList.style.display  = 'flex';
       if(histPanel) histPanel.style.display = 'none';
@@ -3952,15 +3987,26 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
   window.irView = irView;
 
   function irLoadHistory() {
-    const days = document.getElementById('ir-hist-days')?.value || 7;
+    // Set default dates: today for both FROM and TO
+    const today = new Date().toISOString().slice(0,10);
+    const fromEl = document.getElementById('ir-hist-from');
+    const toEl   = document.getElementById('ir-hist-to');
+    if(fromEl && !fromEl.value) fromEl.value = today;
+    if(toEl   && !toEl.value)   toEl.value   = today;
+    const from = fromEl?.value || today;
+    const to   = toEl?.value   || today;
+
     const hl = document.getElementById('ir-hist-list');
     if(hl) hl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2);font-size:9px">Loading...</div>';
-    fetch(`/api/index-signals/history?days=${days}`)
+    fetch(`/api/index-signals/history?from_date=${from}&to_date=${to}`)
       .then(r => r.json())
       .then(data => {
         const sigs = data.signals || [];
         const statsEl = document.getElementById('ir-hist-stats');
-        if(statsEl) statsEl.innerHTML = `<span style="color:var(--go)">${data.wins} HIT T1</span> &nbsp;·&nbsp; <span style="color:var(--st)">${data.losses} HIT SL</span> &nbsp;·&nbsp; <span style="color:${data.win_rate >= 55 ? 'var(--go)' : data.win_rate >= 40 ? 'var(--am)' : 'var(--st)'}">${data.win_rate}% WR</span> &nbsp;·&nbsp; ${data.total} total`;
+        const np = data.net_pnl || 0;
+        const npStr = (np >= 0 ? '+₹' : '−₹') + Math.abs(np).toLocaleString('en-IN');
+        const npCol = np >= 0 ? 'var(--go)' : 'var(--st)';
+        if(statsEl) statsEl.innerHTML = `<span style="color:var(--go)">${data.wins} HIT T1</span> &nbsp;·&nbsp; <span style="color:var(--st)">${data.losses} HIT SL</span> &nbsp;·&nbsp; <span style="color:${data.win_rate >= 55 ? 'var(--go)' : data.win_rate >= 40 ? 'var(--am)' : 'var(--st)'}">${data.win_rate}% WR</span> &nbsp;·&nbsp; Net P&L: <span style="color:${npCol};font-weight:700">${npStr}</span> &nbsp;·&nbsp; ${data.total} signals`;
         if(!hl) return;
         if(!sigs.length) { hl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2);font-size:9px">No history found for this period</div>'; return; }
         const f = n => (n||0) >= 1000 ? Math.round(n).toLocaleString('en-IN') : (n||0).toFixed(0);
@@ -5646,12 +5692,18 @@ function _topActiveStocks(stocks){
       // ── INDEX SPIKE RADAR ─────────────────────────
       case 'index_spikes': {
         if(!d) break;
+        const prevLive = (window._lastIndexSpikes || []).filter(s => !s.outcome).map(s => s.id);
         window._lastIndexSpikes = d;
         if(window._irUpdate) window._irUpdate(d);
-        // Flash tab badge if new live signal
+        // Flash tab badge
         const liveCount = d.filter(s => !s.outcome).length;
         const irTab = document.getElementById('ir-tab');
         if(irTab) irTab.textContent = liveCount > 0 ? `INDEX RADAR 📡 (${liveCount})` : 'INDEX RADAR 📡';
+        // Desktop notification for new signals
+        const newSigs = d.filter(s => !s.outcome && !prevLive.includes(s.id));
+        newSigs.forEach(sig => {
+          _ixNotify(sig);
+        });
         break;
       }
 

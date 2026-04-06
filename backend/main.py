@@ -453,26 +453,43 @@ async def debug_index():
 
 
 @app.get("/api/index-signals/history")
-async def index_signals_history(days: int = 7):
+async def index_signals_history(
+    from_date: str = None, to_date: str = None,
+    days: int = None
+):
     import sqlite3 as _sq
+    from datetime import date, timedelta
     db_path = os.path.join(os.path.dirname(__file__), "data", "backtest.db")
     try:
+        today = date.today().isoformat()
+        # Support both from/to and legacy days param
+        if from_date and to_date:
+            f, t = from_date, to_date
+        elif days:
+            f = (date.today() - timedelta(days=days)).isoformat()
+            t = today
+        else:
+            f = t = today
         conn = _sq.connect(db_path)
         conn.row_factory = _sq.Row
         rows = conn.execute("""
             SELECT * FROM index_signal_history
-            WHERE trade_date >= date('now', ?, 'localtime')
-            ORDER BY ts DESC LIMIT 200
-        """, (f"-{days} days",)).fetchall()
+            WHERE trade_date BETWEEN ? AND ?
+            ORDER BY ts DESC LIMIT 500
+        """, (f, t)).fetchall()
         conn.close()
         data = [dict(r) for r in rows]
-        # Summary stats
         resolved = [r for r in data if r["outcome"] in ("HIT_T1", "HIT_SL")]
         wins = sum(1 for r in resolved if r["outcome"] == "HIT_T1")
+        net_pnl = sum(
+            (r["t1"] - r["entry"]) * r["lot_sz"] if r["outcome"] == "HIT_T1"
+            else -(r["entry"] - r["sl"]) * r["lot_sz"]
+            for r in resolved
+        )
         wr = round(wins / len(resolved) * 100) if resolved else 0
         return JSONResponse({"signals": data, "total": len(data),
                              "wins": wins, "losses": len(resolved)-wins,
-                             "win_rate": wr})
+                             "win_rate": wr, "net_pnl": round(net_pnl)})
     except Exception as e:
         return JSONResponse({"signals": [], "error": str(e)})
 
