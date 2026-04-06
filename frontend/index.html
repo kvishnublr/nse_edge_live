@@ -772,7 +772,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .ir-card.ir-ce::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--go)}
 .ir-card.ir-pe{border-color:rgba(255,51,85,.15);background:rgba(255,51,85,.02)}
 .ir-card.ir-pe::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--st)}
-.ir-card.ir-resolved{opacity:.5;filter:saturate(.6)}
+.ir-card.ir-resolved{opacity:.8;filter:saturate(.7)}
 @keyframes ir-pulse{0%,100%{opacity:.5}50%{opacity:1}}
 .ir-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;padding-left:6px}
 .ir-sym{font-size:11px;font-weight:800;letter-spacing:.5px;color:var(--t0)}
@@ -1553,6 +1553,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       <div class="ir-stat"><span class="ir-stat-val" id="ir-cnt-t1"    style="color:var(--go)">0</span><span class="ir-stat-lbl">HIT T1</span></div>
       <div class="ir-stat"><span class="ir-stat-val" id="ir-cnt-sl"    style="color:var(--st)">0</span><span class="ir-stat-lbl">HIT SL</span></div>
       <div class="ir-stat"><span class="ir-stat-val" id="ir-cnt-wr"    style="color:var(--go)">—</span><span class="ir-stat-lbl">WIN RATE</span></div>
+      <div style="width:1px;background:var(--b1);height:24px;margin:0 4px"></div>
+      <div class="ir-stat"><span class="ir-stat-val" id="ir-cnt-pnl" style="color:var(--t2);font-size:12px">—</span><span class="ir-stat-lbl">NET P&L</span></div>
       <div style="margin-left:auto;font-size:7.5px;color:var(--t2);text-align:right;line-height:1.6">
         CE when index moves ↑0.20% in 5 min + 1-min confirm · PE on down moves<br>
         T1 = +50% · SL = −30% · Trend-filtered · NIFTY lot 25 · BANKNIFTY lot 15
@@ -3974,6 +3976,7 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
             <th style="padding:6px 8px;text-align:right">SL</th>
             <th style="padding:6px 8px;text-align:right">Chg%</th>
             <th style="padding:6px 8px;text-align:right">VIX</th>
+            <th style="padding:6px 8px;text-align:right">P&L (1 lot)</th>
             <th style="padding:6px 8px;text-align:center">Outcome</th>
           </tr></thead>
           <tbody>
@@ -3982,6 +3985,10 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
             const ol = s.outcome === 'HIT_T1' ? '✓ HIT T1' : s.outcome === 'HIT_SL' ? '✗ HIT SL' : s.outcome === 'EXPIRED' ? '— EXP' : '● LIVE';
             const bg = i%2===0 ? 'var(--s1)' : 'var(--bg)';
             const tc = s.type === 'CE' ? 'var(--go)' : 'var(--st)';
+            const lotSz = s.lot_sz || (s.symbol === 'NIFTY' ? 25 : 15);
+            let pnl = 0, pnlStr = '—', pnlCol = 'var(--t2)';
+            if(s.outcome === 'HIT_T1') { pnl = (s.t1 - s.entry)*lotSz; pnlStr = '+₹'+Math.round(pnl).toLocaleString('en-IN'); pnlCol = 'var(--go)'; }
+            else if(s.outcome === 'HIT_SL') { pnl = -(s.entry - s.sl)*lotSz; pnlStr = '−₹'+Math.abs(Math.round(pnl)).toLocaleString('en-IN'); pnlCol = 'var(--st)'; }
             return `<tr style="background:${bg};border-bottom:1px solid var(--b1)">
               <td style="padding:5px 8px;color:var(--t2)">${s.trade_date}</td>
               <td style="padding:5px 8px;font-weight:700">${s.symbol}</td>
@@ -3991,8 +3998,10 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
               <td style="padding:5px 8px;text-align:right">₹${f(s.entry)}</td>
               <td style="padding:5px 8px;text-align:right;color:var(--go)">₹${f(s.t1)}</td>
               <td style="padding:5px 8px;text-align:right;color:var(--st)">₹${f(s.sl)}</td>
-              <td style="padding:5px 8px;text-align:right;color:${s.chg_pct>0?'var(--go)':'var(--st)'}">${s.chg_pct>0?'+':''}${(s.chg_pct||0).toFixed(2)}%</td>
+              <td style="padding:5px 8px;text-align:right;color:${(s.chg_pct||0)>0?'var(--go)':'var(--st)'}">
+                ${(s.chg_pct||0)>0?'+':''}${(s.chg_pct||0).toFixed(2)}%</td>
               <td style="padding:5px 8px;text-align:right;color:var(--t2)">${(s.vix||0).toFixed(1)}</td>
+              <td style="padding:5px 8px;text-align:right;font-weight:700;color:${pnlCol}">${pnlStr}</td>
               <td style="padding:5px 8px;text-align:center;font-weight:700;color:${oc}">${ol}</td>
             </tr>`;
           }).join('')}
@@ -4047,29 +4056,48 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
     }
     if(empty) empty.style.display = 'none';
 
-    const f = n => n >= 1000 ? Math.round(n).toLocaleString('en-IN') : n.toFixed(n < 10 ? 1 : 0);
-    const fc = n => n > 0 ? `<span style="color:var(--go)">+${n.toFixed(2)}%</span>` : `<span style="color:var(--st)">${n.toFixed(2)}%</span>`;
+    const f = n => (n||0) >= 1000 ? Math.round(n).toLocaleString('en-IN') : (n||0).toFixed(1);
 
     list.innerHTML = filtered.map(s => {
       const isCE = s.type === 'CE';
       const oc   = outcomeClass(s.outcome);
       const ol   = outcomeLabel(s.outcome);
       const rr_c = parseFloat(s.rr) >= 1.5 ? 'var(--go)' : 'var(--am)';
-      const sym_icon = s.symbol === 'NIFTY' ? 'N' : 'BN';
+      const lotSz = s.lot_sz || (s.symbol === 'NIFTY' ? 25 : 15);
+
+      // Actual P&L per lot based on outcome
+      let pnlVal, pnlLbl, pnlColor;
+      if(!s.outcome) {
+        // LIVE — show potential T1 profit
+        pnlVal = '+₹' + Math.round((s.t1 - s.entry) * lotSz).toLocaleString('en-IN');
+        pnlLbl = 'potential at T1';
+        pnlColor = 'var(--t2)';
+      } else if(s.outcome === 'HIT_T1' || s.outcome === 'HIT_T2') {
+        pnlVal = '+₹' + Math.round((s.t1 - s.entry) * lotSz).toLocaleString('en-IN');
+        pnlLbl = '1 LOT PROFIT';
+        pnlColor = 'var(--go)';
+      } else if(s.outcome === 'HIT_SL') {
+        pnlVal = '−₹' + Math.round((s.entry - s.sl) * lotSz).toLocaleString('en-IN');
+        pnlLbl = '1 LOT LOSS';
+        pnlColor = 'var(--st)';
+      } else {
+        pnlVal = '₹0'; pnlLbl = 'EXPIRED'; pnlColor = 'var(--t2)';
+      }
+
       return `
       <div class="ir-card ir-${isCE?'ce':'pe'} ${s.outcome?'ir-resolved':'ir-live'}">
         <div class="ir-top">
           <div>
             <div class="ir-dir ${isCE?'ce':'pe'}">${isCE ? '▲ BUY CE' : '▼ BUY PE'} &nbsp;·&nbsp; ${s.symbol}</div>
             <div class="ir-strike">
-              ${s.strike.toLocaleString('en-IN')}
+              ${(s.strike||0).toLocaleString('en-IN')}
               <span class="ir-type">${s.type}</span>
             </div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">
             <span class="ir-outcome ${oc}">${ol}</span>
-            <span class="ir-idx-chg ${s.chg_pct>0?'up':'dn'}">${s.chg_pct>0?'↑':'↓'} ${Math.abs(s.chg_pct).toFixed(2)}% in 5 min</span>
-            <span style="font-size:7.5px;color:var(--t2)">${s.time} &nbsp;·&nbsp; ${s.symbol} @ ${s.index_px?.toLocaleString('en-IN')}</span>
+            <span class="ir-idx-chg ${(s.chg_pct||0)>0?'up':'dn'}">${(s.chg_pct||0)>0?'↑':'↓'} ${Math.abs(s.chg_pct||0).toFixed(2)}% in 5 min</span>
+            <span style="font-size:7.5px;color:var(--t2)">${s.time||s.signal_time} &nbsp;·&nbsp; ${s.symbol} @ ${(s.index_px||0).toLocaleString('en-IN')}</span>
           </div>
         </div>
         <div class="ir-grid">
@@ -4082,11 +4110,11 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
           <div class="ir-reason">
             R:R <span style="color:${rr_c};font-weight:700">${s.rr}:1</span> &nbsp;·&nbsp;
             VIX ${s.vix ? s.vix.toFixed(1) : '—'} &nbsp;·&nbsp;
-            ${s.lot_sz} lot size
+            ${lotSz} lot size
           </div>
           <div class="ir-pnl">
-            <div class="ir-pnl-val">+₹${s.lot_pnl_t1?.toLocaleString('en-IN') || '—'}</div>
-            <div class="ir-pnl-lbl">1 LOT at T1</div>
+            <div class="ir-pnl-val" style="color:${pnlColor}">${pnlVal}</div>
+            <div class="ir-pnl-lbl">${pnlLbl}</div>
           </div>
         </div>
       </div>`;
@@ -4099,12 +4127,33 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
     const sl       = sigs.filter(s => s.outcome === 'HIT_SL').length;
     const resolved = t1 + sl;
     const wr       = resolved ? Math.round(t1/resolved*100) + '%' : '—';
+
+    // Net P&L: sum actual outcomes per lot
+    let netPnl = 0;
+    sigs.forEach(s => {
+      const lotSz = s.lot_sz || (s.symbol === 'NIFTY' ? 25 : 15);
+      if(s.outcome === 'HIT_T1' || s.outcome === 'HIT_T2')
+        netPnl += (s.t1 - s.entry) * lotSz;
+      else if(s.outcome === 'HIT_SL')
+        netPnl -= (s.entry - s.sl) * lotSz;
+    });
+
     const el = id => document.getElementById(id);
     if(el('ir-cnt-total')) el('ir-cnt-total').textContent = sigs.length;
     if(el('ir-cnt-live'))  el('ir-cnt-live').textContent  = live;
     if(el('ir-cnt-t1'))    el('ir-cnt-t1').textContent    = t1;
     if(el('ir-cnt-sl'))    el('ir-cnt-sl').textContent    = sl;
     if(el('ir-cnt-wr'))    el('ir-cnt-wr').textContent    = wr;
+
+    const pnlEl = el('ir-cnt-pnl');
+    if(pnlEl) {
+      if(!resolved) { pnlEl.textContent = '—'; pnlEl.style.color = 'var(--t2)'; }
+      else {
+        pnlEl.textContent = (netPnl >= 0 ? '+₹' : '−₹') + Math.abs(Math.round(netPnl)).toLocaleString('en-IN');
+        pnlEl.style.color = netPnl >= 0 ? 'var(--go)' : 'var(--st)';
+        pnlEl.style.fontSize = '11px';
+      }
+    }
     const wrEl = el('ir-cnt-wr');
     if(wrEl) wrEl.style.color = resolved === 0 ? 'var(--t2)' : t1/resolved >= 0.6 ? 'var(--go)' : t1/resolved >= 0.45 ? 'var(--am)' : 'var(--st)';
   }
