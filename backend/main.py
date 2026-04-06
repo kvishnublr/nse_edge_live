@@ -433,23 +433,48 @@ async def debug_index():
     import time as _t
     hist = sched._cache.get("ix_px_hist", [])
     now_ts = _t.time()
-    three_ago = now_ts - 180
-    old = next((e for e in reversed(hist) if e[0] <= three_ago), None)
+    five_ago = now_ts - 300
+    old = next((e for e in reversed(hist) if e[0] <= five_ago), None)
     if not old and hist:
         old = hist[0]
+    one_ago = now_ts - 60
+    one = next((e for e in reversed(hist) if e[0] <= one_ago), None)
     return JSONResponse({
         "hist_len": len(hist),
         "oldest_age_sec": round(now_ts - hist[0][0]) if hist else None,
-        "newest_age_sec": round(now_ts - hist[-1][0]) if hist else None,
-        "three_min_ago_nifty": old[1] if old else None,
+        "five_min_ago_nifty": old[1] if old else None,
         "current_nifty": hist[-1][1] if hist else None,
-        "chg_pct_nifty": round((hist[-1][1] - old[1]) / old[1] * 100, 3) if (hist and old) else None,
-        "current_bn": hist[-1][2] if hist else None,
-        "chg_pct_bn": round((hist[-1][2] - old[2]) / old[2] * 100, 3) if (hist and old) else None,
-        "threshold": 0.15,
-        "window_sec": 180,
+        "chg_pct_5min_nifty": round((hist[-1][1] - old[1]) / old[1] * 100, 3) if (hist and old) else None,
+        "chg_pct_1min_nifty": round((hist[-1][1] - one[1]) / one[1] * 100, 3) if (hist and one) else None,
+        "threshold": 0.25,
+        "window_sec": 300,
         "index_signals": len(signals.state.get("index_signals", [])),
     })
+
+
+@app.get("/api/index-signals/history")
+async def index_signals_history(days: int = 7):
+    import sqlite3 as _sq
+    db_path = os.path.join(os.path.dirname(__file__), "data", "backtest.db")
+    try:
+        conn = _sq.connect(db_path)
+        conn.row_factory = _sq.Row
+        rows = conn.execute("""
+            SELECT * FROM index_signal_history
+            WHERE trade_date >= date('now', ?, 'localtime')
+            ORDER BY ts DESC LIMIT 200
+        """, (f"-{days} days",)).fetchall()
+        conn.close()
+        data = [dict(r) for r in rows]
+        # Summary stats
+        resolved = [r for r in data if r["outcome"] in ("HIT_T1", "HIT_SL")]
+        wins = sum(1 for r in resolved if r["outcome"] == "HIT_T1")
+        wr = round(wins / len(resolved) * 100) if resolved else 0
+        return JSONResponse({"signals": data, "total": len(data),
+                             "wins": wins, "losses": len(resolved)-wins,
+                             "win_rate": wr})
+    except Exception as e:
+        return JSONResponse({"signals": [], "error": str(e)})
 
 
 @app.get("/api/state")

@@ -4,12 +4,79 @@ All jobs call Kite APIs or read from the Kite price cache.
 """
 
 import logging
+import os
+import sqlite3
 import time
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.events import EVENT_JOB_ERROR
 from config import is_market_open
 from fetcher import IST
+
+_DB_PATH = os.path.join(os.path.dirname(__file__), "data", "backtest.db")
+
+def _ix_db_init():
+    """Ensure index_signal_history table exists."""
+    try:
+        conn = sqlite3.connect(_DB_PATH)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS index_signal_history (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                sig_id      TEXT UNIQUE,
+                trade_date  TEXT,
+                symbol      TEXT,
+                type        TEXT,
+                signal_time TEXT,
+                ts          REAL,
+                index_px    REAL,
+                strike      INTEGER,
+                entry       REAL,
+                sl          REAL,
+                t1          REAL,
+                t2          REAL,
+                rr          REAL,
+                lot_sz      INTEGER,
+                lot_pnl_t1  REAL,
+                chg_pct     REAL,
+                strength    TEXT,
+                vix         REAL,
+                outcome     TEXT,
+                created_ts  REAL,
+                updated_ts  REAL
+            )
+        """)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning(f"ix_db_init: {e}")
+
+def _ix_db_upsert(sig):
+    """Insert or update an index signal in DB."""
+    try:
+        conn = sqlite3.connect(_DB_PATH)
+        conn.execute("""
+            INSERT INTO index_signal_history
+              (sig_id, trade_date, symbol, type, signal_time, ts,
+               index_px, strike, entry, sl, t1, t2, rr, lot_sz, lot_pnl_t1,
+               chg_pct, strength, vix, outcome, created_ts, updated_ts)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(sig_id) DO UPDATE SET
+              outcome=excluded.outcome, updated_ts=excluded.updated_ts
+        """, (
+            sig["id"],
+            datetime.now(IST).strftime("%Y-%m-%d"),
+            sig["symbol"], sig["type"], sig["time"], sig["ts"],
+            sig["index_px"], sig["strike"], sig["entry"],
+            sig["sl"], sig["t1"], sig["t2"], sig["rr"],
+            sig["lot_sz"], sig["lot_pnl_t1"],
+            sig.get("chg_pct", 0), sig.get("strength", "md"),
+            sig.get("vix", 0), sig.get("outcome"),
+            sig["ts"], time.time()
+        ))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning(f"ix_db_upsert: {e}")
 
 logger = logging.getLogger("scheduler")
 
@@ -32,6 +99,7 @@ def set_dependencies(kite_instance, fetcher_mod, signals_mod, broadcast_fn):
     _fetcher = fetcher_mod
     _signals = signals_mod
     _ws      = broadcast_fn
+    _ix_db_init()
 
 
 def set_mode(mode: str):
@@ -137,8 +205,14 @@ def job_chain():
             # Roll over at new day
             if _signals.state.get("index_signals_date") != today_str:
                 existing_ix = new_ix
+                for ns in new_ix:
+                    _ix_db_upsert(ns)
             else:
                 _update_index_outcomes(existing_ix, indices)
+                # Persist outcome updates to DB
+                for sig in existing_ix:
+                    if sig.get("outcome"):
+                        _ix_db_upsert(sig)
                 # Dedup: skip same symbol+type within 15 min
                 def _ixmin(t):
                     try: h,m=t.split(":"); return int(h)*60+int(m)
@@ -152,6 +226,7 @@ def job_chain():
                     )
                     if not already:
                         existing_ix.append(ns)
+                        _ix_db_upsert(ns)
                 existing_ix.sort(key=lambda x: x.get("ts", 0), reverse=True)
                 existing_ix = existing_ix[:25]
             _signals.state["index_signals"]      = existing_ix
@@ -255,30 +330,53 @@ def _detect_index_signals(chain, indices):
     if not nifty_px:
         return []
 
-    # Store in rolling price history
+    # Store in rolling price history (entry every ~30s)
     hist = _cache["ix_px_hist"]
     hist.append((now_ts, nifty_px, bn_px))
     if len(hist) > 120:
         hist.pop(0)
-    if len(hist) < 3:
+    if len(hist) < 5:
         return []
 
     results = []
     for sym, px, lot_sz, px_idx in [("NIFTY", nifty_px, 25, 1), ("BANKNIFTY", bn_px, 15, 2)]:
         if not px:
             continue
-        # Price 3 minutes ago (shorter window = more responsive)
-        three_ago = now_ts - 180
-        old_entry = next((e for e in reversed(hist) if e[0] <= three_ago), None)
+
+        # ── Primary: 5-min momentum ─────────────────────────────────────
+        five_ago = now_ts - 300
+        old_entry = next((e for e in reversed(hist) if e[0] <= five_ago), None)
         if not old_entry:
             old_entry = hist[0]
         old_px = old_entry[px_idx]
         if not old_px:
             continue
         chg = (px - old_px) / old_px * 100
-        if abs(chg) < 0.15:
+        if abs(chg) < 0.25:          # must move ≥0.25% in 5 min
             continue
         is_ce = chg > 0
+
+        # ── Confirmation: last 1-min must also move in signal direction ─
+        one_ago = now_ts - 60
+        one_entry = next((e for e in reversed(hist) if e[0] <= one_ago), None)
+        if one_entry:
+            one_chg = (px - one_entry[px_idx]) / one_entry[px_idx] * 100
+            # 1-min move must be in same direction (momentum still active)
+            if is_ce and one_chg <= 0:
+                continue
+            if not is_ce and one_chg >= 0:
+                continue
+
+        # ── Trend alignment: signal must align with broad 30-min trend ──
+        thirty_ago = now_ts - 1800
+        trend_entry = next((e for e in reversed(hist) if e[0] <= thirty_ago), None)
+        if trend_entry:
+            trend_chg = (px - trend_entry[px_idx]) / trend_entry[px_idx] * 100
+            # Allow only trades WITH the 30-min trend; skip counter-trend
+            if is_ce and trend_chg < -0.3:   # strong 30-min downtrend → skip CE
+                continue
+            if not is_ce and trend_chg > 0.3:  # strong 30-min uptrend → skip PE
+                continue
 
         # Find ATM and real option premium from chain (NIFTY only; BN estimated)
         if sym == "NIFTY" and chain:
@@ -329,6 +427,7 @@ def _detect_index_signals(chain, indices):
             "lot_sz":        lot_sz,
             "lot_pnl_t1":    lot_pnl_t1,
             "strength":      "hi" if abs(chg) >= 0.4 else "md",
+            "chg_window":    "5min",
             "outcome":       None,
             "vix":           float(indices.get("vix", 0) or 0),
         })
