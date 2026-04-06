@@ -186,6 +186,47 @@ GATE = {
     "spike_time_end":     840,    # 2:00 PM
 }
 
+# ─── INDEX RADAR (NIFTY/BANKNIFTY momentum — scheduler._detect_index_signals) ─
+# Goals: fewer false starts, no overnight history bleed, true 5m baseline, no chasing extremes.
+INDEX_RADAR = {
+    "time_start_min":     600,    # 10:00 IST (skip opening noise)
+    "time_end_min":       840,    # 14:00 IST
+    "momentum_sec":       300,    # 5-minute primary window
+    "confirm_sec":        60,     # 1-minute continuation check
+    "trend_sec":          1800,   # 30-minute broader trend alignment
+    "min_hist_span_sec":  270,    # need ≥4.5 min of samples before signalling
+    "min_hist_samples":   6,      # at least N points (30s chain job → ~3 min min)
+    "chg_min_pct":        0.20,   # min |5m move|
+    "chg_max_pct":        0.30,   # max |5m move| (avoid exhaustion spikes)
+    "chg_hi_strength_pct": 0.26,  # strength="hi" when |chg| at upper end of band
+    "trend_against_pct":  0.30,   # skip if 30m trend strongly opposite
+    "pcr_pe_min":         1.40,   # PE only when puts dominate (was 1.4 live)
+    "pe_max_nifty_chg":   0.12,   # PE: Nifty vs prev close must be weak (≤ this %)
+    "pcr_ce_avoid_below": 0.55,   # skip CE when PCR extremely bearish (optional guard)
+    "vix_block_above":    18.0,    # no index radar signals if VIX at panic levels
+    "anti_chase_sec":     180,    # lookback for local high/low
+    "anti_chase_ce_pct":  0.12,   # skip long if px above recent max by more than this
+    "anti_chase_pe_pct":  0.12,   # skip short if px below recent min by more than this
+    "dedup_minutes":      20,     # same symbol + CE/PE
+    "micro_step_min_pct": 0.01,   # last 30s–60s step must favor direction (noise floor)
+    # ── Win-rate / selectivity (0 on *_min / *_pct / floor = feature off) ──
+    "trend_support_min_pct": 0.07,   # CE: 30m trend must be ≥ this; PE: ≤ −this (needs 30m baseline)
+    "pcr_ce_min":         1.05,     # CE only if PCR ≥ this (bullish OI skew); 0 = off
+    "cross_index_against_pct": 0.18, # CE: other index 5m % must be > −this; PE: < +this; 0 = off
+    "quality_floor":      60,       # drop signals with quality below this; 0 = off
+    "vix_soft_skips_md_ce": 16.5,   # if VIX ≥ this, skip CE unless |5m chg| ≥ chg_hi_strength; 0 = off
+    "outcome_index_pct":  0.25,     # underlying % for live HIT_T1 / HIT_SL (backtest matches)
+    # ── High precision (fewer signals). ML needs ≥~50 resolved T1/SL rows in DB first. ──
+    "precision_boost":    False,    # True: tighter chg band, hi-only, stronger trend + quality
+    "precision_hi_only": True,
+    "precision_min_quality": 74,
+    "precision_min_trend_sup": 0.11,
+    "precision_chg_min":  0.23,
+    "precision_chg_max":  0.28,
+    "ml_filter_enabled":  False,   # True: keep signal only if GB model P(win) ≥ threshold
+    "ml_min_win_prob":    0.72,    # fallback if no ix_radar_ml_meta.json from training
+}
+
 # ─── TELEGRAM ALERTS ──────────────────────────────────────────────────────────
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID",   "").strip()

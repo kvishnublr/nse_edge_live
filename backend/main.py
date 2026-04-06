@@ -281,9 +281,27 @@ async def lifespan(app: FastAPI):
         _conn.close()
         if _rows:
             _ix = [dict(r) for r in _rows]
-            # Remap DB column names back to in-memory signal keys
+            import re as _re
             for s in _ix:
-                s.setdefault("time", s.get("signal_time", ""))
+                sid = str(s.get("sig_id") or s.get("id") or "")
+                if sid and not s.get("id"):
+                    s["id"] = sid
+                t = (s.get("signal_time") or s.get("time") or "")
+                t = str(t).strip() if t is not None else ""
+                if not t and s.get("ts"):
+                    try:
+                        t = datetime.datetime.fromtimestamp(
+                            float(s["ts"]), tz=fetcher.IST
+                        ).strftime("%H:%M")
+                    except Exception:
+                        t = ""
+                if not t and sid:
+                    _m = _re.search(r"_(\d{4})_[A-Z]", sid)
+                    if _m:
+                        g = _m.group(1)
+                        t = f"{g[:2]}:{g[2:]}"
+                s["time"] = t
+                s["signal_time"] = t
             signals.state["index_signals"]      = _ix
             signals.state["index_signals_date"] = _today
             logger.info(f"  Restored {len(_ix)} index signals from DB")
@@ -517,15 +535,65 @@ async def index_signals_history(
         return JSONResponse({"signals": [], "error": str(e)})
 
 
+@app.post("/api/index-radar/ml-train")
+async def index_radar_ml_train(request: Request):
+    """
+    Train GradientBoosting filter on index_signal_history (HIT_T1 vs HIT_SL).
+    Body JSON: { "target_precision": 0.80 } — picks proba threshold toward that precision on val split.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    target = float(body.get("target_precision", 0.80))
+    try:
+        import index_radar_ml as _iml
+
+        return JSONResponse(_iml.train_and_save(target_precision=target))
+    except Exception as e:
+        logger.error("ml-train: %s", e, exc_info=True)
+        return JSONResponse(
+            {"ok": False, "error": str(e)},
+            status_code=200,
+        )
+
+
+@app.get("/api/index-radar/ml-status")
+async def index_radar_ml_status():
+    import json as _json
+    import index_radar_ml as _iml
+    meta = {}
+    try:
+        if os.path.isfile(_iml._META_PATH):
+            with open(_iml._META_PATH, encoding="utf-8") as f:
+                meta = _json.load(f)
+    except Exception:
+        pass
+    b = _iml.load_bundle()
+    return JSONResponse({
+        "model_loaded": b is not None,
+        "meta": meta,
+        "model_path": _iml._DEFAULT_MODEL,
+    })
+
+
 @app.post("/api/index-signals/backtest")
 async def index_signals_backtest(request: Request):
     """
-    Run Index Radar strategy on Kite 1-min historical data and populate DB.
-    Strategy: NIFTY/BANKNIFTY moves ≥0.20% in 5-min + 1-min momentum confirm + 30-min trend filter.
-    Outcome: T1 = index +0.25% in signal direction within 45 min; SL = index −0.25%.
-    Option entry estimated as 0.7% of index price (OTM ±1 strike).
+    Run Index Radar on Kite 1-min data; rules match live INDEX_RADAR (see config.py).
+    Outcome: T1 / SL / EXPIRED use outcome_index_pct on the underlying within 45 minutes.
     """
     import sqlite3 as _sq, datetime as _dt, time as _t
+    from collections import defaultdict
+
+    from config import INDEX_RADAR as IR_BT
+    from index_radar_logic import (
+        build_minute_close_map,
+        cm_from_candle,
+        index_radar_quality,
+        passes_index_radar_1m,
+    )
+
     body = await request.json()
     from_date = body.get("from_date", (_dt.date.today() - _dt.timedelta(days=30)).isoformat())
     to_date   = body.get("to_date",   _dt.date.today().isoformat())
@@ -547,137 +615,197 @@ async def index_signals_backtest(request: Request):
 
     db_path = os.path.join(os.path.dirname(__file__), "data", "backtest.db")
     conn = _sq.connect(db_path)
+    try:
+        import index_radar_ml as _irm
+        _irm._ensure_ix_columns()
+    except Exception:
+        pass
+    _ix_dedup_bt = int(IR_BT.get("dedup_minutes", 20))
+    t_win0, t_win1 = int(IR_BT["time_start_min"]), int(IR_BT["time_end_min"])
+
+    # Nifty minute map + prev close — PE filter uses Nifty % vs prev close (same as live)
+    nifty_by_date: dict = defaultdict(list)
+    try:
+        _nh = kite.historical_data(NIFTY_TOK, from_date, to_date, "minute")
+    except Exception:
+        _nh = []
+    for c in _nh or []:
+        nifty_by_date[c["date"].date().isoformat()].append(c)
+    nifty_days = sorted(nifty_by_date.keys())
+    nifty_prev_close: dict = {}
+    nifty_minute: dict = {}
+    for di, d in enumerate(nifty_days):
+        if di > 0:
+            pd = nifty_days[di - 1]
+            nifty_prev_close[d] = float(nifty_by_date[pd][-1]["close"] or 0)
+        nifty_minute[d] = build_minute_close_map(nifty_by_date[d])
+
+    bn_by_date: dict = defaultdict(list)
+    try:
+        _bh = kite.historical_data(BN_TOK, from_date, to_date, "minute")
+    except Exception:
+        _bh = []
+    for c in _bh or []:
+        bn_by_date[c["date"].date().isoformat()].append(c)
+    bn_minute: dict = {d: build_minute_close_map(bn_by_date[d]) for d in bn_by_date}
 
     total_inserted = 0
     results = []
+    _ix_out = float(IR_BT.get("outcome_index_pct", 0.25))
+    filter_stats: dict = defaultdict(int)
 
     for sym, tok, lot_sz, step in CONFIGS:
         try:
             candles = kite.historical_data(tok, from_date, to_date, "minute")
-        except Exception as e:
+        except Exception:
             continue
         if not candles:
             continue
 
-        # Group by date
-        from collections import defaultdict
         by_date = defaultdict(list)
         for c in candles:
             d = c["date"].date().isoformat()
             by_date[d].append(c)
 
         for day, day_c in sorted(by_date.items()):
-            # Filter 3: Start from 10:00 AM only (skip opening whipsaw 9:15-10:00)
-            mkt = [c for c in day_c if 600 <= c["date"].hour*60+c["date"].minute <= 840]
+            mkt = [c for c in day_c if t_win0 <= cm_from_candle(c) <= t_win1]
+            mkt.sort(key=lambda x: x["date"])
             if len(mkt) < 15:
                 continue
 
-            prices = [c["close"] for c in mkt]
-            last_sig_min = {}  # (sym, type): minute
+            vix_row = conn.execute("SELECT vix FROM vix_daily WHERE date=?", (day,)).fetchone()
+            vix_d = float(vix_row[0]) if vix_row and vix_row[0] is not None else 0.0
+            pcr_row = conn.execute("SELECT pcr FROM chain_daily WHERE date=?", (day,)).fetchone()
+            pcr_d = float(pcr_row[0]) if pcr_row and pcr_row[0] else 1.0
+
+            last_sig_min = {}
+            npc_day = nifty_prev_close.get(day) or 0.0
+            nmin_day = nifty_minute.get(day, {})
 
             for i, c in enumerate(mkt):
-                cm = c["date"].hour*60 + c["date"].minute
-                px = c["close"]
-
-                # ── 5-min momentum ────────────────────────
-                five_ago_idx = max(0, i - 10)  # ~10 candles = 10 min, but find closest to 5min
-                target_cm = cm - 5
-                five_ago_i = next((j for j in range(i-1, -1, -1)
-                                   if mkt[j]["date"].hour*60+mkt[j]["date"].minute <= target_cm), None)
-                if five_ago_i is None:
+                cm = cm_from_candle(c)
+                px = float(c.get("close") or 0)
+                if not px:
                     continue
-                old_px = mkt[five_ago_i]["close"]
-                if not old_px:
+
+                filter_stats["bars_scanned"] += 1
+
+                npx = nmin_day.get(cm)
+                if npc_day and npx:
+                    nifty_day_pe = (npx - npc_day) / npc_day * 100
+                else:
+                    nifty_day_pe = None
+
+                cross_o = None
+                if sym == "NIFTY":
+                    bm = bn_minute.get(day, {})
+                    x0, x1 = bm.get(cm - 5), bm.get(cm)
+                    if x0 and x1:
+                        cross_o = (x1 - x0) / x0 * 100
+                else:
+                    xm = nifty_minute.get(day, {})
+                    x0, x1 = xm.get(cm - 5), xm.get(cm)
+                    if x0 and x1:
+                        cross_o = (x1 - x0) / x0 * 100
+
+                ok, chg, is_ce, _why = passes_index_radar_1m(
+                    mkt, i, IR_BT,
+                    vix_eod=vix_d,
+                    pcr_day=pcr_d,
+                    nifty_day_pct_for_pe=nifty_day_pe,
+                    cross_other_5m=cross_o,
+                )
+                if not ok:
+                    filter_stats[f"reject_{_why or 'unknown'}"] += 1
                     continue
-                chg = (px - old_px) / old_px * 100
-                # Filter 2: 0.20–0.30% only — overextended moves (>0.30%) are exhausted
-                if abs(chg) < 0.20 or abs(chg) > 0.30:
-                    continue
-                is_ce = chg > 0
 
-                # ── 1-min confirmation ────────────────────
-                if i >= 1:
-                    one_chg = (px - mkt[i-1]["close"]) / mkt[i-1]["close"] * 100
-                    if is_ce and one_chg <= 0:
-                        continue
-                    if not is_ce and one_chg >= 0:
-                        continue
-
-                # ── 30-min trend filter ───────────────────
-                thirty_ago_cm = cm - 30
-                thirty_i = next((j for j in range(i-1, -1, -1)
-                                 if mkt[j]["date"].hour*60+mkt[j]["date"].minute <= thirty_ago_cm), None)
-                if thirty_i is not None:
-                    trend_chg = (px - mkt[thirty_i]["close"]) / mkt[thirty_i]["close"] * 100
-                    if is_ce and trend_chg < -0.3:
-                        continue
-                    if not is_ce and trend_chg > 0.3:
-                        continue
-
-                # Filter 1: PE requires day to be down AND last 30-min also down
-                # Proxy for PCR > 1.4 (put-heavy bearish sentiment)
-                if not is_ce:
-                    day_open = mkt[0]["close"]
-                    day_chg  = (px - day_open) / day_open * 100
-                    if day_chg > 0:   # Day is net positive → skip PE
-                        continue
-                    # Also require the last 30 min to be down (not just a spike)
-                    if thirty_i is None:
-                        continue   # not enough history → skip PE
-
-                # ── 15-min dedup ──────────────────────────
                 sig_type = "CE" if is_ce else "PE"
-                key = sig_type
-                if key in last_sig_min and cm - last_sig_min[key] < 15:
+                if sig_type in last_sig_min and cm - last_sig_min[sig_type] < _ix_dedup_bt:
+                    filter_stats["reject_dedup"] += 1
                     continue
-                last_sig_min[key] = cm
+                last_sig_min[sig_type] = cm
 
-                # ── Entry / SL / T1 (option premium estimate) ─
-                atm   = round(px / step) * step
+                strength, quality = index_radar_quality(float(chg), is_ce, IR_BT, vix_d, pcr_d)
+                _qf = int(IR_BT.get("quality_floor", 0))
+                if IR_BT.get("precision_boost"):
+                    _qf = max(_qf, int(IR_BT.get("precision_min_quality", 72)))
+                if _qf > 0 and quality < _qf:
+                    filter_stats["reject_quality_floor"] += 1
+                    continue
+
+                atm = round(px / step) * step
                 strike = atm + step if is_ce else atm - step
-                entry  = round(px * 0.007, 1)   # ~0.7% OTM estimate
+                entry = round(px * 0.007, 1)
                 if entry < 20:
                     entry = 20.0
-                sl  = round(entry * 0.70, 2)
-                t1  = round(entry * 1.50, 2)
-                t2  = round(entry * 2.00, 2)
-                rr  = round((t1 - entry) / max(entry - sl, 0.01), 1)
+                sl = round(entry * 0.70, 2)
+                t1 = round(entry * 1.50, 2)
+                t2 = round(entry * 2.00, 2)
+                rr = round((t1 - entry) / max(entry - sl, 0.01), 1)
 
-                # ── Outcome: watch next 45 candles ────────
+                if IR_BT.get("ml_filter_enabled"):
+                    try:
+                        from index_radar_ml import effective_ml_threshold, win_probability
+
+                        _cand_ml = {
+                            "chg_pct": float(chg),
+                            "type": "CE" if is_ce else "PE",
+                            "symbol": sym,
+                            "strength": strength,
+                            "time": c["date"].strftime("%H:%M"),
+                            "vix": vix_d,
+                            "rr": float(rr),
+                            "quality": quality,
+                            "pcr": pcr_d,
+                        }
+                        _pr = win_probability(_cand_ml)
+                        _thr = effective_ml_threshold(float(IR_BT.get("ml_min_win_prob", 0.72)))
+                        if _pr is not None and _pr < _thr:
+                            filter_stats["reject_ml"] += 1
+                            continue
+                    except Exception:
+                        pass
+
                 outcome = None
                 entry_idx_px = px
-                for j in range(i+1, min(i+46, len(mkt))):
+                for j in range(i + 1, min(i + 46, len(mkt))):
                     fc = mkt[j]
                     fmv = (fc["close"] - entry_idx_px) / entry_idx_px * 100
-                    if (is_ce and fmv >= 0.25) or (not is_ce and fmv <= -0.25):
-                        outcome = "HIT_T1"; break
-                    if (is_ce and fmv <= -0.25) or (not is_ce and fmv >= 0.25):
-                        outcome = "HIT_SL"; break
+                    if (is_ce and fmv >= _ix_out) or (not is_ce and fmv <= -_ix_out):
+                        outcome = "HIT_T1"
+                        break
+                    if (is_ce and fmv <= -_ix_out) or (not is_ce and fmv >= _ix_out):
+                        outcome = "HIT_SL"
+                        break
                 if outcome is None:
                     outcome = "EXPIRED"
 
-                sig_id  = f"{sym}_{day.replace('-','')}_{c['date'].strftime('%H%M')}_{sig_type}"
+                sig_id = f"{sym}_{day.replace('-', '')}_{c['date'].strftime('%H%M')}_{sig_type}"
                 sig_time = c["date"].strftime("%H:%M")
                 lot_pnl = round((t1 - entry) * lot_sz)
-                now_ts  = _t.time()
+                now_ts = _t.time()
 
                 try:
                     conn.execute("""
                         INSERT OR REPLACE INTO index_signal_history
                           (sig_id, trade_date, symbol, type, signal_time, ts,
                            index_px, strike, entry, sl, t1, t2, rr, lot_sz, lot_pnl_t1,
-                           chg_pct, strength, vix, outcome, created_ts, updated_ts)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                           chg_pct, strength, vix, quality, pcr, outcome, created_ts, updated_ts)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """, (
                         sig_id, day, sym, sig_type, sig_time, c["date"].timestamp(),
                         round(px, 2), strike, entry, sl, t1, t2, rr, lot_sz, lot_pnl,
-                        round(chg, 2), "hi" if abs(chg) >= 0.4 else "md",
-                        0.0, outcome, now_ts, now_ts
+                        round(float(chg), 2), strength, vix_d, float(quality), float(pcr_d),
+                        outcome, now_ts, now_ts
                     ))
                     total_inserted += 1
-                    results.append({"sig_id": sig_id, "date": day, "symbol": sym,
-                                    "type": sig_type, "time": sig_time,
-                                    "chg": round(chg,2), "outcome": outcome})
+                    filter_stats["signals_inserted"] += 1
+                    results.append({
+                        "sig_id": sig_id, "date": day, "symbol": sym,
+                        "type": sig_type, "time": sig_time,
+                        "chg": round(float(chg), 2), "outcome": outcome,
+                        "quality": quality, "pcr": round(pcr_d, 3), "vix": vix_d,
+                    })
                 except Exception:
                     pass
 
@@ -688,6 +816,7 @@ async def index_signals_backtest(request: Request):
     resolved = [r for r in results if r["outcome"] in ("HIT_T1","HIT_SL")]
     wins = sum(1 for r in resolved if r["outcome"] == "HIT_T1")
     wr = round(wins/len(resolved)*100) if resolved else 0
+    fs_sorted = dict(sorted(filter_stats.items(), key=lambda x: -x[1]))
     return JSONResponse({
         "inserted": total_inserted,
         "total": len(results),
@@ -696,6 +825,7 @@ async def index_signals_backtest(request: Request):
         "win_rate": wr,
         "from": from_date,
         "to": to_date,
+        "filter_stats": fs_sorted,
     })
 
 

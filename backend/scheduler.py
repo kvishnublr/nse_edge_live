@@ -10,10 +10,26 @@ import time
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.events import EVENT_JOB_ERROR
-from config import is_market_open
+from config import is_market_open, INDEX_RADAR as _IXR
 from fetcher import IST
 
 _DB_PATH = os.path.join(os.path.dirname(__file__), "data", "backtest.db")
+
+
+def _ix_migrate_cols():
+    try:
+        conn = sqlite3.connect(_DB_PATH)
+        cur = conn.execute("PRAGMA table_info(index_signal_history)")
+        have = {r[1] for r in cur.fetchall()}
+        if "quality" not in have:
+            conn.execute("ALTER TABLE index_signal_history ADD COLUMN quality REAL")
+        if "pcr" not in have:
+            conn.execute("ALTER TABLE index_signal_history ADD COLUMN pcr REAL")
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning("ix_migrate: %s", e)
+
 
 def _ix_db_init():
     """Ensure index_signal_history table exists."""
@@ -47,6 +63,7 @@ def _ix_db_init():
         """)
         conn.commit()
         conn.close()
+        _ix_migrate_cols()
     except Exception as e:
         logger.warning(f"ix_db_init: {e}")
 
@@ -58,8 +75,8 @@ def _ix_db_upsert(sig):
             INSERT INTO index_signal_history
               (sig_id, trade_date, symbol, type, signal_time, ts,
                index_px, strike, entry, sl, t1, t2, rr, lot_sz, lot_pnl_t1,
-               chg_pct, strength, vix, outcome, created_ts, updated_ts)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               chg_pct, strength, vix, quality, pcr, outcome, created_ts, updated_ts)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(sig_id) DO UPDATE SET
               outcome=excluded.outcome, updated_ts=excluded.updated_ts
         """, (
@@ -70,7 +87,8 @@ def _ix_db_upsert(sig):
             sig["sl"], sig["t1"], sig["t2"], sig["rr"],
             sig["lot_sz"], sig["lot_pnl_t1"],
             sig.get("chg_pct", 0), sig.get("strength", "md"),
-            sig.get("vix", 0), sig.get("outcome"),
+            sig.get("vix", 0), sig.get("quality"), sig.get("pcr"),
+            sig.get("outcome"),
             sig["ts"], time.time()
         ))
         conn.commit()
@@ -199,10 +217,14 @@ def job_chain():
 
         # ── Index Spike Radar ──────────────────────────────────────────────
         if chain and indices:
-            new_ix = _detect_index_signals(chain, indices)
             today_str = datetime.now(IST).strftime("%Y-%m-%d")
             existing_ix = _signals.state.get("index_signals", [])
             existing_date = _signals.state.get("index_signals_date", "")
+            # New session: drop rolling price history so 5m momentum is intraday-only
+            if existing_date and existing_date != today_str:
+                _cache["ix_px_hist"] = []
+
+            new_ix = _detect_index_signals(chain, indices)
             # Roll over ONLY when the date actually changes (not on missing date = startup)
             if existing_date and existing_date != today_str:
                 existing_ix = new_ix
@@ -214,7 +236,8 @@ def job_chain():
                 for sig in existing_ix:
                     if sig.get("outcome"):
                         _ix_db_upsert(sig)
-                # Dedup: skip same symbol+type within 15 min
+                # Dedup: skip same symbol+type within configured minutes
+                _ix_dedup = int(_IXR.get("dedup_minutes", 20))
                 def _ixmin(t):
                     try: h,m=t.split(":"); return int(h)*60+int(m)
                     except: return 0
@@ -222,7 +245,7 @@ def job_chain():
                     nm = _ixmin(ns["time"])
                     already = any(
                         ps["symbol"] == ns["symbol"] and ps["type"] == ns["type"]
-                        and abs(_ixmin(ps["time"]) - nm) < 15
+                        and abs(_ixmin(ps["time"]) - nm) < _ix_dedup
                         for ps in existing_ix
                     )
                     if not already:
@@ -317,14 +340,33 @@ def job_fii():
 
 
 # ─── INDEX SPIKE DETECTION ────────────────────────────────────────────────────
+def _ix_baseline(hist, now_ts, px_idx, window_sec):
+    """Newest sample at or before (now - window_sec). None if none qualifies."""
+    cutoff = now_ts - window_sec
+    return next((e for e in reversed(hist) if e[0] <= cutoff), None)
+
+
+def _ix_recent_range(hist, now_ts, px_idx, window_sec):
+    """High/low over [now-window, now) using history only (excludes live tick)."""
+    lo = now_ts - window_sec
+    xs = [e[px_idx] for e in hist if lo <= e[0] < now_ts and e[px_idx]]
+    if len(xs) < 2:
+        return None, None
+    return max(xs), min(xs)
+
+
 def _detect_index_signals(chain, indices):
-    """Detect NIFTY/BANKNIFTY directional moves ≥0.20% in 5-min with quality filters."""
+    """
+    NIFTY/BANKNIFTY momentum radar: controlled 5m impulse, confirmations, no chasing.
+    History is appended AFTER checks so windows are not polluted by the current print.
+    """
     import time as _t
+    ir = _IXR
     now_ts = _t.time()
     now_dt = datetime.now(IST)
     cm = now_dt.hour * 60 + now_dt.minute
-    # Filter 3: Skip first 45 min (9:15-10:00) — opening whipsaw kills accuracy
-    if not (600 <= cm <= 840):   # 10:00 AM to 14:00
+    t0, t1w = ir["time_start_min"], ir["time_end_min"]
+    if not (t0 <= cm <= t1w):
         return []
 
     nifty_px = float(indices.get("nifty", 0) or 0)
@@ -332,62 +374,132 @@ def _detect_index_signals(chain, indices):
     if not nifty_px:
         return []
 
-    # Store in rolling price history (entry every ~30s)
-    hist = _cache["ix_px_hist"]
-    hist.append((now_ts, nifty_px, bn_px))
-    if len(hist) > 120:
-        hist.pop(0)
-    if len(hist) < 5:
+    vix = float(indices.get("vix", 0) or 0)
+    if vix and vix >= float(ir.get("vix_block_above", 99)):
         return []
+
+    nifty_day = float(indices.get("nifty_chg", 0) or 0)
+    pcr = float((chain or {}).get("pcr", 1.0) or 1.0)
+
+    hist = _cache["ix_px_hist"]
+    min_span = float(ir["min_hist_span_sec"])
+    min_samp = int(ir["min_hist_samples"])
+    if len(hist) < min_samp or (now_ts - hist[0][0]) < min_span:
+        hist.append((now_ts, nifty_px, bn_px))
+        if len(hist) > 120:
+            hist.pop(0)
+        return []
+
+    mom_sec   = int(ir["momentum_sec"])
+    conf_sec  = int(ir["confirm_sec"])
+    trend_sec = int(ir["trend_sec"])
+    chg_lo    = float(ir["chg_min_pct"])
+    chg_hi    = float(ir["chg_max_pct"])
+    if ir.get("precision_boost"):
+        chg_lo = max(chg_lo, float(ir.get("precision_chg_min", 0.23)))
+        chg_hi = min(chg_hi, float(ir.get("precision_chg_max", 0.28)))
+    chg_str   = float(ir["chg_hi_strength_pct"])
+    tr_against = float(ir["trend_against_pct"])
+    chase_w   = int(ir["anti_chase_sec"])
+    chase_ce  = float(ir["anti_chase_ce_pct"])
+    chase_pe  = float(ir["anti_chase_pe_pct"])
+    micro_min = float(ir["micro_step_min_pct"])
+    pcr_pe    = float(ir["pcr_pe_min"])
+    pe_nifty  = float(ir["pe_max_nifty_chg"])
+    pcr_ce_av = float(ir.get("pcr_ce_avoid_below", 0))
 
     results = []
     for sym, px, lot_sz, px_idx in [("NIFTY", nifty_px, 25, 1), ("BANKNIFTY", bn_px, 15, 2)]:
         if not px:
             continue
 
-        # ── Primary: 5-min momentum ─────────────────────────────────────
-        five_ago = now_ts - 300
-        old_entry = next((e for e in reversed(hist) if e[0] <= five_ago), None)
-        if not old_entry:
-            old_entry = hist[0]
-        old_px = old_entry[px_idx]
-        if not old_px:
+        base = _ix_baseline(hist, now_ts, px_idx, mom_sec)
+        if not base or not base[px_idx]:
             continue
+        old_px = base[px_idx]
         chg = (px - old_px) / old_px * 100
 
-        # Filter 2: Cap at 0.30% — moves >0.30% are overextended, momentum exhausted
-        if abs(chg) < 0.20 or abs(chg) > 0.30:
+        if abs(chg) < chg_lo or abs(chg) > chg_hi:
             continue
         is_ce = chg > 0
 
-        # ── Confirmation: last 1-min must also move in signal direction ─
-        one_ago = now_ts - 60
-        one_entry = next((e for e in reversed(hist) if e[0] <= one_ago), None)
-        if one_entry:
+        if ir.get("precision_boost") and ir.get("precision_hi_only", True):
+            if abs(chg) < chg_str:
+                continue
+
+        one_entry = _ix_baseline(hist, now_ts, px_idx, conf_sec)
+        if one_entry and one_entry[px_idx]:
             one_chg = (px - one_entry[px_idx]) / one_entry[px_idx] * 100
             if is_ce and one_chg <= 0:
                 continue
             if not is_ce and one_chg >= 0:
                 continue
 
-        # ── Trend alignment: signal must align with broad 30-min trend ──
-        thirty_ago = now_ts - 1800
-        trend_entry = next((e for e in reversed(hist) if e[0] <= thirty_ago), None)
-        if trend_entry:
+        trend_entry = _ix_baseline(hist, now_ts, px_idx, trend_sec)
+        trend_chg = None
+        if trend_entry and trend_entry[px_idx]:
             trend_chg = (px - trend_entry[px_idx]) / trend_entry[px_idx] * 100
-            if is_ce and trend_chg < -0.3:
+            if is_ce and trend_chg < -tr_against:
                 continue
-            if not is_ce and trend_chg > 0.3:
+            if not is_ce and trend_chg > tr_against:
+                continue
+            tsup = float(ir.get("trend_support_min_pct", 0))
+            if ir.get("precision_boost"):
+                tsup = max(tsup, float(ir.get("precision_min_trend_sup", 0.10)))
+            if tsup > 0:
+                if is_ce and trend_chg < tsup:
+                    continue
+                if not is_ce and trend_chg > -tsup:
+                    continue
+
+        cap = float(ir.get("cross_index_against_pct", 0))
+        if cap > 0:
+            if px_idx == 1 and base[2] and bn_px:
+                o_chg = (bn_px - base[2]) / base[2] * 100
+                if is_ce and o_chg < -cap:
+                    continue
+                if not is_ce and o_chg > cap:
+                    continue
+            elif px_idx == 2 and base[1] and nifty_px:
+                o_chg = (nifty_px - base[1]) / base[1] * 100
+                if is_ce and o_chg < -cap:
+                    continue
+                if not is_ce and o_chg > cap:
+                    continue
+
+        if len(hist) >= 2:
+            e_old, e_new = hist[-2], hist[-1]
+            if e_old[px_idx] and e_new[px_idx]:
+                step_pct = (e_new[px_idx] - e_old[px_idx]) / e_old[px_idx] * 100
+                if is_ce and step_pct < micro_min:
+                    continue
+                if not is_ce and step_pct > -micro_min:
+                    continue
+
+        recent_hi, recent_lo = _ix_recent_range(hist, now_ts, px_idx, chase_w)
+        if recent_hi and recent_lo:
+            if is_ce and px > recent_hi * (1.0 + chase_ce / 100.0):
+                continue
+            if not is_ce and px < recent_lo * (1.0 - chase_pe / 100.0):
                 continue
 
-        # Filter 1: PE only when PCR > 1.4 (strong put-heavy sentiment required)
-        # Data shows CE WR=66%, PE WR=33% — PE needs strong bearish OI confirmation
+        if is_ce and pcr_ce_av > 0 and pcr < pcr_ce_av:
+            continue
+
+        pcr_ce_min = float(ir.get("pcr_ce_min", 0))
+        if is_ce and pcr_ce_min > 0 and pcr < pcr_ce_min:
+            continue
+
+        vs = float(ir.get("vix_soft_skips_md_ce", 0))
+        if is_ce and vs > 0 and vix and vix >= vs and abs(chg) < chg_str:
+            continue
+
         if not is_ce:
-            pcr = float((chain or {}).get("pcr", 1.0) or 1.0)
-            if pcr < 1.4:   # raised from 1.2 → 1.4 for tighter PE filter
+            if pcr < pcr_pe:
+                continue
+            if nifty_day > pe_nifty:
                 continue
 
-        # Find ATM and real option premium from chain (NIFTY only; BN estimated)
         if sym == "NIFTY" and chain:
             atm = chain.get("atm", 0) or round(px / 50) * 50
             step = 50
@@ -398,7 +510,6 @@ def _detect_index_signals(chain, indices):
                     entry_px = float(s.get("call_ltp" if is_ce else "put_ltp", 0) or 0)
                     break
             if not entry_px:
-                # fallback: ATM itself
                 for s in (chain.get("strikes") or []):
                     if s.get("is_atm"):
                         entry_px = float(s.get("call_ltp" if is_ce else "put_ltp", 0) or 0)
@@ -407,18 +518,35 @@ def _detect_index_signals(chain, indices):
             atm    = round(px / 100) * 100
             step   = 100
             target = atm + step if is_ce else atm - step
-            entry_px = round(px * 0.007, 1)   # ~0.7% estimate for BN OTM
+            entry_px = round(px * 0.007, 1)
 
         if not entry_px:
             continue
 
-        sl         = round(entry_px * 0.70, 2)   # −30%
-        t1         = round(entry_px * 1.50, 2)   # +50%
-        t2         = round(entry_px * 2.00, 2)   # +100%
+        sl         = round(entry_px * 0.70, 2)
+        t1         = round(entry_px * 1.50, 2)
+        t2         = round(entry_px * 2.00, 2)
         rr         = round((t1 - entry_px) / max(entry_px - sl, 0.01), 1)
         lot_pnl_t1 = round((t1 - entry_px) * lot_sz)
 
-        results.append({
+        strength = "hi" if abs(chg) >= chg_str else "md"
+        quality = 52
+        quality += min(18, int((abs(chg) - chg_lo) / max(chg_hi - chg_lo, 0.01) * 18))
+        if vix and vix < 12:
+            quality += 8
+        if (is_ce and pcr >= 1.0) or (not is_ce and pcr >= pcr_pe):
+            quality += 7
+        if strength == "hi":
+            quality += 10
+        quality = max(40, min(99, quality))
+
+        qfloor = int(ir.get("quality_floor", 0))
+        if ir.get("precision_boost"):
+            qfloor = max(qfloor, int(ir.get("precision_min_quality", 72)))
+        if qfloor > 0 and quality < qfloor:
+            continue
+
+        cand = {
             "id":            f"{sym}_{now_dt.strftime('%H%M')}_{'CE' if is_ce else 'PE'}",
             "symbol":        sym,
             "time":          now_dt.strftime("%H:%M"),
@@ -435,11 +563,31 @@ def _detect_index_signals(chain, indices):
             "rr":            rr,
             "lot_sz":        lot_sz,
             "lot_pnl_t1":    lot_pnl_t1,
-            "strength":      "hi" if abs(chg) >= 0.4 else "md",
+            "strength":      strength,
+            "quality":       quality,
             "chg_window":    "5min",
             "outcome":       None,
-            "vix":           float(indices.get("vix", 0) or 0),
-        })
+            "vix":           vix,
+            "pcr":           round(pcr, 3),
+        }
+
+        if ir.get("ml_filter_enabled"):
+            try:
+                from index_radar_ml import effective_ml_threshold, win_probability
+
+                _p = win_probability(cand)
+                _thr = effective_ml_threshold(float(ir.get("ml_min_win_prob", 0.72)))
+                if _p is not None and _p < _thr:
+                    continue
+                cand["ml_p"] = round(_p, 4) if _p is not None else None
+            except Exception as _e:
+                logger.debug("index radar ml: %s", _e)
+
+        results.append(cand)
+
+    hist.append((now_ts, nifty_px, bn_px))
+    if len(hist) > 120:
+        hist.pop(0)
     return results
 
 
@@ -449,6 +597,7 @@ def _update_index_outcomes(signals, indices):
     now_ts  = _t.time()
     nifty   = float((indices or {}).get("nifty", 0) or 0)
     bn      = float((indices or {}).get("banknifty", 0) or 0)
+    ix_th   = float(_IXR.get("outcome_index_pct", 0.25))
     for sig in signals:
         if sig.get("outcome") is not None:
             continue
@@ -458,9 +607,16 @@ def _update_index_outcomes(signals, indices):
             continue
         mv    = (cur - entry_idx) / entry_idx * 100
         is_ce = sig["type"] == "CE"
-        if   (is_ce and mv >= 0.25) or (not is_ce and mv <= -0.25): sig["outcome"] = "HIT_T1"
-        elif (is_ce and mv <= -0.25) or (not is_ce and mv >= 0.25): sig["outcome"] = "HIT_SL"
-        elif now_ts - sig.get("ts", now_ts) > 2700:                  sig["outcome"] = "EXPIRED"
+        _otm = datetime.now(IST).strftime("%H:%M")
+        if   (is_ce and mv >= ix_th) or (not is_ce and mv <= -ix_th):
+            sig["outcome"] = "HIT_T1"
+            sig["outcome_time"] = _otm
+        elif (is_ce and mv <= -ix_th) or (not is_ce and mv >= ix_th):
+            sig["outcome"] = "HIT_SL"
+            sig["outcome_time"] = _otm
+        elif now_ts - sig.get("ts", now_ts) > 2700:
+            sig["outcome"] = "EXPIRED"
+            sig["outcome_time"] = _otm
 
 
 # ─── JOB: SPIKES + TICKER (every 10 seconds) ─────────────────────────────────

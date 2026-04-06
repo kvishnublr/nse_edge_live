@@ -476,33 +476,122 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .sk{width:32px;height:32px;border-radius:50%;border:1px solid var(--b1);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;color:var(--t2);transition:all .2s}
 .sk:hover{border-color:var(--t2);background:var(--s3)}
 .sk.hit{border-color:var(--st-b);background:var(--st-d);color:var(--st)}
-/* CE/PE SCANNER */
-.kz-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
-.cepe-card{border-radius:6px;border:1px solid;padding:12px 14px;position:relative;overflow:hidden}
-.cepe-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
-.cepe-card.ce{border-color:rgba(0,232,122,.22);background:rgba(0,232,122,.04)}
-.cepe-card.ce::before{background:linear-gradient(90deg,transparent,rgba(0,232,122,.6),transparent)}
-.cepe-card.pe{border-color:rgba(255,51,85,.2);background:rgba(255,51,85,.03)}
-.cepe-card.pe::before{background:linear-gradient(90deg,transparent,rgba(255,51,85,.5),transparent)}
-.cepe-card.avoid{border-color:var(--b1);background:var(--s2);opacity:.55}
-.cepe-card.avoid::before{display:none}
-.cepe-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.cepe-type{font-size:9px;font-weight:800;letter-spacing:1.2px}
+/* CE/PE SCANNER — dense, high-contrast panels */
+.kz-grid.cepe-grid,.cepe-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;align-items:stretch}
+@media (max-width:780px){.cepe-grid{grid-template-columns:1fr}}
+.cepe-span-full{grid-column:1/-1}
+.cepe-avoid-ban{grid-column:1/-1;padding:11px 14px;border-radius:10px;font-size:8.5px;font-weight:600;line-height:1.45;display:flex;align-items:flex-start;gap:10px;border:1px solid rgba(255,71,102,.45);background:linear-gradient(135deg,rgba(255,51,85,.16),rgba(40,12,24,.85));box-shadow:0 6px 24px rgba(255,51,85,.12),inset 0 1px 0 rgba(255,255,255,.06);color:#ffc9d4}
+.cepe-avoid-ban b{color:#fff;font-weight:800}
+.kz-section-hdr--cepe{font-size:9px;font-weight:800;letter-spacing:2.2px;color:var(--t1);margin-bottom:10px}
+.kz-section-hdr--cepe::before{content:'◆';font-size:7px;opacity:.65;margin-right:4px;color:var(--go)}
+.cepe-gatebar{grid-column:1/-1;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;border-radius:10px;border:1px solid rgba(56,190,255,.22);background:linear-gradient(180deg,rgba(15,28,48,.95),rgba(8,14,26,.88));box-shadow:0 4px 18px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.04)}
+.cepe-gatebar-lbl{font-size:7px;font-weight:800;letter-spacing:1.6px;color:var(--bl);flex-shrink:0}
+.cepe-gdots{display:flex;gap:5px;align-items:center;flex:1;min-width:0}
+.cepe-gdot{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;border:1px solid var(--b1);background:var(--s3);color:var(--t3)}
+.cepe-gdot.on-go{background:rgba(0,232,122,.2);border-color:rgba(0,232,122,.45);color:var(--go);box-shadow:0 0 12px rgba(0,232,122,.12)}
+.cepe-gdot.on-st{background:rgba(255,51,85,.18);border-color:rgba(255,51,85,.45);color:var(--st)}
+.cepe-gdot.on-am{background:rgba(255,170,0,.14);border-color:rgba(255,170,0,.35);color:var(--am)}
+.cepe-gdot.on-wt{background:rgba(56,190,255,.1);border-color:rgba(56,190,255,.25);color:var(--bl)}
+.cepe-gdot.on-off{opacity:.4}
+.cepe-gatebar-sum{font-size:9px;font-weight:800;color:var(--t0);letter-spacing:.3px;font-variant-numeric:tabular-nums}
+.cepe-card{border-radius:10px;border:1px solid;position:relative;overflow:hidden;box-shadow:0 10px 32px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.05)}
+.cepe-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;z-index:2}
+.cepe-card::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:0}
+.cepe-card-inner{position:relative;z-index:1;padding:15px 16px 14px}
+.cepe-card.ce{border-color:rgba(0,232,122,.5);background:linear-gradient(165deg,rgba(0,232,122,.2) 0%,rgba(8,18,32,.97) 42%,rgba(6,12,22,1) 100%)}
+.cepe-card.ce::before{background:linear-gradient(90deg,rgba(0,232,122,.15),rgba(0,232,122,.85) 50%,rgba(0,232,122,.15))}
+.cepe-card.ce::after{background:radial-gradient(ellipse 90% 70% at 15% -30%,rgba(0,232,122,.14),transparent 50%)}
+.cepe-card.pe{border-color:rgba(255,71,102,.48);background:linear-gradient(165deg,rgba(255,71,102,.16) 0%,rgba(14,10,22,.97) 42%,rgba(8,8,18,1) 100%)}
+.cepe-card.pe::before{background:linear-gradient(90deg,rgba(255,71,102,.12),rgba(255,71,102,.75) 50%,rgba(255,71,102,.12))}
+.cepe-card.pe::after{background:radial-gradient(ellipse 90% 70% at 85% -28%,rgba(255,71,102,.12),transparent 50%)}
+.cepe-card.avoid{border-color:var(--b1);background:var(--s2);opacity:.72;box-shadow:none}
+.cepe-card.avoid::before,.cepe-card.avoid::after{display:none}
+.cepe-card--sd{border-color:rgba(56,190,255,.42)!important;background:linear-gradient(165deg,rgba(56,190,255,.14) 0%,rgba(8,16,30,.96) 50%,rgba(6,12,22,1) 100%)!important}
+.cepe-card--sd::before{background:linear-gradient(90deg,transparent,rgba(56,190,255,.65),transparent)!important;height:3px!important;display:block!important}
+.cepe-card--sd::after{background:radial-gradient(ellipse 80% 60% at 50% -40%,rgba(56,190,255,.1),transparent 55%)!important;display:block!important}
+.cepe-card--rules{border-color:rgba(255,170,0,.25)!important;background:linear-gradient(180deg,rgba(22,18,12,.96),rgba(10,12,18,1))!important}
+.cepe-card--rules::before{background:linear-gradient(90deg,transparent,rgba(255,170,0,.45),transparent)!important;display:block!important;height:3px!important}
+.cepe-card--rules::after{display:none!important}
+.cepe-card.cepe-wait{border-color:rgba(56,190,255,.2);background:linear-gradient(180deg,var(--s3),var(--s2))}
+.cepe-card.cepe-wait::before{background:linear-gradient(90deg,transparent,rgba(56,190,255,.45),transparent)!important;display:block!important;height:3px!important}
+.cepe-card.cepe-wait::after{display:none!important}
+.cepe-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px}
+.cepe-type{font-size:9px;font-weight:800;letter-spacing:1.3px;text-shadow:0 0 18px currentColor}
 .cepe-type.ce{color:var(--go)}.cepe-type.pe{color:var(--st)}
-.cepe-badge{font-size:7px;padding:2px 8px;border-radius:10px;font-weight:700;letter-spacing:.5px}
-.cepe-badge.strong{background:rgba(0,232,122,.18);color:var(--go)}
-.cepe-badge.moderate{background:rgba(255,170,0,.16);color:var(--am)}
-.cepe-badge.weak{background:rgba(255,51,85,.14);color:var(--st)}
-.cepe-badge.avoid{background:var(--s3);color:var(--t2)}
-.cepe-badge.hedge{background:rgba(56,190,255,.14);color:var(--bl)}
-.cepe-strike{font-size:18px;font-weight:800;color:var(--t0);margin-bottom:6px;letter-spacing:-.5px}
-.cepe-divider{height:1px;background:var(--b1);margin:6px 0}
-.cepe-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+.cepe-badge{font-size:7px;padding:3px 10px;border-radius:12px;font-weight:800;letter-spacing:.55px;border:1px solid transparent}
+.cepe-badge.strong{background:rgba(0,232,122,.22);color:#7dffc5;border-color:rgba(0,232,122,.35)}
+.cepe-badge.moderate{background:rgba(255,170,0,.2);color:#ffd28a;border-color:rgba(255,170,0,.35)}
+.cepe-badge.weak{background:rgba(255,51,85,.2);color:#ff9eae;border-color:rgba(255,51,85,.35)}
+.cepe-badge.avoid{background:var(--s3);color:var(--t2);border-color:var(--b1)}
+.cepe-badge.hedge{background:rgba(56,190,255,.18);color:#8fd8ff;border-color:rgba(56,190,255,.32)}
+.cepe-sigrow{margin-bottom:10px}
+.cepe-siglbl{display:block;font-size:7px;color:var(--t3);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;font-weight:700}
+.cepe-sigtrack{height:6px;border-radius:6px;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.06);overflow:hidden}
+.cepe-sigtrack.ce .cepe-sigfill{background:linear-gradient(90deg,rgba(0,180,95,.4),var(--go));box-shadow:0 0 14px rgba(0,232,122,.35)}
+.cepe-sigtrack.pe .cepe-sigfill{background:linear-gradient(90deg,rgba(200,40,70,.4),var(--st));box-shadow:0 0 14px rgba(255,71,102,.3)}
+.cepe-sigfill{height:100%;border-radius:6px;transition:width .45s ease}
+.cepe-strike{font-size:23px;font-weight:800;color:var(--t0);margin-bottom:8px;letter-spacing:-1px;line-height:1.15}
+.cepe-strike small{font-size:11px;font-weight:700;color:var(--t2);letter-spacing:0;opacity:.85}
+.cepe-divider{height:1px;background:linear-gradient(90deg,transparent,var(--b1),transparent);margin:8px 0;opacity:.9}
+.cepe-pricegrid{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-bottom:4px}
+.cepe-kv{display:flex;flex-direction:column;gap:2px}
+.cepe-kv .cepe-lbl{font-size:7px;color:var(--t3);letter-spacing:.4px;text-transform:uppercase;font-weight:700}
+.cepe-kv .cepe-val{font-size:11px;font-weight:800;color:var(--t1);font-variant-numeric:tabular-nums}
+.cepe-kv .cepe-val small{font-size:8px;font-weight:600;opacity:.72}
+.cepe-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.cepe-row--wide{grid-column:1/-1}
 .cepe-lbl{font-size:8px;color:var(--t2)}
-.cepe-val{font-size:8.5px;font-weight:600;color:var(--t1)}
+.cepe-val{font-size:9px;font-weight:700;color:var(--t1);font-variant-numeric:tabular-nums}
 .cepe-val.go{color:var(--go)}.cepe-val.st{color:var(--st)}.cepe-val.am{color:var(--am)}
-.cepe-pnl{margin-top:6px;padding:5px 8px;border-radius:4px;background:rgba(0,0,0,.15);display:flex;justify-content:space-between;align-items:center}
-.cepe-reason{font-size:7.5px;color:var(--t3);margin-top:6px;padding-top:6px;border-top:1px solid var(--b1);line-height:1.6}
+.cepe-pnl{margin-top:10px;padding:9px 11px;border-radius:8px;background:rgba(0,0,0,.32);border:1px solid rgba(255,255,255,.06);display:flex;justify-content:space-between;align-items:center}
+.cepe-pnl span:last-child{font-size:11px!important;font-weight:800!important}
+.cepe-metrics{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:10px;padding:8px 10px;border-radius:8px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.05);font-size:8px;color:var(--t2);line-height:1.4}
+.cepe-metrics b{color:var(--t1);font-weight:800;margin-right:4px;font-size:7px;letter-spacing:.6px}
+.cepe-reason{font-size:8px;color:var(--t2);margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.08);line-height:1.55}
+.light .cepe-card.ce{background:linear-gradient(165deg,rgba(0,120,62,.12),#f4f8fc)}
+.light .cepe-card.pe{background:linear-gradient(165deg,rgba(196,30,60,.1),#faf4f6)}
+.light .cepe-gatebar{background:linear-gradient(180deg,#e8eef6,#dde5f0);border-color:rgba(30,90,140,.2)}
+.light .cepe-avoid-ban{background:linear-gradient(135deg,rgba(255,180,190,.35),#fff);color:#6b1224;border-color:rgba(196,30,60,.35)}
+.light .cepe-metrics{background:rgba(255,255,255,.6);border-color:rgba(0,0,0,.06)}
+.light .cepe-pnl{background:rgba(255,255,255,.55)}
+/* CE/PE — readability */
+.cepe-card-inner{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.cepe-kv .cepe-lbl{font-size:7.5px;opacity:.92;letter-spacing:.65px}
+.cepe-kv .cepe-val{font-size:12px;letter-spacing:.2px}
+.cepe-metrics{font-size:9px;gap:10px 18px;padding:10px 12px}
+.cepe-metrics b{margin-right:5px;color:var(--t0)}
+.cepe-reason{font-size:8.5px;color:var(--t2);line-height:1.6}
+/* INDEX RADAR trail (Kill Zones) */
+.kz-trail-wrap{display:flex;flex-direction:column;gap:10px;margin-top:0}
+.kz-trail-hdr{font-size:9px;font-weight:800;letter-spacing:2px;color:var(--t1);margin:16px 0 8px;display:flex;align-items:center;gap:8px}
+.kz-trail-hdr::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--b1),transparent)}
+.kz-trail-empty{padding:16px 14px;border-radius:10px;border:1px dashed var(--b1);color:var(--t2);font-size:9px;line-height:1.55;text-align:center;background:rgba(0,0,0,.12)}
+.kz-tr-card{border-radius:11px;border:1px solid rgba(56,190,255,.18);background:linear-gradient(165deg,rgba(18,32,52,.97),rgba(6,10,20,.99));box-shadow:0 10px 28px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.04);overflow:hidden}
+.kz-tr-head{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;padding:11px 14px;border-bottom:1px solid rgba(255,255,255,.07);background:rgba(0,0,0,.22)}
+.kz-tr-sym{font-size:11px;font-weight:800;color:var(--t0);letter-spacing:.3px}
+.kz-tr-strike{font-size:12px;font-weight:800;color:var(--t1);font-variant-numeric:tabular-nums}
+.kz-tr-badge{font-size:7px;padding:4px 10px;border-radius:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase}
+.kz-tr-badge.ce{background:rgba(0,232,122,.18);color:#9fffc9;border:1px solid rgba(0,232,122,.3)}
+.kz-tr-badge.pe{background:rgba(255,71,102,.16);color:#ffc0cb;border:1px solid rgba(255,71,102,.28)}
+.kz-tr-body{padding:12px 14px 14px 12px}
+.kz-tr-row{display:grid;grid-template-columns:14px 76px 1fr;gap:6px 12px;align-items:start;padding:6px 0}
+.kz-tr-dot{width:11px;height:11px;border-radius:50%;margin-top:4px;border:2px solid var(--b1);background:var(--s2);flex-shrink:0}
+.kz-tr-dot.done{border-color:var(--go);background:rgba(0,232,122,.22);box-shadow:0 0 12px rgba(0,232,122,.15)}
+.kz-tr-dot.bad{border-color:var(--st);background:rgba(255,51,85,.2)}
+.kz-tr-dot.wait{border-color:var(--am);background:rgba(255,170,0,.12);animation:kzDotPulse 1.4s ease-in-out infinite}
+@keyframes kzDotPulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(255,170,0,.25)}50%{opacity:.65;box-shadow:0 0 12px rgba(255,170,0,.12)}}
+.kz-tr-ph{font-size:7px;font-weight:800;letter-spacing:.9px;color:var(--bl);text-transform:uppercase;padding-top:2px}
+.kz-tr-tm{font-weight:800;color:var(--am);font-variant-numeric:tabular-nums;font-size:12px;letter-spacing:.4px}
+.kz-tr-timebox{display:inline-flex;flex-direction:column;align-items:flex-start;gap:2px;margin-right:8px;padding:4px 8px;border-radius:5px;background:rgba(0,0,0,.3);border:1px solid rgba(255,170,0,.2)}
+.kz-tr-timebox .kz-tr-tm-l{font-size:6px;font-weight:800;letter-spacing:1px;color:var(--t2);text-transform:uppercase}
+.kz-tr-txt{font-size:9px;color:var(--t2);line-height:1.5}
+.kz-tr-out{font-weight:800;font-size:10px;margin-right:4px}
+.kz-tr-out.hit-t{color:var(--go)}
+.kz-tr-out.hit-s{color:var(--st)}
+.kz-tr-out.hit-x{color:var(--t2)}
+.kz-tr-join{width:2px;min-height:14px;background:linear-gradient(180deg,var(--b1),rgba(255,255,255,.04));margin-left:4px;margin-top:-2px;margin-bottom:-2px;border-radius:1px}
+.light .kz-tr-card{border-color:rgba(30,80,130,.2);background:linear-gradient(165deg,#f0f4fa,#e8ecf4)}
+.light .kz-trail-empty{background:rgba(255,255,255,.5)}
 /* BIAS BAR */
 .kz-toprow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:stretch;margin-bottom:0}
 .bias-bar{display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:6px;border:1px solid var(--b1);background:var(--s2)}
@@ -522,6 +611,20 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 /* SECTION HEADERS */
 .kz-section-hdr{font-size:8px;color:var(--t2);letter-spacing:1.8px;text-transform:uppercase;margin-bottom:7px;display:flex;align-items:center;gap:6px}
 .kz-section-hdr::after{content:'';flex:1;height:1px;background:var(--b1)}
+/* kill zones — session meta + playbook emphasis */
+.kz-meta-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:8px;color:var(--t2);margin-top:2px}
+#kz-ist-clock{font-variant-numeric:tabular-nums;font-weight:800;color:var(--t1);letter-spacing:.3px;min-width:88px}
+.kz-pill{padding:3px 9px;border-radius:10px;background:var(--s3);border:1px solid var(--b1);font-weight:700;letter-spacing:.4px}
+.kz-pill.go{color:var(--go);border-color:rgba(0,232,122,.35);background:rgba(0,232,122,.06)}
+.kz-pill.am{color:var(--am);border-color:rgba(255,170,0,.35);background:rgba(255,170,0,.06)}
+.kz-pill.st{color:var(--st);border-color:rgba(255,51,85,.35);background:rgba(255,51,85,.05)}
+.kz-hint{flex:1;min-width:120px;text-align:right;color:var(--t3);font-size:7.5px;letter-spacing:.2px}
+.kz-sess-wrap{margin-top:6px}
+.kz-sess-bar{height:5px;border-radius:3px;background:var(--s3);overflow:hidden;border:1px solid var(--b1)}
+.kz-sess-fill{height:100%;background:linear-gradient(90deg,rgba(255,170,0,.85),rgba(0,232,122,.75),rgba(56,190,255,.5));width:0%;transition:width .45s ease;border-radius:2px}
+.kz-sess-lbl{display:flex;justify-content:space-between;font-size:7px;color:var(--t3);margin-top:3px;letter-spacing:.4px}
+.zcard.kz-card-live{box-shadow:inset 0 0 0 2px currentColor,0 4px 18px rgba(0,0,0,.12)}
+.zcard.kz-card-live .zt{text-decoration:underline;text-underline-offset:2px}
 
 /* LEVELS */
 .lv2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -773,11 +876,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .ir-ce.ir-live .ir-live-dot{background:var(--go);box-shadow:0 0 4px var(--go);animation:ir-pulse 1.8s infinite}
 .ir-pe.ir-live .ir-live-dot{background:var(--st);box-shadow:0 0 4px var(--st);animation:ir-pulse 1.8s infinite}
 /* Col: Direction badge */
-.irc-dir{flex:0 0 82px}
+.irc-dir{flex:0 0 92px;display:flex;flex-direction:column;gap:4px}
 .irc-badge{display:inline-block;font-size:8.5px;font-weight:800;letter-spacing:.7px;padding:3px 8px;border-radius:3px;white-space:nowrap}
 .irc-badge.ce{background:rgba(0,232,122,.14);color:var(--go);border:1px solid rgba(0,232,122,.32)}
 .irc-badge.pe{background:rgba(255,51,85,.12);color:var(--st);border:1px solid rgba(255,51,85,.28)}
-.irc-time{font-size:7.5px;color:var(--t1);margin-top:4px;font-weight:500}
+.irc-when{margin-top:2px;padding:5px 7px;border-radius:4px;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.06)}
+.irc-when-lbl{font-size:6px;font-weight:800;letter-spacing:1.1px;color:var(--t2);text-transform:uppercase;margin-bottom:3px}
+.irc-time{font-size:12px;font-weight:800;color:var(--am);font-variant-numeric:tabular-nums;letter-spacing:.5px;line-height:1.2}
 /* Col: Instrument */
 .irc-inst{flex:0 0 120px}
 .irc-sym{font-size:7.5px;font-weight:700;color:var(--t2);letter-spacing:.8px}
@@ -1181,6 +1286,16 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
         </div>
       </div>
 
+      <div class="kz-meta-row">
+        <span id="kz-ist-clock">—</span>
+        <span id="kz-gate-pill" class="kz-pill am">GATES —</span>
+        <span id="kz-hint" class="kz-hint"></span>
+      </div>
+      <div class="kz-sess-wrap">
+        <div class="kz-sess-bar" title="Progress through cash session (9:15–15:30 IST)"><div class="kz-sess-fill" id="kz-sess-fill"></div></div>
+        <div class="kz-sess-lbl"><span>9:15 open</span><span id="kz-sess-pct">—</span><span>15:30 close</span></div>
+      </div>
+
       <!-- Bias + Timer row -->
       <div class="kz-toprow">
         <div class="bias-bar">
@@ -1201,13 +1316,20 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
     <!-- Row 2: CE/PE Opportunity Scanner -->
     <div style="flex-shrink:0">
-      <div class="kz-section-hdr">⚡ CE / PE OPPORTUNITY SCANNER</div>
-      <div class="kz-grid" id="kz-cepe">
-        <div class="cepe-card avoid" style="grid-column:1/-1;text-align:center;padding:20px;border-radius:6px">
+      <div class="kz-section-hdr kz-section-hdr--cepe">CE / PE OPPORTUNITY SCANNER</div>
+      <div class="cepe-grid" id="kz-cepe">
+        <div class="cepe-card avoid cepe-span-full" style="text-align:center;padding:20px;border-radius:10px">
           <div style="font-size:16px;margin-bottom:6px;opacity:.4">📊</div>
           <div style="font-size:8.5px;color:var(--t2)">Live option chain data needed</div>
           <div style="font-size:8px;color:var(--t3);margin-top:3px">Available during market hours (9:15 – 15:30 IST)</div>
         </div>
+      </div>
+    </div>
+
+    <div style="flex-shrink:0">
+      <div class="kz-trail-hdr">INDEX RADAR · TODAY&rsquo;S TRAIL</div>
+      <div id="kz-ix-trail" class="kz-trail-wrap">
+        <div class="kz-trail-empty">No Index Radar signals yet today. When an alert fires, you&rsquo;ll see <b>signal time</b> → <b>in trade</b> → <b>target hit</b> or <b>stop hit</b> here.</div>
       </div>
     </div>
 
@@ -1216,10 +1338,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       <div style="display:flex;flex-direction:column;gap:0">
         <div class="kz-section-hdr">SESSION PLAYBOOK</div>
         <div id="kzcards" style="display:flex;flex-direction:column;gap:4px">
-          <div class="zcard am"><div class="zt">9:15–10:00  DISCOVERY</div><div class="zd">Watch only. Mark ORB high / low. No entries. Algo traps active. Spreads wide.</div></div>
-          <div class="zcard go"><div class="zt">10:00–13:30  ✦ TREND (BEST)</div><div class="zd">All 5 gates must pass. Full position size. Momentum entries only.</div></div>
-          <div class="zcard dm"><div class="zt">13:30–14:30  DRIFT</div><div class="zd">No new entries. Manage open trades. Book partial profits here.</div></div>
-          <div class="zcard st"><div class="zt">14:30–15:30  EXPIRY</div><div class="zd">Exit all. OI distortion. Max Pain gravity. Avoid new CE/PE buys.</div></div>
+          <div class="zcard am" id="kz-card-d"><div class="zt">9:15–10:00  DISCOVERY</div><div class="zd">Watch only. Mark ORB high / low. No entries. Algo traps active. Spreads wide.</div></div>
+          <div class="zcard go" id="kz-card-t"><div class="zt">10:00–13:30  ✦ TREND (BEST)</div><div class="zd">All 5 gates must pass. Full position size. Momentum entries only.</div></div>
+          <div class="zcard dm" id="kz-card-r"><div class="zt">13:30–14:30  DRIFT</div><div class="zd">No new entries. Manage open trades. Book partial profits here.</div></div>
+          <div class="zcard st" id="kz-card-e"><div class="zt">14:30–15:30  EXPIRY</div><div class="zd">Exit all. OI distortion. Max Pain gravity. Avoid new CE/PE buys.</div></div>
         </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:12px">
@@ -1579,8 +1701,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       <div style="width:1px;background:var(--b1);height:24px;margin:0 4px"></div>
       <div class="ir-stat"><span class="ir-stat-val" id="ir-cnt-pnl" style="color:var(--t2);font-size:12px">—</span><span class="ir-stat-lbl">NET P&L</span></div>
       <div style="margin-left:auto;font-size:7.5px;color:var(--t2);text-align:right;line-height:1.6">
-        CE: index moves 0.20–0.30% in 5 min · after 10 AM · 1-min confirm · with 30-min trend<br>
-        PE: same + PCR > 1.4 required · T1 = +50% · SL = −30% · NIFTY lot 25 · BANKNIFTY lot 15
+        CE: 5m impulse band + 30m trend <em>supports</em> direction · PCR ≥ pcr_ce_min · Nifty/BN aligned · quality floor<br>
+        PE: same + PCR > 1.4 + weak Nifty day · high VIX skips weak CE · T1/SL on index per config · lots 25 / 15
       </div>
     </div>
 
@@ -1607,7 +1729,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
       <div style="text-align:center;padding:50px 16px;color:var(--t2);font-size:9px;line-height:2" id="ir-empty">
         <div style="font-size:28px;opacity:.25;margin-bottom:10px">📡</div>
         <div style="font-size:10px;font-weight:700;margin-bottom:4px">Waiting for index spike signals...</div>
-        <div style="font-size:8px;color:var(--t3)">Fires when NIFTY or BANKNIFTY moves ≥0.20% in 5 min with trend confirmation</div>
+        <div style="font-size:8px;color:var(--t3)">Stricter trend + PCR + cross-index filters — tune INDEX_RADAR in config.py</div>
         <div style="font-size:8px;color:var(--t3)">CE recommended on up moves · PE recommended on down moves</div>
       </div>
     </div>
@@ -1622,6 +1744,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
         <input type="date" id="ir-hist-to" class="jfi" style="font-size:8px;padding:3px 6px;background:var(--s2);border:1px solid var(--b1);color:var(--t0);border-radius:3px">
         <button onclick="irLoadHistory()" style="padding:3px 14px;font-family:var(--fn);font-size:8px;font-weight:700;letter-spacing:1px;border:1px solid var(--bl);color:var(--bl);background:rgba(0,140,255,.08);border-radius:3px;cursor:pointer">▶ LOAD</button>
         <button onclick="irRunBacktest()" id="ir-bt-btn" style="padding:3px 12px;font-family:var(--fn);font-size:8px;font-weight:700;letter-spacing:.5px;border:1px solid #f0a500;color:#f0a500;background:rgba(240,165,0,.08);border-radius:3px;cursor:pointer">⚡ BACKTEST</button>
+        <button onclick="irTrainMl()" id="ir-ml-btn" style="padding:3px 10px;font-family:var(--fn);font-size:8px;font-weight:700;letter-spacing:.5px;border:1px solid var(--bl);color:var(--bl);background:rgba(80,160,255,.08);border-radius:3px;cursor:pointer;margin-left:4px">ML TRAIN</button>
         <div id="ir-hist-stats" style="font-size:8px;color:var(--t2);margin-left:4px"></div>
       </div>
       <div style="overflow-y:auto;flex:1;min-height:0" id="ir-hist-list">
@@ -3697,6 +3820,8 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
     {id:'kzb-r', start:810, end:870,  label:'DRIFT',       cls:'am',  theta:'bad', thetaMsg:'⚠ Drift zone — no new entries, theta accelerating'},
     {id:'kzb-e', start:870, end:930,  label:'EXPIRY',      cls:'st',  theta:'bad', thetaMsg:'✗ Expiry zone — avoid buying CE/PE, theta crush active'},
   ];
+  const ZONE_TO_CARD = { 'kzb-d':'kz-card-d', 'kzb-t':'kz-card-t', 'kzb-r':'kz-card-r', 'kzb-e':'kz-card-e' };
+  const SESS_START = 555, SESS_END = 930;
 
   function istNow() {
     return new Date(new Date().toLocaleString('en-US', {timeZone:'Asia/Kolkata'}));
@@ -3704,12 +3829,57 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
 
   function getZoneMin(d) { return d.getHours() * 60 + d.getMinutes(); }
 
+  function highlightPlaybook(zoneId) {
+    ['kz-card-d','kz-card-t','kz-card-r','kz-card-e'].forEach(id => {
+      const c = document.getElementById(id);
+      if(c) c.classList.remove('kz-card-live');
+    });
+    const cid = ZONE_TO_CARD[zoneId];
+    if(cid) {
+      const c = document.getElementById(cid);
+      if(c) c.classList.add('kz-card-live');
+    }
+  }
+
   function updateZoneTimer() {
     const now = istNow();
     const m   = getZoneMin(now);
-    const isOpen = now.getDay() >= 1 && now.getDay() <= 5 && m >= 555 && m < 930;
+    const isOpen = now.getDay() >= 1 && now.getDay() <= 5 && m >= SESS_START && m < SESS_END;
 
-    // Highlight active zone bar segment
+    const clockEl = document.getElementById('kz-ist-clock');
+    if(clockEl) {
+      const hh = String(now.getHours()).padStart(2,'0');
+      const mi = String(now.getMinutes()).padStart(2,'0');
+      const sc = String(now.getSeconds()).padStart(2,'0');
+      clockEl.textContent = `${hh}:${mi}:${sc} IST`;
+    }
+    const fillEl = document.getElementById('kz-sess-fill');
+    const pctEl  = document.getElementById('kz-sess-pct');
+    if(fillEl && pctEl) {
+      if(isOpen) {
+        const pct = Math.max(0, Math.min(100, ((m - SESS_START) / (SESS_END - SESS_START)) * 100));
+        fillEl.style.width = pct.toFixed(2) + '%';
+        pctEl.textContent = `${Math.round(pct)}% through session`;
+      } else {
+        fillEl.style.width = '0%';
+        pctEl.textContent = '—';
+      }
+    }
+    const pill = document.getElementById('kz-gate-pill');
+    if(pill) {
+      const g = window._lastGateSummary || {};
+      const pc = g.pass_count;
+      const vd = String(g.verdict || '').toUpperCase();
+      if(isOpen && pc != null && pc !== '') {
+        const n = Number(pc);
+        pill.textContent = `${n}/5 · ${vd || 'WAIT'}`;
+        pill.className = 'kz-pill ' + (n >= 5 && vd !== 'NO TRADE' ? 'go' : n >= 3 ? 'am' : 'st');
+      } else {
+        pill.textContent = 'GATES —';
+        pill.className = 'kz-pill am';
+      }
+    }
+
     ZONES.forEach(z => {
       const el = document.getElementById(z.id);
       if(el) el.classList.remove('zone-now');
@@ -3720,10 +3890,11 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
     const thetaEl   = document.getElementById('kz-theta');
 
     if(!isOpen) {
-      if(curZoneEl) curZoneEl.textContent = now.getDay() === 0 || now.getDay() === 6 ? 'WEEKEND' : m < 555 ? 'PRE-MARKET' : 'MARKET CLOSED';
+      if(curZoneEl) curZoneEl.textContent = now.getDay() === 0 || now.getDay() === 6 ? 'WEEKEND' : m < SESS_START ? 'PRE-MARKET' : 'MARKET CLOSED';
       if(timerEl)   timerEl.textContent = '';
       if(thetaEl)   { thetaEl.className='theta-warn ok'; thetaEl.textContent='Market closed — review setups for tomorrow'; }
-      updateBias(null, null, null);
+      highlightPlaybook('');
+      updateBias(null, null, null, null);
       return;
     }
 
@@ -3736,19 +3907,19 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
     if(activeZone) {
       const el = document.getElementById(activeZone.id);
       if(el) el.classList.add('zone-now');
-      if(curZoneEl) curZoneEl.textContent = activeZone.label.replace('✦ ','✦ ');
+      highlightPlaybook(activeZone.id);
+      if(curZoneEl) curZoneEl.textContent = activeZone.label;
 
-      // Countdown to next zone
       if(nextZone && timerEl) {
         const totalSecs = (nextZone.start - m) * 60 - now.getSeconds();
         const mm = String(Math.floor(totalSecs / 60)).padStart(2,'0');
-        const ss = String(totalSecs % 60).padStart(2,'0');
+        const ss = String(Math.max(0, totalSecs % 60)).padStart(2,'0');
         timerEl.textContent = `${mm}:${ss}`;
-        if(curZoneEl) curZoneEl.textContent = activeZone.label.replace('✦ ','✦ ') + ' → ' + nextZone.label.replace('✦ ','');
+        if(curZoneEl) curZoneEl.textContent = activeZone.label + ' → ' + nextZone.label.replace('✦ ','');
       } else if(timerEl) {
-        const totalSecs = (930 - m) * 60 - now.getSeconds();
+        const totalSecs = (SESS_END - m) * 60 - now.getSeconds();
         const mm = String(Math.floor(totalSecs / 60)).padStart(2,'0');
-        const ss = String(totalSecs % 60).padStart(2,'0');
+        const ss = String(Math.max(0, totalSecs % 60)).padStart(2,'0');
         timerEl.textContent = `${mm}:${ss}`;
         if(curZoneEl) curZoneEl.textContent = 'EXPIRY — CLOSE ALL';
       }
@@ -3760,7 +3931,7 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
     }
   }
 
-  function updateBias(vix, pcr, verdict) {
+  function updateBias(vix, pcr, verdict, passCount) {
     const biasEl  = document.getElementById('kz-bias');
     const reasonEl = document.getElementById('kz-bias-reason');
     const metaEl  = document.getElementById('kz-bias-meta');
@@ -3769,13 +3940,15 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
     if(vix === null) {
       biasEl.textContent = '—'; biasEl.className = 'bias-val neutral';
       if(reasonEl) reasonEl.textContent = 'Market closed';
+      if(metaEl) metaEl.textContent = '';
       return;
     }
 
     let bias = 'NEUTRAL', cls = 'neutral', reason = '';
+    const pcn = passCount != null && passCount !== '' ? Number(passCount) : null;
     if(verdict === 'NO TRADE' || vix > 20) {
-      bias = 'AVOID'; cls = 'neutral';
-      reason = vix > 20 ? `VIX ${vix.toFixed(1)} — too high for option buying` : 'Gate fail — stand down';
+      bias = 'AVOID'; cls = 'avoid';
+      reason = vix > 20 ? `VIX ${vix.toFixed(1)} — elevated; size down or skip buys` : 'Gate fail — stand down';
     } else if(pcr >= 1.2) {
       bias = 'BUY CE'; cls = 'ce';
       reason = `PCR ${pcr.toFixed(2)} bullish — put writers dominant`;
@@ -3793,7 +3966,40 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
     biasEl.textContent = bias;
     biasEl.className = 'bias-val ' + cls;
     if(reasonEl) reasonEl.textContent = reason;
-    if(metaEl)   metaEl.textContent = vix ? `VIX ${vix.toFixed(1)}` : '';
+    const metaBits = [];
+    if(vix) metaBits.push(`VIX ${vix.toFixed(1)}`);
+    if(pcn != null && !isNaN(pcn)) metaBits.push(`${pcn}/5 gates`);
+    if(metaEl) metaEl.textContent = metaBits.join(' · ');
+  }
+
+  function kzGateStripHTML(signals) {
+    const gates = (signals && signals.gates) ? signals.gates : {};
+    const pc = signals != null && signals.pass_count != null ? Number(signals.pass_count) : NaN;
+    let dots = '';
+    for(let n = 1; n <= 5; n++) {
+      const g = gates[n] || gates[String(n)];
+      const st = (g && g.state) ? g.state : 'off';
+      const cls = st === 'go' ? 'on-go' : st === 'st' ? 'on-st' : st === 'am' ? 'on-am' : st === 'wt' ? 'on-wt' : 'on-off';
+      const title = ((g && g.name) ? ('G' + n + ': ' + g.name) : ('Gate ' + n)).replace(/"/g, '');
+      dots += '<span class="cepe-gdot ' + cls + '" title="' + title + '">' + n + '</span>';
+    }
+    const sum = !isNaN(pc) ? (pc + '/5') : '—/5';
+    return '<div class="cepe-gatebar cepe-span-full"><span class="cepe-gatebar-lbl">⚡ 5-GATE ENGINE</span><div class="cepe-gdots">' + dots + '</div><span class="cepe-gatebar-sum">' + sum + '</span></div>';
+  }
+  function kzSigMeterPct(biasLabel) {
+    const b = String(biasLabel || '').toUpperCase();
+    if(b === 'STRONG') return 100;
+    if(b === 'MODERATE') return 58;
+    return 30;
+  }
+  function kzOiLabel(chain) {
+    const tc = Number(chain && chain.total_call_oi != null ? chain.total_call_oi : 0);
+    const tp = Number(chain && chain.total_put_oi != null ? chain.total_put_oi : 0);
+    const oiTot = tc + tp;
+    if(!oiTot) return '—';
+    if(oiTot >= 1e7) return (oiTot / 1e7).toFixed(2) + ' Cr';
+    if(oiTot >= 1e5) return (oiTot / 1e5).toFixed(1) + ' L';
+    return (oiTot / 1e3).toFixed(0) + 'K';
   }
 
   function renderCEPE(chain, indices, signals) {
@@ -3807,10 +4013,13 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
     const vix      = indices?.vix || 0;
     const verdict  = signals?.verdict || 'WAIT';
 
+    const hintEl = document.getElementById('kz-hint');
     if(!nifty || !atm) {
-      box.innerHTML = `<div class="cepe-card avoid" style="grid-column:1/-1;text-align:center;padding:16px">
-        <div style="font-size:11px;margin-bottom:4px">📊</div>
-        <div style="font-size:8px;color:var(--t2)">Waiting for live option chain data (market hours only)</div>
+      if(hintEl) hintEl.textContent = '';
+      box.innerHTML = `<div class="cepe-card cepe-wait cepe-span-full" style="text-align:center;padding:22px 16px;box-shadow:0 6px 20px rgba(0,0,0,.2)">
+        <div style="font-size:20px;margin-bottom:8px;opacity:.55">📊</div>
+        <div style="font-size:9px;font-weight:700;color:var(--t1);letter-spacing:.3px">Waiting for live option chain</div>
+        <div style="font-size:8px;color:var(--t3);margin-top:5px">Connect during market hours (9:15 – 15:30 IST)</div>
       </div>`;
       return;
     }
@@ -3845,12 +4054,21 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
     const ceT2     = Math.round(ceEntry * 2.00);
     const ceRR     = ((ceT1 - ceEntry) / Math.max(ceEntry - ceSL, 1)).toFixed(1);
     const ceBias   = pcr >= 1.1 ? 'STRONG' : pcr >= 0.9 ? 'MODERATE' : 'WEAK';
-    const ceReason = `PCR ${pcr.toFixed(2)} · Nifty ${nifty > maxPain ? 'above' : 'below'} Max Pain ${maxPain} · VIX ${vix.toFixed(1)}`;
+    const ceReason = `PCR ${pcr.toFixed(2)} · Nifty ${nifty > maxPain ? 'above' : 'below'} Max Pain ${maxPain.toLocaleString?.('en-IN')||maxPain} · VIX ${vix.toFixed(1)}`;
 
+    const peSL     = Math.round(peEntry * 0.70);
     const peT1     = Math.round(peEntry * 1.50);
     const peT2     = Math.round(peEntry * 2.00);
     const peRR     = ((peT1 - peEntry) / Math.max(peEntry - peSL, 1)).toFixed(1);
-    const peReason = `PCR ${pcr.toFixed(2)} · ${nifty < maxPain ? 'Below' : 'Above'} Max Pain ${maxPain} · VIX ${vix.toFixed(1)}`;
+    const peBias   = pcr <= 0.9 ? 'STRONG' : pcr <= 1.1 ? 'MODERATE' : 'WEAK';
+    const peReason = `PCR ${pcr.toFixed(2)} · ${nifty < maxPain ? 'Below' : 'Above'} Max Pain ${maxPain.toLocaleString?.('en-IN')||maxPain} · VIX ${vix.toFixed(1)}`;
+
+    if(hintEl) {
+      const sym = chain?.symbol || 'NIFTY';
+      const exp = chain?.expiry || '';
+      const mpD = maxPain && nifty ? Math.round(Math.abs(nifty - maxPain)) : 0;
+      hintEl.textContent = exp ? `${sym} · ${exp} · |Spot−MP| ${mpD} pts` : (mpD ? `|Spot−MP| ${mpD} pts` : '');
+    }
 
     // Straddle setup
     const strEntry = ceEntry + peEntry;
@@ -3858,76 +4076,111 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
     const strBE_dn = atm - strEntry;
 
     const rr_c = r => parseFloat(r) >= 1.5 ? 'go' : 'am';
+    const oiFoot = kzOiLabel(chain);
+    const spotStr = Math.round(nifty).toLocaleString('en-IN');
+    const warnMsg = verdict === 'NO TRADE'
+      ? '<b>Stand down.</b> Signal gates are not green — do not add fresh CE/PE until the engine clears (watch 5-gate strip below).'
+      : ('<b>Volatility warning.</b> VIX ' + vix.toFixed(1) + ' — cut size or avoid naked option buys.');
     box.innerHTML = `
-      ${isAvoid ? `<div style="grid-column:1/-1;padding:7px 12px;border-radius:5px;background:rgba(255,51,85,.07);border:1px solid rgba(255,51,85,.18);color:var(--st);font-size:8px;display:flex;align-items:center;gap:8px">
-        <span style="font-size:11px">⚠</span>
-        <span>${verdict === 'NO TRADE' ? 'Signal gates failing — avoid new CE/PE positions until gates clear' : `VIX ${vix.toFixed(1)} elevated — option buying is high-risk`}</span>
-      </div>` : ''}
-      <div class="cepe-card ce ${isAvoid ? 'avoid' : ''}">
-        <div class="cepe-hdr">
-          <span class="cepe-type ce">📈 BUY CE</span>
-          <span class="cepe-badge ${ceBias.toLowerCase()}">${ceBias} SIGNAL</span>
+      ${isAvoid ? `<div class="cepe-avoid-ban cepe-span-full"><span style="font-size:15px;line-height:1">⚠</span><span>${warnMsg}</span></div>` : ''}
+      ${kzGateStripHTML(signals)}
+      <div class="cepe-card ce">
+        <div class="cepe-card-inner">
+          <div class="cepe-hdr">
+            <span class="cepe-type ce">BUY CE</span>
+            <span class="cepe-badge ${ceBias.toLowerCase()}">${ceBias} SIGNAL</span>
+          </div>
+          <div class="cepe-sigrow">
+            <span class="cepe-siglbl">Setup conviction (PCR skew)</span>
+            <div class="cepe-sigtrack ce"><div class="cepe-sigfill" style="width:${kzSigMeterPct(ceBias)}%"></div></div>
+          </div>
+          <div class="cepe-strike">${ceStrike.toLocaleString('en-IN')} <small>CE · 1 strike OTM</small></div>
+          <div class="cepe-divider"></div>
+          <div class="cepe-pricegrid">
+            <div class="cepe-kv"><span class="cepe-lbl">Entry</span><span class="cepe-val">₹${ceEntry}</span></div>
+            <div class="cepe-kv"><span class="cepe-lbl">Stop</span><span class="cepe-val st">₹${ceSL} <small>−30%</small></span></div>
+            <div class="cepe-kv"><span class="cepe-lbl">Target 1</span><span class="cepe-val go">₹${ceT1} <small>+50%</small></span></div>
+            <div class="cepe-kv"><span class="cepe-lbl">Target 2</span><span class="cepe-val go">₹${ceT2} <small>+100%</small></span></div>
+          </div>
+          <div class="cepe-row cepe-row--wide"><span class="cepe-lbl">Risk : reward</span><span class="cepe-val ${rr_c(ceRR)}">${ceRR}:1</span></div>
+          <div class="cepe-pnl">
+            <span style="font-size:8px;color:var(--t3);font-weight:700;letter-spacing:.3px">1 lot @ T1</span>
+            <span style="font-size:12px;font-weight:800;color:var(--go)">+₹${((ceT1-ceEntry)*lotSize).toLocaleString('en-IN')}</span>
+          </div>
+          <div class="cepe-metrics">
+            <span><b>PCR</b> ${pcr.toFixed(2)}</span><span><b>VIX</b> ${vix.toFixed(1)}</span><span><b>SPOT</b> ${spotStr}</span><span><b>OI</b> ${oiFoot}</span>
+          </div>
+          <div class="cepe-reason">${ceReason}</div>
         </div>
-        <div class="cepe-strike">${ceStrike} <span style="font-size:11px;font-weight:600;color:var(--t2)">CE</span></div>
-        <div class="cepe-divider"></div>
-        <div class="cepe-row"><span class="cepe-lbl">Entry (est.)</span><span class="cepe-val">₹${ceEntry}</span></div>
-        <div class="cepe-row"><span class="cepe-lbl">Stop Loss</span><span class="cepe-val st">₹${ceSL} <span style="opacity:.7;font-weight:400">(−30%)</span></span></div>
-        <div class="cepe-row"><span class="cepe-lbl">Target 1</span><span class="cepe-val go">₹${ceT1} <span style="opacity:.7;font-weight:400">(+40%)</span></span></div>
-        <div class="cepe-row"><span class="cepe-lbl">Target 2</span><span class="cepe-val go">₹${ceT2} <span style="opacity:.7;font-weight:400">(+90%)</span></span></div>
-        <div class="cepe-row"><span class="cepe-lbl">Risk:Reward</span><span class="cepe-val ${rr_c(ceRR)}">${ceRR}:1</span></div>
-        <div class="cepe-pnl">
-          <span style="font-size:7.5px;color:var(--t2)">1 LOT P&L at T1</span>
-          <span style="font-size:9px;font-weight:700;color:var(--go)">+₹${((ceT1-ceEntry)*lotSize).toLocaleString()}</span>
-        </div>
-        <div class="cepe-reason">${ceReason}</div>
       </div>
-      <div class="cepe-card pe ${isAvoid ? 'avoid' : ''}">
-        <div class="cepe-hdr">
-          <span class="cepe-type pe">📉 BUY PE</span>
-          <span class="cepe-badge ${peBias.toLowerCase()}">${peBias} SIGNAL</span>
+      <div class="cepe-card pe">
+        <div class="cepe-card-inner">
+          <div class="cepe-hdr">
+            <span class="cepe-type pe">BUY PE</span>
+            <span class="cepe-badge ${peBias.toLowerCase()}">${peBias} SIGNAL</span>
+          </div>
+          <div class="cepe-sigrow">
+            <span class="cepe-siglbl">Setup conviction (PCR skew)</span>
+            <div class="cepe-sigtrack pe"><div class="cepe-sigfill" style="width:${kzSigMeterPct(peBias)}%"></div></div>
+          </div>
+          <div class="cepe-strike">${peStrike.toLocaleString('en-IN')} <small>PE · 1 strike OTM</small></div>
+          <div class="cepe-divider"></div>
+          <div class="cepe-pricegrid">
+            <div class="cepe-kv"><span class="cepe-lbl">Entry</span><span class="cepe-val">₹${peEntry}</span></div>
+            <div class="cepe-kv"><span class="cepe-lbl">Stop</span><span class="cepe-val st">₹${peSL} <small>−30%</small></span></div>
+            <div class="cepe-kv"><span class="cepe-lbl">Target 1</span><span class="cepe-val go">₹${peT1} <small>+50%</small></span></div>
+            <div class="cepe-kv"><span class="cepe-lbl">Target 2</span><span class="cepe-val go">₹${peT2} <small>+100%</small></span></div>
+          </div>
+          <div class="cepe-row cepe-row--wide"><span class="cepe-lbl">Risk : reward</span><span class="cepe-val ${rr_c(peRR)}">${peRR}:1</span></div>
+          <div class="cepe-pnl">
+            <span style="font-size:8px;color:var(--t3);font-weight:700;letter-spacing:.3px">1 lot @ T1</span>
+            <span style="font-size:12px;font-weight:800;color:var(--go)">+₹${((peT1-peEntry)*lotSize).toLocaleString('en-IN')}</span>
+          </div>
+          <div class="cepe-metrics">
+            <span><b>PCR</b> ${pcr.toFixed(2)}</span><span><b>VIX</b> ${vix.toFixed(1)}</span><span><b>SPOT</b> ${spotStr}</span><span><b>OI</b> ${oiFoot}</span>
+          </div>
+          <div class="cepe-reason">${peReason}</div>
         </div>
-        <div class="cepe-strike">${peStrike} <span style="font-size:11px;font-weight:600;color:var(--t2)">PE</span></div>
-        <div class="cepe-divider"></div>
-        <div class="cepe-row"><span class="cepe-lbl">Entry (est.)</span><span class="cepe-val">₹${peEntry}</span></div>
-        <div class="cepe-row"><span class="cepe-lbl">Stop Loss</span><span class="cepe-val st">₹${peSL} <span style="opacity:.7;font-weight:400">(−30%)</span></span></div>
-        <div class="cepe-row"><span class="cepe-lbl">Target 1</span><span class="cepe-val go">₹${peT1} <span style="opacity:.7;font-weight:400">(+40%)</span></span></div>
-        <div class="cepe-row"><span class="cepe-lbl">Target 2</span><span class="cepe-val go">₹${peT2} <span style="opacity:.7;font-weight:400">(+90%)</span></span></div>
-        <div class="cepe-row"><span class="cepe-lbl">Risk:Reward</span><span class="cepe-val ${rr_c(peRR)}">${peRR}:1</span></div>
-        <div class="cepe-pnl">
-          <span style="font-size:7.5px;color:var(--t2)">1 LOT P&L at T1</span>
-          <span style="font-size:9px;font-weight:700;color:var(--go)">+₹${((peT1-peEntry)*lotSize).toLocaleString()}</span>
-        </div>
-        <div class="cepe-reason">${peReason}</div>
       </div>
-      <div class="cepe-card" style="border-color:rgba(56,190,255,.18);background:rgba(56,190,255,.03)">
-        <div class="cepe-hdr">
-          <span class="cepe-type" style="color:rgba(56,190,255,.9);font-size:9px;font-weight:800;letter-spacing:1px">⇄ ATM STRADDLE</span>
-          <span class="cepe-badge hedge">HEDGE</span>
+      <div class="cepe-card cepe-card--sd">
+        <div class="cepe-card-inner">
+          <div class="cepe-hdr">
+            <span class="cepe-type" style="color:rgba(120,210,255,.95);font-size:9px;font-weight:800;letter-spacing:1.2px">ATM STRADDLE</span>
+            <span class="cepe-badge hedge">HEDGE</span>
+          </div>
+          <div class="cepe-strike" style="color:rgba(143,216,255,.95)">${atm.toLocaleString('en-IN')} <small>ATM</small></div>
+          <div class="cepe-divider"></div>
+          <div class="cepe-pricegrid">
+            <div class="cepe-kv"><span class="cepe-lbl">Premium / lot</span><span class="cepe-val">₹${strEntry}</span></div>
+            <div class="cepe-kv"><span class="cepe-lbl">Range ±</span><span class="cepe-val am">${strEntry} pts</span></div>
+          </div>
+          <div class="cepe-row"><span class="cepe-lbl">Break-even ↑</span><span class="cepe-val go">${strBE_up.toLocaleString('en-IN')}</span></div>
+          <div class="cepe-row"><span class="cepe-lbl">Break-even ↓</span><span class="cepe-val st">${strBE_dn.toLocaleString('en-IN')}</span></div>
+          <div class="cepe-reason">When direction is unclear: you need a clean break beyond either side before expiry decay wins.</div>
         </div>
-        <div class="cepe-strike" style="color:rgba(56,190,255,.85)">${atm}</div>
-        <div class="cepe-divider"></div>
-        <div class="cepe-row"><span class="cepe-lbl">Total cost</span><span class="cepe-val">₹${strEntry} / lot</span></div>
-        <div class="cepe-row"><span class="cepe-lbl">Break-even ↑</span><span class="cepe-val go">${strBE_up}</span></div>
-        <div class="cepe-row"><span class="cepe-lbl">Break-even ↓</span><span class="cepe-val st">${strBE_dn}</span></div>
-        <div class="cepe-row"><span class="cepe-lbl">Range needed</span><span class="cepe-val am">±${strEntry} pts</span></div>
-        <div class="cepe-reason">Use when direction is unclear. Profit if Nifty breaks beyond either break-even before expiry.</div>
       </div>
-      <div class="cepe-card" style="border-color:var(--b1);background:var(--s2)">
-        <div style="font-size:8px;color:var(--t2);letter-spacing:1.2px;margin-bottom:9px;font-weight:700">📌 OPTION RULES</div>
-        <div style="display:flex;flex-direction:column;gap:5px">
-          ${[
-            ['BUY ONLY','Trend zone 10:00 – 13:30'],
-            ['STRIKE','ATM or 1 strike OTM only'],
-            ['STOP','Exit if premium falls 30%'],
-            ['BOOK','50% at T1, trail rest to T2'],
-            ['VIX > 20','Reduce size by 50%'],
-            ['EXPIRY','Never hold CE/PE to close'],
-          ].map(([k,v])=>`<div class="cepe-row"><span style="font-size:7.5px;color:var(--t1);font-weight:700;min-width:62px">${k}</span><span style="font-size:7.5px;color:var(--t2)">${v}</span></div>`).join('')}
+      <div class="cepe-card cepe-card--rules">
+        <div class="cepe-card-inner">
+          <div class="cepe-hdr">
+            <span class="cepe-type" style="color:var(--am);font-size:9px;font-weight:800;letter-spacing:1.2px">OPTION RULES</span>
+            <span class="cepe-badge moderate">CHECKLIST</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            ${[
+            ['BUY WINDOW','Trend zone 10:00 – 13:30 only'],
+            ['STRIKE','ATM or 1 strike OTM'],
+            ['STOP','Exit if premium −30%'],
+            ['BOOK','50% at T1 · trail to T2'],
+            ['VIX > 20','Half size or skip'],
+            ['EXPIRY','No hold to bell'],
+            ].map(([k,v])=>`<div class="cepe-row" style="margin-bottom:0"><span class="cepe-lbl" style="font-weight:800;color:var(--t1);min-width:76px">${k}</span><span class="cepe-val" style="font-weight:600;color:var(--t2)">${v}</span></div>`).join('')}
+          </div>
         </div>
       </div>
     `;
 
-    updateBias(vix, pcr, verdict);
+    const psg = signals && signals.pass_count != null ? Number(signals.pass_count) : null;
+    updateBias(vix, pcr, verdict, psg);
   }
 
   // Subscribe to live data
@@ -3935,9 +4188,69 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
     renderCEPE(chain, indices, signals);
   };
 
+  window._kzTrailRender = function(raw) {
+    const host = document.getElementById('kz-ix-trail');
+    if(!host) return;
+    const sigs = Array.isArray(raw) ? raw : [];
+    if(!sigs.length) {
+      host.innerHTML = '<div class="kz-trail-empty">No Index Radar signals yet today. When an alert fires, you&rsquo;ll see <b>signal time</b> → <b>in trade</b> → <b>target hit</b> or <b>stop hit</b> here.</div>';
+      return;
+    }
+    const fp = n => {
+      if(n == null || n === '') return '—';
+      return Number(n) >= 100 ? Math.round(Number(n)).toLocaleString('en-IN') : Number(n).toFixed(1);
+    };
+    const rows = sigs.slice(0, 6).map(s => {
+      const isCE = s.type === 'CE';
+      const stime = (typeof ixFmtSignalTime === 'function' ? ixFmtSignalTime(s) : (s.time || s.signal_time || '—'));
+      const oc = s.outcome || '';
+      const otime = s.outcome_time || '—';
+      const lotSz = s.lot_sz || (s.symbol === 'NIFTY' ? 25 : 15);
+      let pnlStr = '—', pnlCol = 'var(--t2)', outCls = 'hit-x', outLbl = 'OPEN';
+      if(oc === 'HIT_T1' || oc === 'HIT_T2') {
+        pnlStr = '+₹' + Math.round((s.t1 - s.entry) * lotSz).toLocaleString('en-IN');
+        pnlCol = 'var(--go)'; outCls = 'hit-t'; outLbl = oc === 'HIT_T2' ? 'TARGET (T2)' : 'TARGET HIT';
+      } else if(oc === 'HIT_SL') {
+        pnlStr = '−₹' + Math.abs(Math.round((s.entry - s.sl) * lotSz)).toLocaleString('en-IN');
+        pnlCol = 'var(--st)'; outCls = 'hit-s'; outLbl = 'STOP HIT';
+      } else if(oc === 'EXPIRED') {
+        outLbl = 'EXPIRED'; pnlStr = '—'; outCls = 'hit-x';
+      } else {
+        outLbl = '';
+        pnlStr = '+₹' + Math.round((s.t1 - s.entry) * lotSz).toLocaleString('en-IN') + ' if T1';
+      }
+      const d1 = 'done', d2 = oc ? 'done' : 'wait';
+      const d3 = oc === 'HIT_SL' ? 'bad' : oc ? 'done' : 'wait';
+      const midTxt = oc
+        ? 'Model closed the idea — index moved enough vs the entry anchor for a result.'
+        : 'In trade — server checks index vs your entry anchor (±0.25% typical). Premium T1/SL are the plan.';
+      const resHtml = oc
+        ? ('<span class="kz-tr-out ' + outCls + '">' + outLbl + '</span> <span class="kz-tr-tm">@ ' + otime + '</span> · <span style="color:' + pnlCol + ';font-weight:800">' + pnlStr + '</span>')
+        : ('<span class="kz-tr-txt">Waiting for <b style="color:var(--go)">target</b> or <b style="color:var(--st)">stop</b> on the index move…</span>');
+      return (
+        '<div class="kz-tr-card">' +
+          '<div class="kz-tr-head">' +
+            '<span class="kz-tr-sym">' + (s.symbol || '—') + '</span>' +
+            '<span class="kz-tr-badge ' + (isCE ? 'ce' : 'pe') + '">' + (isCE ? 'Buy CE' : 'Buy PE') + '</span>' +
+            '<span class="kz-tr-strike">' + fp(s.strike) + ' ' + (s.type || '') + '</span>' +
+          '</div>' +
+          '<div class="kz-tr-body">' +
+            '<div class="kz-tr-row"><span class="kz-tr-dot ' + d1 + '"></span><span class="kz-tr-ph">Signal</span><span style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:6px 10px"><span class="kz-tr-timebox"><span class="kz-tr-tm-l">Time (IST)</span><span class="kz-tr-tm">' + stime + '</span></span><span class="kz-tr-txt">Alert · entry ₹' + fp(s.entry) + ' · SL ₹' + fp(s.sl) + ' · T1 ₹' + fp(s.t1) + '</span></span></div>' +
+            '<div class="kz-tr-join"></div>' +
+            '<div class="kz-tr-row"><span class="kz-tr-dot ' + d2 + '"></span><span class="kz-tr-ph">Active</span><span class="kz-tr-txt">' + midTxt + '</span></div>' +
+            '<div class="kz-tr-join"></div>' +
+            '<div class="kz-tr-row"><span class="kz-tr-dot ' + d3 + '"></span><span class="kz-tr-ph">Result</span><span>' + resHtml + '</span></div>' +
+          '</div>' +
+        '</div>'
+      );
+    });
+    host.innerHTML = rows.join('');
+  };
+
   // Zone timer — update every second
   setInterval(updateZoneTimer, 1000);
   updateZoneTimer();
+  if(typeof window._kzTrailRender === 'function') window._kzTrailRender(window._lastIndexSpikes || []);
 })();
 
 // ═══════════════════════════════════════════════
@@ -3971,6 +4284,27 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
     } catch(e) {}
   };
 })();
+
+// ═══════════════════════════════════════════════════════════
+// INDEX RADAR — signal clock (IST HH:MM from API or fallbacks)
+// ═══════════════════════════════════════════════════════════
+function ixFmtSignalTime(s) {
+  if(!s) return '—';
+  let t = s.time != null ? s.time : s.signal_time;
+  if(t != null && String(t).trim() !== '') return String(t).trim();
+  const sid = String(s.id || s.sig_id || '');
+  const mm = sid.match(/_(\d{4})_[A-Z]/);
+  if(mm) return mm[1].slice(0, 2) + ':' + mm[1].slice(2);
+  const ts = Number(s.ts);
+  if(ts > 1e8) {
+    try {
+      const d = new Date(ts * 1000);
+      const ist = new Date(d.toLocaleString('en-US', {timeZone: 'Asia/Kolkata'}));
+      return String(ist.getHours()).padStart(2, '0') + ':' + String(ist.getMinutes()).padStart(2, '0');
+    } catch(e) { /* ignore */ }
+  }
+  return '—';
+}
 
 // ═══════════════════════════════════════════════
 // INDEX RADAR
@@ -4111,7 +4445,16 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
         return;
       }
       const statsEl = document.getElementById('ir-hist-stats');
-      if(statsEl) statsEl.innerHTML = `Backtest done: <span style="color:var(--go)">${data.wins} T1</span> · <span style="color:var(--st)">${data.losses} SL</span> · <span style="color:${data.win_rate>=55?'var(--go)':data.win_rate>=40?'var(--am)':'var(--st)'}">${data.win_rate}% WR</span> · ${data.inserted} signals inserted`;
+      let fsHtml = '';
+      if (data.filter_stats && typeof data.filter_stats === 'object') {
+        const fs = data.filter_stats;
+        const bars = fs.bars_scanned ?? 0, ins = fs.signals_inserted ?? 0;
+        const rej = Object.entries(fs).filter(([k]) => k.startsWith('reject_'))
+          .sort((a, b) => b[1] - a[1]).slice(0, 12)
+          .map(([k, v]) => `${k.replace(/^reject_/, '')}:${v}`);
+        fsHtml = `<br><span style="font-size:7px;color:var(--t3);line-height:1.5">Scan: ${bars} bars → ${ins} signals · ${rej.join(' · ')}</span>`;
+      }
+      if(statsEl) statsEl.innerHTML = `Backtest done: <span style="color:var(--go)">${data.wins} T1</span> · <span style="color:var(--st)">${data.losses} SL</span> · <span style="color:${data.win_rate>=55?'var(--go)':data.win_rate>=40?'var(--am)':'var(--st)'}">${data.win_rate}% WR</span> · ${data.inserted} signals inserted` + fsHtml;
       irLoadHistory();  // auto-load table with new data
     })
     .catch(e => {
@@ -4120,6 +4463,32 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
     });
   }
   window.irRunBacktest = irRunBacktest;
+
+  function irTrainMl() {
+    const btn = document.getElementById('ir-ml-btn');
+    const statsEl = document.getElementById('ir-hist-stats');
+    if(btn) { btn.textContent = '⏳ Training...'; btn.disabled = true; }
+    fetch('/api/index-radar/ml-train', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ target_precision: 0.80 })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if(btn) { btn.textContent = 'ML TRAIN'; btn.disabled = false; }
+      if(!data || data.ok === false) {
+        const msg = (data && data.error) ? data.error : 'failed (see server log)';
+        if(statsEl) statsEl.innerHTML = `<span style="color:var(--st);font-size:7px;line-height:1.4">ML: ${msg}</span>`;
+        return;
+      }
+      if(statsEl) statsEl.innerHTML = `ML trained · thr=<b>${(data.threshold||0).toFixed(3)}</b> val_prec=<b>${(data.val_precision||0).toFixed(2)}</b> auc=${(data.auc||0).toFixed(2)} · set INDEX_RADAR ml_filter_enabled true in config`;
+    })
+    .catch(() => {
+      if(btn) { btn.textContent = 'ML TRAIN'; btn.disabled = false; }
+      if(statsEl) statsEl.innerHTML = '<span style="color:var(--st)">ML train request failed</span>';
+    });
+  }
+  window.irTrainMl = irTrainMl;
 
   function irFilter(f, btn) {
     _filter = f;
@@ -4176,7 +4545,7 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
       const ol    = outcomeLabel(s.outcome);
       const lotSz = s.lot_sz || (s.symbol === 'NIFTY' ? 25 : 15);
       const chg   = s.chg_pct || 0;
-      const stime = s.time || s.signal_time || '';
+      const stime = ixFmtSignalTime(s);
 
       let pnlVal, pnlColor;
       if(!s.outcome)                                      { pnlVal = '+₹'+Math.round((s.t1-s.entry)*lotSz).toLocaleString('en-IN'); pnlColor='var(--t2)'; }
@@ -4190,7 +4559,10 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
         ${liveDot}
         <div class="irc-dir">
           <div class="irc-badge ${isCE?'ce':'pe'}">${isCE?'▲ BUY CE':'▼ BUY PE'}</div>
-          <div class="irc-time">${stime}</div>
+          <div class="irc-when" title="Signal generated (IST)">
+            <div class="irc-when-lbl">Signal time</div>
+            <div class="irc-time">${stime}</div>
+          </div>
         </div>
         <div class="irc-inst">
           <div class="irc-sym">${s.symbol}</div>
@@ -4203,7 +4575,7 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
         </div>
         <div class="irc-chg">
           <div class="irc-chg-pct">${chg>0?'↑':'↓'}${Math.abs(chg).toFixed(2)}%</div>
-          <div class="irc-chg-rr">R:R ${s.rr||'—'}:1</div>
+          <div class="irc-chg-rr">R:R ${s.rr||'—'}:1${s.quality!=null?' · Q'+s.quality:''}${s.pcr!=null&&s.pcr>0?' · PCR '+s.pcr:''}</div>
         </div>
         <div class="irc-status">
           <div class="irc-outcome ${oc}">${ol}</div>
@@ -4256,6 +4628,7 @@ document.getElementById('ttc').innerHTML='<div style="color:var(--t2);font-size:
     _allSignals = signals;
     updateStats(signals);
     renderSignals(signals);
+    if(typeof window._kzTrailRender === 'function') window._kzTrailRender(signals);
   };
 })();
 
