@@ -202,8 +202,9 @@ def job_chain():
             new_ix = _detect_index_signals(chain, indices)
             today_str = datetime.now(IST).strftime("%Y-%m-%d")
             existing_ix = _signals.state.get("index_signals", [])
-            # Roll over at new day
-            if _signals.state.get("index_signals_date") != today_str:
+            existing_date = _signals.state.get("index_signals_date", "")
+            # Roll over ONLY when the date actually changes (not on missing date = startup)
+            if existing_date and existing_date != today_str:
                 existing_ix = new_ix
                 for ns in new_ix:
                     _ix_db_upsert(ns)
