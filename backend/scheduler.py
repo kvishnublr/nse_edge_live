@@ -255,28 +255,28 @@ def _detect_index_signals(chain, indices):
     if not nifty_px:
         return []
 
-    # Store in 5-min rolling price history
+    # Store in rolling price history
     hist = _cache["ix_px_hist"]
     hist.append((now_ts, nifty_px, bn_px))
     if len(hist) > 120:
         hist.pop(0)
-    if len(hist) < 5:
+    if len(hist) < 3:
         return []
 
     results = []
     for sym, px, lot_sz, px_idx in [("NIFTY", nifty_px, 25, 1), ("BANKNIFTY", bn_px, 15, 2)]:
         if not px:
             continue
-        # Price 5 minutes ago
-        five_ago = now_ts - 300
-        old_entry = next((e for e in reversed(hist) if e[0] <= five_ago), None)
+        # Price 3 minutes ago (shorter window = more responsive)
+        three_ago = now_ts - 180
+        old_entry = next((e for e in reversed(hist) if e[0] <= three_ago), None)
         if not old_entry:
             old_entry = hist[0]
         old_px = old_entry[px_idx]
         if not old_px:
             continue
         chg = (px - old_px) / old_px * 100
-        if abs(chg) < 0.3:
+        if abs(chg) < 0.15:
             continue
         is_ce = chg > 0
 
@@ -328,7 +328,7 @@ def _detect_index_signals(chain, indices):
             "rr":            rr,
             "lot_sz":        lot_sz,
             "lot_pnl_t1":    lot_pnl_t1,
-            "strength":      "hi" if abs(chg) >= 0.5 else "md",
+            "strength":      "hi" if abs(chg) >= 0.4 else "md",
             "outcome":       None,
             "vix":           float(indices.get("vix", 0) or 0),
         })

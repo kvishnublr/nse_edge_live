@@ -428,6 +428,30 @@ async def health():
     })
 
 
+@app.get("/api/debug/index")
+async def debug_index():
+    import time as _t
+    hist = sched._cache.get("ix_px_hist", [])
+    now_ts = _t.time()
+    three_ago = now_ts - 180
+    old = next((e for e in reversed(hist) if e[0] <= three_ago), None)
+    if not old and hist:
+        old = hist[0]
+    return JSONResponse({
+        "hist_len": len(hist),
+        "oldest_age_sec": round(now_ts - hist[0][0]) if hist else None,
+        "newest_age_sec": round(now_ts - hist[-1][0]) if hist else None,
+        "three_min_ago_nifty": old[1] if old else None,
+        "current_nifty": hist[-1][1] if hist else None,
+        "chg_pct_nifty": round((hist[-1][1] - old[1]) / old[1] * 100, 3) if (hist and old) else None,
+        "current_bn": hist[-1][2] if hist else None,
+        "chg_pct_bn": round((hist[-1][2] - old[2]) / old[2] * 100, 3) if (hist and old) else None,
+        "threshold": 0.15,
+        "window_sec": 180,
+        "index_signals": len(signals.state.get("index_signals", [])),
+    })
+
+
 @app.get("/api/state")
 async def get_state():
     return JSONResponse({
