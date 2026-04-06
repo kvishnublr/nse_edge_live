@@ -446,7 +446,7 @@ async def debug_index():
         "current_nifty": hist[-1][1] if hist else None,
         "chg_pct_5min_nifty": round((hist[-1][1] - old[1]) / old[1] * 100, 3) if (hist and old) else None,
         "chg_pct_1min_nifty": round((hist[-1][1] - one[1]) / one[1] * 100, 3) if (hist and one) else None,
-        "threshold": 0.25,
+        "threshold": 0.20,
         "window_sec": 300,
         "index_signals": len(signals.state.get("index_signals", [])),
     })

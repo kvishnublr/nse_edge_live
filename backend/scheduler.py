@@ -352,7 +352,7 @@ def _detect_index_signals(chain, indices):
         if not old_px:
             continue
         chg = (px - old_px) / old_px * 100
-        if abs(chg) < 0.25:          # must move ≥0.25% in 5 min
+        if abs(chg) < 0.20:          # must move ≥0.20% in 5 min
             continue
         is_ce = chg > 0
 
