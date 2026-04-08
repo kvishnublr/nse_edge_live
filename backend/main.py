@@ -280,7 +280,31 @@ async def lifespan(app: FastAPI):
         ).fetchall()
         _conn.close()
         if _rows:
-            _ix = [dict(r) for r in _rows]
+            _ix_raw = [dict(r) for r in _rows]
+            # Deduplicate historical duplicates by business identity
+            # (same day/symbol/type/time/strike/entry), keeping the most useful row.
+            def _ix_key(z):
+                return (
+                    str(z.get("trade_date") or ""),
+                    str(z.get("symbol") or ""),
+                    str(z.get("type") or ""),
+                    str(z.get("signal_time") or z.get("time") or ""),
+                    int(z.get("strike") or 0),
+                    round(float(z.get("entry") or 0), 2),
+                )
+            def _ix_rank(z):
+                oc = 1 if z.get("outcome") else 0
+                upd = float(z.get("updated_ts") or z.get("ts") or 0)
+                rid = int(z.get("id") or 0)
+                return (oc, upd, rid)
+            _pick = {}
+            for _r in _ix_raw:
+                _k = _ix_key(_r)
+                _old = _pick.get(_k)
+                if (_old is None) or (_ix_rank(_r) > _ix_rank(_old)):
+                    _pick[_k] = _r
+            _ix = list(_pick.values())
+            _ix.sort(key=lambda x: float(x.get("ts") or 0), reverse=True)
             import re as _re
             for s in _ix:
                 sid = str(s.get("sig_id") or s.get("id") or "")
@@ -846,6 +870,302 @@ async def get_state():
         "index_signals": signals.state.get("index_signals", []),
         "position_size_lots": signals.state.get("position_size_lots", 0),
         "position_size_rupees": signals.state.get("position_size_rupees", 0),
+    })
+
+
+@app.get("/api/performance/day")
+async def day_performance(date: str = None):
+    """
+    Day performance across all alert sections (spikes + swing radar + index radar).
+
+    - For `live_signal_history`: uses stored outcomes and P&L; OPEN rows use current prices for MTM.
+    - For `index_signal_history`: uses stored outcomes and plan P&L; OPEN rows use current option LTP for MTM.
+    """
+    import sqlite3 as _sq
+    from datetime import date as _d
+    try:
+        day = (date or _d.today().isoformat()).strip()
+    except Exception:
+        day = _d.today().isoformat()
+
+    db_path = os.path.join(os.path.dirname(__file__), "data", "backtest.db")
+    prices_now = get_all_prices() or {}
+    ix_live = signals.state.get("index_signals", []) or []
+    ch_nifty = signals.state.get("last_chain", {}) or {}
+    ch_bank = signals.state.get("bn_chain", {}) or {}
+    try:
+        from config import LOT_SIZES as _LOT_SIZES
+    except Exception:
+        _LOT_SIZES = {}
+
+    def _inr(n: float) -> float:
+        try:
+            return float(round(float(n or 0), 2))
+        except Exception:
+            return 0.0
+
+    def _opt_ltp(sym: str, strike, typ: str) -> float:
+        ch = ch_nifty if str(sym or "").upper() == "NIFTY" else ch_bank
+        rows_ = (ch or {}).get("strikes") or []
+        if not rows_:
+            return 0.0
+        is_ce = str(typ or "").upper() == "CE"
+        key = "call_ltp" if is_ce else "put_ltp"
+        try:
+            target = int(strike or 0)
+        except Exception:
+            target = 0
+        nearest = None
+        for r in rows_:
+            try:
+                st = int(r.get("strike") or 0)
+            except Exception:
+                continue
+            v = float(r.get(key) or 0)
+            if target and st == target and v > 0:
+                return v
+            if target:
+                d = abs(st - target)
+                if nearest is None or d < nearest[0]:
+                    nearest = (d, v)
+        return float((nearest[1] if nearest else 0) or 0)
+
+    rows = []
+    sections = {}
+    capital_total = 100000.0
+    section_count = 3.0  # SPIKE, SWING, INDEX_RADAR
+    trade_slots_per_section = 4.0
+    per_trade_budget = capital_total / section_count / trade_slots_per_section
+
+    # ── Spikes + Swing (live_signal_history) ───────────────────────────────
+    try:
+        conn = _sq.connect(db_path)
+        conn.row_factory = _sq.Row
+        lsh = conn.execute(
+            """SELECT id, trade_date, symbol, signal_type, trigger, strength, signal_time,
+                      entry_price, stop_loss, target_price, exit_price, exit_time,
+                      status, outcome, pnl_pts, pnl_pct, hold_minutes, verdict
+               FROM live_signal_history
+               WHERE trade_date = ?
+               ORDER BY created_ts ASC""",
+            (day,),
+        ).fetchall()
+        conn.close()
+    except Exception:
+        lsh = []
+
+    for r in lsh:
+        d = dict(r)
+        sym = d.get("symbol")
+        status = d.get("status") or "OPEN"
+        entry = float(d.get("entry_price") or 0)
+        exit_p = d.get("exit_price")
+        dirn = (d.get("signal_type") or "LONG").upper()
+        last_px = float(((prices_now.get(sym) or {}).get("price") or 0) or 0)
+        # MTM for open rows if we can
+        if status == "OPEN" and entry and last_px:
+            pnl_pts = (last_px - entry) if dirn != "SHORT" else (entry - last_px)
+            pnl_pct = (pnl_pts / entry) * 100
+        else:
+            pnl_pts = float(d.get("pnl_pts") or 0)
+            pnl_pct = float(d.get("pnl_pct") or 0)
+        sec = "SWING" if str(d.get("verdict") or "") == "SWING_RADAR" else "SPIKE"
+        lot_sz = int((_LOT_SIZES or {}).get(str(sym or "").upper(), 1) or 1)
+        pnl_inr = float(pnl_pts or 0) * lot_sz
+        # 1L model: section budget split equally, then 1/4th per trade slot.
+        qty_model_raw = int(per_trade_budget / max(entry, 0.01)) if entry > 0 else 0
+        qty_model = (qty_model_raw // max(lot_sz, 1)) * max(lot_sz, 1) if lot_sz > 1 else qty_model_raw
+        pnl_model = float(pnl_pts or 0) * float(qty_model or 0)
+        row = {
+            "section": sec,
+            "kind": "STOCK",
+            "symbol": sym,
+            "time": d.get("signal_time"),
+            "hit_time": d.get("exit_time"),
+            "direction": dirn,
+            "trigger": d.get("trigger") or "",
+            "strength": d.get("strength") or "",
+            "entry": _inr(entry),
+            "sl": _inr(d.get("stop_loss")),
+            "t1": _inr(d.get("target_price")),
+            "ltp": _inr(last_px) if status == "OPEN" and last_px else _inr(exit_p),
+            "status": status,
+            "outcome": d.get("outcome") or status,
+            "pnl_pts": _inr(pnl_pts),
+            "pnl_pct": _inr(pnl_pct),
+            "lot_sz": lot_sz,
+            "pnl_inr": _inr(pnl_inr),
+            "qty_model": int(qty_model or 0),
+            "pnl_model_inr": _inr(pnl_model),
+        }
+        rows.append(row)
+        sections.setdefault(sec, {"count": 0, "wins": 0, "losses": 0, "open": 0, "pnl_inr": 0.0, "pnl_model_inr": 0.0})
+        sections[sec]["count"] += 1
+        sections[sec]["pnl_inr"] += float(row["pnl_inr"] or 0)
+        sections[sec]["pnl_model_inr"] += float(row["pnl_model_inr"] or 0)
+        if status == "OPEN":
+            sections[sec]["open"] += 1
+        if str(row["outcome"]).upper().startswith("TARGET") or str(row["outcome"]).upper().startswith("WIN"):
+            sections[sec]["wins"] += 1
+        if "SL" in str(row["outcome"]).upper() or "LOSS" in str(row["outcome"]).upper():
+            sections[sec]["losses"] += 1
+
+    # ── Index Radar (index_signal_history + live MTM) ──────────────────────
+    try:
+        conn = _sq.connect(db_path)
+        conn.row_factory = _sq.Row
+        ix = conn.execute(
+            """SELECT id, updated_ts, sig_id, trade_date, symbol, type, signal_time, ts, index_px,
+                      strike, entry, sl, t1, t2, rr, lot_sz, outcome,
+                      option_expiry, option_week
+               FROM index_signal_history
+               WHERE trade_date = ?
+               ORDER BY ts ASC""",
+            (day,),
+        ).fetchall()
+        conn.close()
+    except Exception:
+        ix = []
+
+    # Deduplicate DB rows first (same signal repeated from earlier inserts)
+    def _ixk(z):
+        return (
+            str(z.get("trade_date") or ""),
+            str(z.get("symbol") or ""),
+            str(z.get("type") or ""),
+            str(z.get("signal_time") or ""),
+            int(z.get("strike") or 0),
+            round(float(z.get("entry") or 0), 2),
+        )
+    def _ixrank(z):
+        oc = 1 if z.get("outcome") else 0
+        upd = float(z.get("updated_ts") or z.get("ts") or 0)
+        rid = int(z.get("id") or 0)
+        return (oc, upd, rid)
+    ix_pick = {}
+    for _r in [dict(x) for x in ix]:
+        _k = _ixk(_r)
+        _old = ix_pick.get(_k)
+        if (_old is None) or (_ixrank(_r) > _ixrank(_old)):
+            ix_pick[_k] = _r
+    ix = list(ix_pick.values())
+    ix.sort(key=lambda x: float(x.get("ts") or 0))
+
+    ix_live_by_id = {str(s.get("id")): s for s in ix_live if s and s.get("id")}
+    for d in ix:
+        sid = str(d.get("sig_id") or "")
+        live = ix_live_by_id.get(sid, {})
+        status = "OPEN" if not d.get("outcome") else "CLOSED"
+        lot = int(d.get("lot_sz") or 0) or (25 if d.get("symbol") == "NIFTY" else 15)
+        entry = float(d.get("entry") or 0)
+        ltp = float((live.get("ltp") if live else 0) or 0)
+        if not ltp:
+            ltp = _opt_ltp(d.get("symbol"), d.get("strike"), d.get("type"))
+        if status == "OPEN" and entry and ltp:
+            pnl = (ltp - entry) * lot
+            unit_move = (ltp - entry)
+        else:
+            oc = d.get("outcome")
+            if oc == "HIT_T1" or oc == "HIT_T2":
+                pnl = (float(d.get("t1") or 0) - entry) * lot
+                unit_move = (float(d.get("t1") or 0) - entry)
+            elif oc == "HIT_SL":
+                pnl = -(entry - float(d.get("sl") or 0)) * lot
+                unit_move = (float(d.get("sl") or 0) - entry)
+            else:
+                pnl = 0.0
+                unit_move = 0.0
+        qty_model_raw = int(per_trade_budget / max(entry, 0.01)) if entry > 0 else 0
+        qty_model = (qty_model_raw // max(lot, 1)) * max(lot, 1) if lot > 1 else qty_model_raw
+        pnl_model = float(unit_move or 0) * float(qty_model or 0)
+        row = {
+            "section": "INDEX_RADAR",
+            "kind": "OPTION",
+            "symbol": d.get("symbol"),
+            "time": d.get("signal_time"),
+            "hit_time": d.get("exit_time"),
+            "direction": d.get("type"),
+            "trigger": "INDEX RADAR",
+            "strength": "",
+            "entry": _inr(entry),
+            "sl": _inr(d.get("sl")),
+            "t1": _inr(d.get("t1")),
+            "ltp": _inr(ltp if ltp else None),
+            "option_expiry": d.get("option_expiry") or (live.get("option_expiry") if live else None),
+            "option_week": d.get("option_week") or (live.get("option_week") if live else None),
+            "status": status,
+            "outcome": d.get("outcome") or "OPEN",
+            "pnl_pts": _inr(pnl),
+            "pnl_pct": 0.0,
+            "strike": d.get("strike"),
+            "lot_sz": lot,
+            "pnl_inr": _inr(pnl),
+            "qty_model": int(qty_model or 0),
+            "pnl_model_inr": _inr(pnl_model),
+        }
+        rows.append(row)
+        sections.setdefault("INDEX_RADAR", {"count": 0, "wins": 0, "losses": 0, "open": 0, "pnl_inr": 0.0, "pnl_model_inr": 0.0})
+        sections["INDEX_RADAR"]["count"] += 1
+        sections["INDEX_RADAR"]["pnl_inr"] += float(row["pnl_inr"] or 0)
+        sections["INDEX_RADAR"]["pnl_model_inr"] += float(row["pnl_model_inr"] or 0)
+        if status == "OPEN":
+            sections["INDEX_RADAR"]["open"] += 1
+        if row["outcome"] == "HIT_T1" or row["outcome"] == "HIT_T2":
+            sections["INDEX_RADAR"]["wins"] += 1
+        if row["outcome"] == "HIT_SL":
+            sections["INDEX_RADAR"]["losses"] += 1
+
+    total_pnl = round(sum(v["pnl_inr"] for v in sections.values()), 2) if sections else 0.0
+    total_pnl_model = round(sum(v.get("pnl_model_inr", 0.0) for v in sections.values()), 2) if sections else 0.0
+    total_count = sum(v["count"] for v in sections.values()) if sections else 0
+    total_open = sum(v["open"] for v in sections.values()) if sections else 0
+    total_wins = sum(v["wins"] for v in sections.values()) if sections else 0
+    total_losses = sum(v["losses"] for v in sections.values()) if sections else 0
+    wr = round((total_wins / max(total_wins + total_losses, 1)) * 100, 1) if (total_wins + total_losses) else 0.0
+
+    # sort rows by time (string) then section
+    rows.sort(key=lambda x: (str(x.get("time") or ""), str(x.get("section") or "")))
+    # Validation checks (data quality / consistency)
+    issues = []
+    for r in rows:
+        if not r.get("time"):
+            issues.append({"symbol": r.get("symbol"), "section": r.get("section"), "issue": "missing signal_time"})
+        if (r.get("entry") or 0) <= 0:
+            issues.append({"symbol": r.get("symbol"), "section": r.get("section"), "issue": "non_positive_entry"})
+        st = str(r.get("status") or "").upper()
+        if st == "OPEN" and (r.get("ltp") is None or float(r.get("ltp") or 0) <= 0):
+            issues.append({"symbol": r.get("symbol"), "section": r.get("section"), "issue": "open_without_ltp"})
+        out = str(r.get("outcome") or "").upper()
+        p = float(r.get("pnl_inr") or 0)
+        if ("SL" in out) and p > 0:
+            issues.append({"symbol": r.get("symbol"), "section": r.get("section"), "issue": "sl_with_positive_pnl"})
+        if (("TARGET" in out) or ("HIT_T1" in out) or ("HIT_T2" in out)) and p < 0:
+            issues.append({"symbol": r.get("symbol"), "section": r.get("section"), "issue": "target_with_negative_pnl"})
+
+    return JSONResponse({
+        "date": day,
+        "summary": {
+            "signals": total_count,
+            "open": total_open,
+            "wins": total_wins,
+            "losses": total_losses,
+            "win_rate": wr,
+            "pnl_inr": round(total_pnl),
+            "pnl_model_inr": round(total_pnl_model),
+        },
+        "sections": {k: {**v, "pnl_inr": round(v["pnl_inr"]), "pnl_model_inr": round(v.get("pnl_model_inr", 0.0))} for k, v in sections.items()},
+        "rows": rows,
+        "capital_model": {
+            "capital_total": int(capital_total),
+            "section_count": int(section_count),
+            "trade_slots_per_section": int(trade_slots_per_section),
+            "per_trade_budget": round(per_trade_budget, 2),
+        },
+        "validation": {
+            "ok": len(issues) == 0,
+            "issues_count": len(issues),
+            "issues": issues[:100],
+        },
     })
 
 
