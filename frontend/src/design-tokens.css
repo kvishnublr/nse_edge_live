@@ -1,0 +1,403 @@
+/**
+ * NSE Edge — centralized design system (SaaS / Linear-style)
+ * All semantic UI derives from these tokens. Legacy selectors keep var(--go), etc.
+ */
+
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  color-scheme: dark;
+
+  /* Canvas & surfaces — true dark zinc */
+  --bg: #09090b;
+  --s1: #0c0c0f;
+  --s2: #141417;
+  --s3: #1c1c21;
+  --s4: #27272c;
+
+  --b1: #3f3f46;
+  --b2: #52525b;
+
+  /* Semantic */
+  --go: #22c55e;
+  --go-d: rgba(34, 197, 94, 0.12);
+  --go-b: rgba(34, 197, 94, 0.38);
+  --st: #f87171;
+  --st-d: rgba(248, 113, 113, 0.12);
+  --st-b: rgba(248, 113, 113, 0.4);
+  --am: #eab308;
+  --am-d: rgba(234, 179, 8, 0.14);
+  --am-b: rgba(234, 179, 8, 0.45);
+  --bl: #60a5fa;
+  --bl-d: rgba(96, 165, 250, 0.12);
+  --bl-b: rgba(96, 165, 250, 0.4);
+  --pu: #c084fc;
+  --pu-d: rgba(192, 132, 252, 0.12);
+  --pu-b: rgba(192, 132, 252, 0.35);
+
+  /* Text — WCAG-friendly on dark surfaces */
+  --t0: #fafafa;
+  --t1: #e4e4e7;
+  --t2: #a1a1aa;
+  --t3: #71717a;
+
+  --fn: 'IBM Plex Mono', ui-monospace, monospace;
+  --fh: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  --radius-sm: 8px;
+  --radius: 10px;
+  --radius-lg: 12px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.55);
+
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--bl);
+}
+
+:root.light {
+  color-scheme: light;
+  --bg: #fafafa;
+  --s1: #ffffff;
+  --s2: #f4f4f5;
+  --s3: #e4e4e7;
+  --s4: #d4d4d8;
+  --b1: #d4d4d8;
+  --b2: #a1a1aa;
+
+  --go: #15803d;
+  --go-d: rgba(21, 128, 61, 0.1);
+  --go-b: rgba(21, 128, 61, 0.35);
+  --st: #dc2626;
+  --st-d: rgba(220, 38, 38, 0.08);
+  --st-b: rgba(220, 38, 38, 0.35);
+  --am: #ca8a04;
+  --am-d: rgba(202, 138, 4, 0.12);
+  --am-b: rgba(202, 138, 4, 0.4);
+  --bl: #2563eb;
+  --bl-d: rgba(37, 99, 235, 0.08);
+  --bl-b: rgba(37, 99, 235, 0.35);
+
+  --t0: #18181b;
+  --t1: #3f3f46;
+  --t2: #52525b;
+  --t3: #71717a;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.1);
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--bl);
+}
+
+html,
+body,
+#tb,
+.pn,
+#center,
+.tp,
+.gate,
+.rpk,
+.je,
+.stc,
+.msc,
+.acard,
+.mi,
+.lvl,
+.zcard,
+.oip,
+.sr-card,
+.atbl td,
+.xtbl td {
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.18s ease, box-shadow 0.2s ease;
+}
+
+/* Light-mode component tint overrides */
+.light .kzd {
+  background: rgba(202, 138, 4, 0.1) !important;
+}
+.light .kzt {
+  background: rgba(21, 128, 61, 0.1) !important;
+}
+.light .kze {
+  background: rgba(220, 38, 38, 0.08) !important;
+}
+.light .kzr {
+  background: rgba(82, 82, 91, 0.12) !important;
+  color: var(--t2);
+}
+.light .stbl tr.top td {
+  background: rgba(21, 128, 61, 0.06) !important;
+}
+.light .atbl tr.sbuy td {
+  background: rgba(21, 128, 61, 0.05) !important;
+}
+.light .atbl tr.ssell td {
+  background: rgba(220, 38, 38, 0.05) !important;
+}
+.light .atbl tr.soi td {
+  background: rgba(202, 138, 4, 0.05) !important;
+}
+.light .oct tr.atm td {
+  background: rgba(202, 138, 4, 0.07) !important;
+}
+.light .oct td,
+.light .xtbl td,
+.light .atbl td {
+  border-bottom-color: rgba(0, 0, 0, 0.07);
+}
+.light .gm,
+.light .gr,
+.light .ttcr {
+  border-bottom-color: rgba(0, 0, 0, 0.07);
+}
+.light .ci {
+  border-bottom-color: var(--b1);
+}
+.light .jnote {
+  border-top-color: var(--b1);
+}
+.light #hist-banner {
+  background: rgba(37, 99, 235, 0.07);
+  border-bottom-color: rgba(37, 99, 235, 0.22);
+}
+.light #hist-banner .hb-dot,
+.light #hist-banner .hb-lbl {
+  color: var(--bl);
+}
+.light #hist-banner .hb-date {
+  color: var(--t0);
+}
+.light #hist-banner .hb-note {
+  color: var(--t2);
+}
+.light .sr-sig-dot.on {
+  background: rgba(21, 128, 61, 0.12);
+  border-color: rgba(21, 128, 61, 0.28);
+}
+.light .sr-sig-dot.off {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: var(--b1);
+  color: var(--t2);
+}
+.light #notif {
+  background: var(--s1);
+  border-color: var(--go-b);
+  color: var(--go);
+}
+.light .oip {
+  background: var(--s1);
+  border-color: var(--b1);
+}
+.light input[type='date'] {
+  color-scheme: light;
+}
+.light .jfi,
+.light .jfs,
+.light .jfta {
+  color: var(--t0);
+}
+.light .jfs option {
+  background: var(--s2);
+  color: var(--t0);
+}
+.light .vgo {
+  border-color: var(--go-b) !important;
+  background: var(--go-d) !important;
+}
+.light .vst {
+  border-color: var(--st-b) !important;
+  background: var(--st-d) !important;
+}
+.light .vam {
+  border-color: var(--am-b) !important;
+  background: var(--am-d) !important;
+}
+.light .tktrack .tki {
+  color: var(--t1);
+}
+.light .tki em {
+  color: var(--go);
+}
+.light .tki.w em {
+  color: var(--st);
+}
+.light .ldot {
+  animation: pulse-l 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-l {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(21, 128, 61, 0.45);
+  }
+  60% {
+    box-shadow: 0 0 0 5px rgba(21, 128, 61, 0);
+  }
+}
+
+.theme-tog {
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid var(--b1);
+  background: var(--s3);
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.15s;
+}
+.theme-tog:hover {
+  border-color: var(--b2);
+}
+.theme-tog:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.theme-tog::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--t1);
+  transition: left 0.2s ease, background 0.2s;
+}
+.light .theme-tog {
+  background: var(--bl-d);
+  border-color: var(--bl-b);
+}
+.light .theme-tog::after {
+  left: 17px;
+  background: var(--bl);
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  font-family: var(--fn);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--t0);
+  display: flex;
+  flex-direction: column;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--bl) 35%, transparent);
+  color: var(--t0);
+}
+
+:root.light ::selection {
+  background: color-mix(in srgb, var(--bl) 22%, transparent);
+  color: var(--t0);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--b2);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--t3);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* —— Global interactive polish (applies across legacy markup) —— */
+button,
+[role='button'],
+input[type='button'],
+input[type='submit'],
+a {
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+button:focus-visible,
+[role='button']:focus-visible,
+.sf:focus-visible,
+.mb:focus-visible,
+.mtog .mb:focus-visible,
+#tb-live-btn:focus-visible,
+.jfi:focus-visible,
+.jfs:focus-visible,
+.jfta:focus-visible,
+.btsel:focus-visible,
+.btdate:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.sf {
+  border-radius: var(--radius-sm) !important;
+  padding: 6px 12px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+}
+
+.sf:hover:not(.on) {
+  color: var(--t0) !important;
+  border-color: var(--b2) !important;
+  background: var(--s3) !important;
+}
+
+.sf.on {
+  box-shadow: var(--shadow-sm);
+}
+
+#tb {
+  box-shadow: var(--shadow-sm);
+}
+
+.mtog {
+  border-radius: var(--radius-sm) !important;
+}
+
+.mb {
+  border-radius: var(--radius-sm) !important;
+  padding: 7px 16px !important;
+  font-size: 11px !important;
+}
+
+.mtog .mb.on {
+  box-shadow: var(--shadow-sm);
+}
+
+.gate {
+  border-radius: var(--radius-sm) !important;
+}
+
+.ph {
+  border-radius: 0;
+}
+
+.jfi,
+.jfs,
+.jfta,
+.btdate,
+.btsel {
+  border-radius: var(--radius-sm) !important;
+}

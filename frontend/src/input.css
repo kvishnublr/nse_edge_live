@@ -1,0 +1,60 @@
+/**
+ * Tailwind entry — design tokens + component layer + utilities.
+ * Run: npm run build:css
+ */
+@import './design-tokens.css';
+
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Reusable primitives (Stripe / Linear–style). Use on new markup or gradually on legacy.
+ */
+@layer components {
+  .ds-btn {
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-ds-sm border border-edge px-3.5 py-2 text-sm font-semibold text-foreground transition duration-150 ease-out;
+    @apply hover:bg-surface-3 focus-visible:outline-none;
+    box-shadow: var(--shadow-sm);
+  }
+  .ds-btn:disabled {
+    @apply pointer-events-none opacity-45;
+  }
+  .ds-btn-primary {
+    @apply border-transparent bg-success text-gray-950 hover:opacity-95 active:scale-[0.99] dark:text-gray-950;
+  }
+  .ds-btn-secondary {
+    @apply border-edge bg-surface-2 text-foreground hover:border-edge-strong hover:bg-surface-3;
+  }
+  .ds-btn-ghost {
+    background: transparent;
+    box-shadow: none;
+    @apply border-transparent text-foreground-secondary hover:bg-surface-3 hover:text-foreground;
+  }
+  .ds-btn-danger {
+    @apply border-transparent bg-danger text-white hover:opacity-95 active:scale-[0.99];
+  }
+  .ds-input {
+    @apply w-full rounded-ds-sm border border-edge bg-surface-2 px-3 py-2 text-sm text-foreground placeholder:text-foreground-muted;
+    @apply transition duration-150 focus-visible:border-info focus-visible:outline-none;
+    box-shadow: var(--shadow-sm);
+  }
+  .ds-card {
+    @apply rounded-ds border border-edge bg-surface-2 text-foreground;
+    box-shadow: var(--shadow-md);
+  }
+  .ds-badge {
+    @apply inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold;
+  }
+  .ds-badge-success {
+    @apply ds-badge border-success-border bg-success-surface text-success;
+  }
+  .ds-badge-danger {
+    @apply ds-badge border-danger-border bg-danger-surface text-danger;
+  }
+  .ds-badge-warn {
+    @apply ds-badge border-warning-border bg-warning-surface text-warning;
+  }
+  .ds-badge-info {
+    @apply ds-badge border-info-border bg-info-surface text-info;
+  }
+}
