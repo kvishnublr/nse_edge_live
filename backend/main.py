@@ -161,13 +161,6 @@ async def lifespan(app: FastAPI):
             sched.set_initial_stocks(stocks)  # seed scheduler cache
 
         signals.run_signal_engine(indices, chain, fii, stocks or [], "intraday")
-        # Confluence tab: first snapshot even when market is closed (job_chain skips off-hours)
-        try:
-            from scheduler import refresh_confluence_broadcast
-
-            refresh_confluence_broadcast(persist=True)
-        except Exception:
-            pass
     except Exception as e:
         logger.error(f"Initial fetch error: {e}", exc_info=True)
 
@@ -355,9 +348,7 @@ app.add_middleware(
 
 
 # ─── FRONTEND ─────────────────────────────────────────────────────────────────
-_FE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
-_FRONTEND = os.path.join(_FE_DIR, "index.html")
-_ASSETS_DIR = os.path.join(_FE_DIR, "dist")
+_FRONTEND = os.path.join(os.path.dirname(__file__), "..", "frontend", "index.html")
 
 @app.get("/")
 async def serve_frontend():
@@ -366,18 +357,6 @@ async def serve_frontend():
     resp.headers["Pragma"] = "no-cache"
     resp.headers["Expires"] = "0"
     return resp
-
-
-@app.get("/manifest.json")
-async def serve_manifest():
-    path = os.path.join(_FE_DIR, "manifest.json")
-    if os.path.isfile(path):
-        return FileResponse(path)
-    return JSONResponse({"error": "Not found"}, status_code=404)
-
-
-if os.path.isdir(_ASSETS_DIR):
-    app.mount("/assets", StaticFiles(directory=_ASSETS_DIR), name="assets")
 
 # ─── WEBSOCKET ────────────────────────────────────────────────────────────────
 @app.websocket("/ws")
@@ -554,15 +533,6 @@ async def index_signals_history(
                              "win_rate": wr, "net_pnl": round(net_pnl)})
     except Exception as e:
         return JSONResponse({"signals": [], "error": str(e)})
-
-
-@app.get("/api/confluence/history")
-async def confluence_history(limit: int = 120, date: str | None = None):
-    """Stored confluence snapshots (experimental — see confluence_engine.py)."""
-    from confluence_engine import fetch_history
-
-    rows = fetch_history(limit=limit, trade_date=date)
-    return JSONResponse({"rows": rows})
 
 
 @app.post("/api/index-radar/ml-train")
@@ -876,57 +846,124 @@ async def get_state():
         "index_signals": signals.state.get("index_signals", []),
         "position_size_lots": signals.state.get("position_size_lots", 0),
         "position_size_rupees": signals.state.get("position_size_rupees", 0),
-        "confluence": signals.state.get("confluence"),
     })
 
 
 @app.get("/api/live-picks")
 async def get_live_picks():
     """Compute live stock picks from current stocks cache."""
-    from live_picks import compute_live_picks
+    stocks  = signals.state.get("last_stocks", [])
+    indices = signals.state.get("last_macro", {}) or {}
+    chain   = signals.state.get("last_chain", {}) or {}
+    pcr     = chain.get("pcr", 1.0)
+    vix     = indices.get("vix", 15.0)
+    g_pass  = signals.state.get("pass_count", 0)   # global gate pass count
+    global_verdict = signals.state.get("verdict", "WAIT")
 
-    data = compute_live_picks(signals.state)
-    picks = data["picks"]
-    return JSONResponse({"picks": picks[:8], "count": data["total"]})
+    picks = []
+    for s in stocks:
+        sym    = s.get("symbol", "")
+        price  = s.get("price", 0) or 0
+        if not price or sym in ("NIFTY", "BANKNIFTY", "INDIAVIX"):
+            continue
+        chg    = s.get("chg_pct", 0) or 0
+        vol_r  = s.get("vol_ratio", 1.0) or 1.0
+        oi_pct = s.get("oi_chg_pct", 0) or 0
+        # Score stock-level quality
+        stock_score = 0
+        if abs(chg) >= 1.5: stock_score += 3
+        elif abs(chg) >= 0.5: stock_score += 1
+        if vol_r >= 2.0: stock_score += 2
+        elif vol_r >= 1.3: stock_score += 1
+        if abs(oi_pct) >= 5: stock_score += 2
+        elif abs(oi_pct) >= 2: stock_score += 1
+        if stock_score < 1:
+            continue  # skip flat/no-activity stocks
 
+        # Simple ATR proxy: 1.5% of price
+        atr    = price * 0.015
+        if chg >= 1.5:
+            setup    = "Breakout"
+            entry_p  = price * 1.002
+        elif chg > 0:
+            setup    = "Pullback"
+            entry_p  = price - 0.2 * atr
+        elif chg > -0.5:
+            setup    = "Recovery"
+            entry_p  = price + 0.1 * atr
+        else:
+            setup    = "Momentum"
+            entry_p  = price
 
-@app.get("/api/market-desk")
-async def market_desk_api(refresh: bool = False):
-    """Headlines (RSS) + live picks + macro/FII snapshot for Confluence desk UI."""
-    from market_desk import get_market_desk
+        sl_p   = entry_p - 1.5 * atr
+        tgt_p  = entry_p + 2.5 * (entry_p - sl_p)
+        tgt_pp = entry_p + 4.0 * (entry_p - sl_p)
+        rr     = round((tgt_p - entry_p) / max(entry_p - sl_p, 1), 1)
+        rr_p   = round((tgt_pp - entry_p) / max(entry_p - sl_p, 1), 1)
+        score  = min(99, round(40 + g_pass * 8 + stock_score * 4 + (5 if vol_r >= 1.5 else 0)))
+        pc     = int(s.get("pc", g_pass) or g_pass)
+        stock_verdict = str(s.get("verdict", global_verdict or "WAIT"))
+        signal_label = str(s.get("signal", "WATCH")).upper()
+        if stock_verdict == "EXECUTE" and pc >= 5:
+            conf = "CONFIRMED"
+            cls = "rpk-go"
+        elif stock_verdict in ("EXECUTE", "WATCH") or pc >= 3:
+            conf = "HIGH CONF" if pc >= 4 else "WATCH"
+            cls = "rpk-go" if pc >= 4 else "rpk-am"
+        elif global_verdict == "NO TRADE" or s.get("g1") == "st" or s.get("g5") == "st":
+            conf = "NO TRADE"
+            cls = "rpk-st"
+            stock_verdict = "NO TRADE"
+        else:
+            conf = "WATCH"
+            cls = "rpk-am"
 
-    return JSONResponse(get_market_desk(signals, force_refresh=refresh))
+        sec_map = {
+            "HDFCBANK":"Banking","ICICIBANK":"Banking","AXISBANK":"Banking",
+            "KOTAKBANK":"Banking","INDUSINDBK":"Banking","SBIN":"PSU Bank",
+            "BANKNIFTY":"Index","TCS":"IT","INFY":"IT","MARUTI":"Auto",
+            "TATAMOTORS":"Auto","LT":"Infra","BAJFINANCE":"NBFC","RELIANCE":"Energy",
+            "TATASTEEL":"Steel","SUNPHARMA":"Pharma","BAJFINANCE":"NBFC",
+        }
+        sector = sec_map.get(sym, "Market")
+        oi_pct = s.get("oi_chg_pct", 0) or 0
+
+        def _pf(p):
+            return str(round(p, 1)) if p < 2000 else str(int(round(p)))
+
+        picks.append({
+            "sym":      sym,
+            "score":    score,
+            "pc":       pc,
+            "conf":     conf,
+            "cls":      cls,
+            "setup":    setup,
+            "close":    price,
+            "chg_pct":  round(chg, 2),
+            "vol_ratio":round(vol_r, 1),
+            "oi_chg_pct": round(oi_pct, 1),
+            "entry":    _pf(entry_p),
+            "sl":       _pf(sl_p),
+            "target":   _pf(tgt_p),
+            "target_p": _pf(tgt_pp),
+            "rr":       rr,
+            "rr_p":     rr_p,
+            "meta":     f"{setup} · {sector} · Vol {vol_r:.1f}x · OI {oi_pct:+.1f}% · VIX {vix:.1f}",
+            "reason":   f"{stock_verdict} · {pc}/5 gates · {signal_label} · R:R 1:{rr}",
+            "reason_p": f"{stock_verdict} · {pc}/5 gates · Swing target · R:R 1:{rr_p}",
+            "g1": s.get("g1","wt"), "g2": s.get("g2","wt"),
+            "g3": s.get("g3","wt"), "g4": s.get("g4","wt"), "g5": s.get("g5","wt"),
+        })
+
+    picks.sort(key=lambda x: (-x["pc"], -x["score"]))
+    return JSONResponse({"picks": picks[:8], "count": len(picks)})
 
 
 @app.get("/api/signals/history")
-async def get_signals_history(
-    limit: int = 100,
-    status: str = "ALL",
-    verdict: str = None,
-    days: int = None,
-):
-    """`days` — only rows with trade_date on/after (today − days), max lookback 400. `limit` capped at 8000."""
+async def get_signals_history(limit: int = 100, status: str = "ALL"):
     import backtest_data as bd
-
-    lim = max(1, min(int(limit or 100), 8000))
-    min_td = None
-    if days is not None and int(days) > 0:
-        ist = pytz.timezone("Asia/Kolkata")
-        d0 = datetime.datetime.now(ist).date() - datetime.timedelta(
-            days=min(int(days), 400)
-        )
-        min_td = d0.strftime("%Y-%m-%d")
-    rows = bd.get_live_signal_history(
-        limit=lim, status=status, verdict=verdict, min_trade_date=min_td
-    )
-    return JSONResponse(
-        {
-            "rows": rows,
-            "count": len(rows),
-            "min_trade_date": min_td,
-            "limit": lim,
-        }
-    )
+    rows = bd.get_live_signal_history(limit=limit, status=status)
+    return JSONResponse({"rows": rows, "count": len(rows)})
 
 
 @app.get("/api/signals/accuracy-filters")
