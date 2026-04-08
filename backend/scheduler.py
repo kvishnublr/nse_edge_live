@@ -67,31 +67,6 @@ def _ix_db_init():
     except Exception as e:
         logger.warning(f"ix_db_init: {e}")
 
-def _notify_index_radar_new(sig: dict) -> None:
-    """Telegram alert for a newly appended live index radar signal (server-side, no duplicate on outcome updates)."""
-    try:
-        from signals import send_telegram_message
-    except Exception:
-        return
-    try:
-        sym = sig.get("symbol") or ""
-        typ = sig.get("type") or ""
-        strike = sig.get("strike", "")
-        tm = sig.get("time", "")
-        chg = float(sig.get("chg_pct") or 0)
-        msg = (
-            f"📡 <b>INDEX RADAR — {sym} {strike} {typ}</b>\n"
-            f"<i>{tm} IST</i> · 5m move <b>{chg:+.2f}%</b>\n"
-            f"Premium entry <b>₹{float(sig.get('entry') or 0):.2f}</b> · SL ₹{float(sig.get('sl') or 0):.2f} · "
-            f"T1 ₹{float(sig.get('t1') or 0):.2f} · R:R {sig.get('rr', '—')}\n"
-            f"VIX {float(sig.get('vix') or 0):.1f} · PCR {float(sig.get('pcr') or 0):.2f} · "
-            f"Q {int(sig.get('quality') or 0)} · {sig.get('strength', 'md')}"
-        )
-        send_telegram_message(msg)
-    except Exception as e:
-        logger.debug("index radar telegram: %s", e)
-
-
 def _ix_db_upsert(sig):
     """Insert or update an index signal in DB."""
     try:
@@ -127,10 +102,9 @@ _kite    = None   # KiteConnect instance
 _fetcher = None
 _signals = None
 _ws      = None
-_cache   = {"indices": None, "chain": None, "bn_chain": None, "fii": None,
+_cache   = {"indices": None, "chain": None, "fii": None,
             "stocks": [], "mode": "intraday",
-            "ix_px_hist": [],   # [(ts, nifty_px, bn_px), ...] for index spike detection
-            "prev_chain_totals": None}  # for confluence ΔOI (confluence_engine)
+            "ix_px_hist": []}   # [(ts, nifty_px, bn_px), ...] for index spike detection
 
 # ─── CIRCUIT BREAKER (prevent cascading failures) ──────────────────────────────
 _job_errors = {}  # Track consecutive errors per job
@@ -180,43 +154,6 @@ def _record_success(job_name: str):
     _job_errors[job_name] = 0
 
 
-def refresh_confluence_broadcast(persist: bool = True) -> None:
-    """
-    Build confluence from current signal state + scheduler cache; broadcast on WS.
-    Safe when market is closed (uses last_chain / last_macro from startup or last session).
-    """
-    if not _ws or not _signals:
-        return
-    try:
-        import confluence_engine as _ce
-
-        chain = _signals.state.get("last_chain") or _cache.get("chain")
-        macro = _signals.state.get("last_macro") or _cache.get("indices") or {}
-        if not chain or not macro:
-            logger.debug("refresh_confluence_broadcast: missing chain or macro")
-            return
-        prev_tot = _cache.get("prev_chain_totals")
-        cg = _signals.state.get("gates") or {}
-        stocks = _cache.get("stocks") or _signals.state.get("last_stocks") or []
-        co = _ce.compute_confluence(
-            cg,
-            str(_signals.state.get("verdict") or "WAIT"),
-            int(_signals.state.get("pass_count") or 0),
-            chain,
-            macro,
-            stocks,
-            prev_tot,
-        )
-        _signals.state["confluence"] = co
-        _ws({"type": "confluence", "data": co, "ts": time.time()})
-        if persist:
-            td = datetime.now(IST).strftime("%Y-%m-%d")
-            _ce.maybe_persist_snapshot(co, td)
-            _cache["prev_chain_totals"] = _ce.chain_totals_snapshot(chain)
-    except Exception as e:
-        logger.debug("refresh_confluence_broadcast: %s", e)
-
-
 # ─── JOB: BROADCAST PRICES (every 1 second) ───────────────────────────────────
 def job_prices():
     """Broadcast latest prices from Kite cache — KiteTicker keeps them fresh."""
@@ -245,7 +182,6 @@ def job_chain():
     try:
         # Option chain from Kite NFO
         chain = _fetcher.fetch_option_chain(_kite, "NIFTY")
-        bn_chain = _fetcher.fetch_option_chain(_kite, "BANKNIFTY")
         if chain:
             # Validate Max Pain is not too stale
             ul_price = chain.get("ul_price", 0)
@@ -263,8 +199,6 @@ def job_chain():
 
             if chain:
                 _cache["chain"] = chain
-        if bn_chain:
-            _cache["bn_chain"] = bn_chain
 
         # Indices from price cache (Kite live)
         indices = _fetcher.fetch_indices()
@@ -290,13 +224,12 @@ def job_chain():
             if existing_date and existing_date != today_str:
                 _cache["ix_px_hist"] = []
 
-            new_ix = _detect_index_signals(chain, indices, _cache.get("bn_chain"))
+            new_ix = _detect_index_signals(chain, indices)
             # Roll over ONLY when the date actually changes (not on missing date = startup)
             if existing_date and existing_date != today_str:
                 existing_ix = new_ix
                 for ns in new_ix:
                     _ix_db_upsert(ns)
-                    _notify_index_radar_new(ns)
             else:
                 _update_index_outcomes(existing_ix, indices)
                 # Persist outcome updates to DB
@@ -318,10 +251,8 @@ def job_chain():
                     if not already:
                         existing_ix.append(ns)
                         _ix_db_upsert(ns)
-                        _notify_index_radar_new(ns)
                 existing_ix.sort(key=lambda x: x.get("ts", 0), reverse=True)
                 existing_ix = existing_ix[:25]
-            _ix_attach_option_ltps(existing_ix, chain, _cache.get("bn_chain"))
             _signals.state["index_signals"]      = existing_ix
             _signals.state["index_signals_date"] = today_str
 
@@ -339,20 +270,10 @@ def job_chain():
             ix_sigs = _signals.state.get("index_signals", [])
             _ws({"type": "index_spikes", "data": ix_sigs, "ts": time.time()})
 
-            # Confluence (same helper as off-hours job)
-            refresh_confluence_broadcast(persist=True)
-
         _record_success("job_chain")
     except Exception as e:
         logger.error(f"job_chain: {e}", exc_info=True)
         _record_error("job_chain")
-
-
-def job_confluence_idle():
-    """Market closed: still emit confluence from cached chain/macro so the tab + DB history work."""
-    if is_market_open():
-        return
-    refresh_confluence_broadcast(persist=True)
 
 
 # ─── JOB: F&O STOCKS (every 30 seconds) ──────────────────────────────────────
@@ -394,19 +315,6 @@ def job_stocks():
             _cache["stocks"] = stocks
             if _ws:
                 _ws({"type": "stocks", "data": stocks, "timestamp": time.time()})
-            # Persist Swing Radar snapshots (same logic family as UI carousel) for history.
-            try:
-                from backtest_data import log_swing_radar_triggers
-
-                _gates = _signals.state.get("gates", {}) or {}
-                _ver = str(_signals.state.get("verdict", "WAIT") or "WAIT")
-                _pc = int(_signals.state.get("pass_count", 0) or 0)
-                log_swing_radar_triggers(
-                    stocks, _gates, _ver, _pc,
-                    _cache.get("indices"), _cache.get("chain"),
-                )
-            except Exception as _e:
-                logger.debug("swing_radar persist: %s", _e)
         _record_success("job_stocks")
     except Exception as e:
         logger.error(f"job_stocks: {e}")
@@ -447,7 +355,7 @@ def _ix_recent_range(hist, now_ts, px_idx, window_sec):
     return max(xs), min(xs)
 
 
-def _detect_index_signals(chain, indices, bn_chain=None):
+def _detect_index_signals(chain, indices):
     """
     NIFTY/BANKNIFTY momentum radar: controlled 5m impulse, confirmations, no chasing.
     History is appended AFTER checks so windows are not polluted by the current print.
@@ -593,40 +501,24 @@ def _detect_index_signals(chain, indices, bn_chain=None):
                 continue
 
         if sym == "NIFTY" and chain:
-            active_chain = chain
-            atm = active_chain.get("atm", 0) or round(px / 50) * 50
+            atm = chain.get("atm", 0) or round(px / 50) * 50
             step = 50
             target = atm + step if is_ce else atm - step
             entry_px = 0.0
-            for s in (active_chain.get("strikes") or []):
+            for s in (chain.get("strikes") or []):
                 if s["strike"] == target:
                     entry_px = float(s.get("call_ltp" if is_ce else "put_ltp", 0) or 0)
                     break
             if not entry_px:
-                for s in (active_chain.get("strikes") or []):
+                for s in (chain.get("strikes") or []):
                     if s.get("is_atm"):
                         entry_px = float(s.get("call_ltp" if is_ce else "put_ltp", 0) or 0)
-                        target = int(s.get("strike") or target)
                         break
         else:
-            # BANKNIFTY: use its own option chain LTP (fallback to proxy only if chain unavailable)
-            active_chain = bn_chain
-            atm = (active_chain or {}).get("atm", 0) or round(px / 100) * 100
-            step = 100
+            atm    = round(px / 100) * 100
+            step   = 100
             target = atm + step if is_ce else atm - step
-            entry_px = 0.0
-            for s in ((active_chain or {}).get("strikes") or []):
-                if s["strike"] == target:
-                    entry_px = float(s.get("call_ltp" if is_ce else "put_ltp", 0) or 0)
-                    break
-            if not entry_px:
-                for s in ((active_chain or {}).get("strikes") or []):
-                    if s.get("is_atm"):
-                        entry_px = float(s.get("call_ltp" if is_ce else "put_ltp", 0) or 0)
-                        target = int(s.get("strike") or target)
-                        break
-            if not entry_px:
-                entry_px = round(px * 0.007, 1)
+            entry_px = round(px * 0.007, 1)
 
         if not entry_px:
             continue
@@ -697,38 +589,6 @@ def _detect_index_signals(chain, indices, bn_chain=None):
     if len(hist) > 120:
         hist.pop(0)
     return results
-
-
-def _ix_attach_option_ltps(signals, chain, bn_chain):
-    """Set ``ltp`` on open index radar signals from the current option chain."""
-    if not signals:
-        return
-    for sig in signals:
-        if sig.get("outcome"):
-            continue
-        sym = str(sig.get("symbol") or "")
-        try:
-            strike = int(sig.get("strike") or 0)
-        except (TypeError, ValueError):
-            strike = 0
-        is_ce = sig.get("type") == "CE"
-        ch = chain if sym == "NIFTY" else bn_chain
-        ltp = None
-        if ch and strike:
-            for row in ch.get("strikes") or []:
-                try:
-                    st = int(row.get("strike") or 0)
-                except (TypeError, ValueError):
-                    continue
-                if st != strike:
-                    continue
-                raw = row.get("call_ltp" if is_ce else "put_ltp", 0)
-                ltp = float(raw or 0)
-                break
-        if ltp and ltp > 0:
-            sig["ltp"] = round(ltp, 2)
-        else:
-            sig["ltp"] = round(float(sig.get("entry") or 0), 2)
 
 
 def _update_index_outcomes(signals, indices):
@@ -831,63 +691,6 @@ def _apply_new_token():
         logger.error(f"_apply_new_token error: {e}")
 
 
-def job_morning_briefing():
-    """9:00 IST Mon–Fri: global/India context, movement checklist, watchlist → Telegram."""
-    try:
-        from config import MORNING_TELEGRAM_BRIEF, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-        if not MORNING_TELEGRAM_BRIEF or not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-            return
-        import html as html_mod
-
-        import signals
-        from market_desk import get_market_desk
-
-        desk = get_market_desk(signals, force_refresh=True)
-        brief = desk.get("today_brief") or []
-        picks = desk.get("picks") or []
-        leaders = desk.get("fno_leaders") or []
-        ng = desk.get("news_global") or []
-        err = desk.get("error")
-
-        lines: list[str] = [
-            "🌅 <b>Pre-open desk — 9:00 IST</b>",
-            "<i>Context only — not a trade signal.</i>",
-        ]
-        if err:
-            lines.append("⚠ " + html_mod.escape(str(err)))
-        for line in brief[:14]:
-            lines.append("· " + html_mod.escape(line))
-        pick_syms = [p.get("sym") or p.get("symbol", "") for p in picks[:12]]
-        pick_syms = [x for x in pick_syms if x]
-        if pick_syms:
-            lines.append("")
-            lines.append("<b>Stocks to watch:</b> " + html_mod.escape(", ".join(pick_syms)))
-        if leaders:
-            parts = []
-            for x in leaders[:8]:
-                sym = x.get("sym") or x.get("symbol", "")
-                if not sym:
-                    continue
-                try:
-                    cp = float(x.get("chg_pct", 0) or 0)
-                except (TypeError, ValueError):
-                    cp = 0.0
-                parts.append(f"{sym} ({cp:+.1f}%)")
-            if parts:
-                lines.append("<b>F&amp;O movers:</b> " + html_mod.escape(", ".join(parts)))
-        if ng:
-            lines.append("")
-            lines.append("<b>Global headlines:</b>")
-            for it in ng[:4]:
-                t = (it.get("title") or "")[:160]
-                lines.append("• " + html_mod.escape(t))
-
-        signals.send_telegram_message("\n".join(lines))
-        logger.info("Morning Telegram briefing sent (9:00 IST)")
-    except Exception as e:
-        logger.error("job_morning_briefing failed: %s", e)
-
-
 # ─── BUILD SCHEDULER ─────────────────────────────────────────────────────────
 def build_scheduler() -> BackgroundScheduler:
     sched = BackgroundScheduler(
@@ -899,18 +702,8 @@ def build_scheduler() -> BackgroundScheduler:
     sched.add_job(job_stocks,        "interval", seconds=30,  id="stocks")
     sched.add_job(job_fii,           "interval", seconds=300, id="fii")
     sched.add_job(job_spikes,        "interval", seconds=10,  id="spikes")
-    sched.add_job(job_confluence_idle, "interval", seconds=45, id="confluence_idle")
     # Daily token refresh at 7:55 AM IST — runs before market open (9:15 AM)
     sched.add_job(job_token_refresh, "cron", hour=7, minute=55, id="token_refresh")
-    # Pre-open briefing: global markets, checklist, key names (Telegram)
-    sched.add_job(
-        job_morning_briefing,
-        "cron",
-        hour=9,
-        minute=0,
-        day_of_week="mon-fri",
-        id="morning_brief",
-    )
 
     def on_err(ev):
         logger.error(f"Scheduler job {ev.job_id} failed: {ev.exception}")
