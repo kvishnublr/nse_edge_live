@@ -53,11 +53,30 @@ KITE_ACCESS_TOKEN = os.getenv("KITE_ACCESS_TOKEN", "").strip()
 
 # ─── SERVER ───────────────────────────────────────────────────────────────────
 HOST = os.getenv("HOST", "0.0.0.0").strip()
-try:
-    PORT = int(os.getenv("PORT", "8765"))
-except ValueError:
-    logger.error(f"Invalid PORT value: {os.getenv('PORT')}")
-    PORT = 8765
+
+
+def _resolve_listen_port() -> int:
+    """
+    Listen port for uvicorn. NSE_EDGE_PORT wins when set (e.g. in backend/.env) so a
+    global Windows PORT=8000 from another tool does not override the app default 8765
+    that matches frontend/index.html. On Railway, leave NSE_EDGE_PORT unset and use PORT.
+    """
+    for key, raw in (("NSE_EDGE_PORT", os.getenv("NSE_EDGE_PORT", "").strip()),
+                     ("PORT", os.getenv("PORT", "").strip())):
+        if not raw:
+            continue
+        try:
+            p = int(raw)
+            if 1 <= p <= 65535:
+                if key == "NSE_EDGE_PORT":
+                    logger.info("Using NSE_EDGE_PORT=%s for listen port", p)
+                return p
+        except ValueError:
+            logger.error("Invalid %s value: %r", key, raw)
+    return 8765
+
+
+PORT = _resolve_listen_port()
 
 # ─── NSE HEADERS (for FII/DII — only endpoint not on Kite) ────────────────────
 NSE_HEADERS = {
@@ -196,25 +215,25 @@ INDEX_RADAR = {
     "trend_sec":          1800,   # 30-minute broader trend alignment
     "min_hist_span_sec":  270,    # need ≥4.5 min of samples before signalling
     "min_hist_samples":   6,      # at least N points (30s chain job → ~3 min min)
-    "chg_min_pct":        0.20,   # min |5m move|
-    "chg_max_pct":        0.30,   # max |5m move| (avoid exhaustion spikes)
-    "chg_hi_strength_pct": 0.26,  # strength="hi" when |chg| at upper end of band
+    "chg_min_pct":        0.14,   # min |5m move| (relaxed for low-to-mid impulse days)
+    "chg_max_pct":        0.45,   # max |5m move| (allow stronger intraday impulses)
+    "chg_hi_strength_pct": 0.24,  # strength="hi" when |chg| at upper end of band
     "trend_against_pct":  0.30,   # skip if 30m trend strongly opposite
-    "pcr_pe_min":         1.40,   # PE only when puts dominate (was 1.4 live)
+    "pcr_pe_min":         1.20,   # PE bias threshold (relaxed)
     "pe_max_nifty_chg":   0.12,   # PE: Nifty vs prev close must be weak (≤ this %)
     "pcr_ce_avoid_below": 0.55,   # skip CE when PCR extremely bearish (optional guard)
-    "vix_block_above":    18.0,    # no index radar signals if VIX at panic levels
+    "vix_block_above":    28.0,    # hard block only in extreme panic regimes
     "anti_chase_sec":     180,    # lookback for local high/low
     "anti_chase_ce_pct":  0.12,   # skip long if px above recent max by more than this
     "anti_chase_pe_pct":  0.12,   # skip short if px below recent min by more than this
-    "dedup_minutes":      20,     # same symbol + CE/PE
+    "dedup_minutes":      12,     # same symbol + CE/PE
     "micro_step_min_pct": 0.01,   # last 30s–60s step must favor direction (noise floor)
     # ── Win-rate / selectivity (0 on *_min / *_pct / floor = feature off) ──
-    "trend_support_min_pct": 0.07,   # CE: 30m trend must be ≥ this; PE: ≤ −this (needs 30m baseline)
-    "pcr_ce_min":         1.05,     # CE only if PCR ≥ this (bullish OI skew); 0 = off
-    "cross_index_against_pct": 0.18, # CE: other index 5m % must be > −this; PE: < +this; 0 = off
-    "quality_floor":      60,       # drop signals with quality below this; 0 = off
-    "vix_soft_skips_md_ce": 16.5,   # if VIX ≥ this, skip CE unless |5m chg| ≥ chg_hi_strength; 0 = off
+    "trend_support_min_pct": 0.03,   # CE: 30m trend must be ≥ this; PE: ≤ −this
+    "pcr_ce_min":         0.95,     # CE minimum PCR (relaxed)
+    "cross_index_against_pct": 0.25, # opposite-index tolerance (relaxed)
+    "quality_floor":      52,       # drop only lower-quality noise
+    "vix_soft_skips_md_ce": 22.0,   # soft CE skip threshold under elevated VIX
     "outcome_index_pct":  0.25,     # underlying % for live HIT_T1 / HIT_SL (backtest matches)
     # ── High precision (fewer signals). ML needs ≥~50 resolved T1/SL rows in DB first. ──
     "precision_boost":    False,    # True: tighter chg band, hi-only, stronger trend + quality
@@ -227,9 +246,88 @@ INDEX_RADAR = {
     "ml_min_win_prob":    0.72,    # fallback if no ix_radar_ml_meta.json from training
 }
 
+# ─── SWING RADAR (positional picks — scheduler → log_swing_radar_triggers + UI carousel) ─
+# Tighter filters = fewer logs but higher alignment with index / PCR / R:R / weak-symbol stats.
+SWING_RADAR = {
+    "min_score_log": 58,              # persist floor (after weak-symbol penalty) — was 62; empty UI fix
+    "min_rr": 1.72,                   # ATR template ~2.0; allow normal float noise
+    "vix_strict_above": 22.0,
+    "vix_extra_min_score": 3,         # was 5 — less empty on high-VIX days
+    "nifty_against_threshold": 0.45,
+    "counter_trend_min_pc": 4,
+    "rs_long_min_vs_nifty": 0.06,
+    "rs_short_max_vs_nifty": -0.06,
+    "pcr_soft_long_min": 0.82,
+    "pcr_soft_short_max": 1.22,
+    "pcr_soft_min_pc": 4,
+    "vol_breakout_min": 1.02,
+    "vol_breakout_min_vix": 1.10,
+    "oi_long_breakout_max_neg": -7.0,
+    "no_trade_bypass_min_score": 76,
+    "no_trade_bypass_min_pc": 3,
+    "weak_symbol_penalty": 8,
+    "recovery_vol_min": 1.0,
+}
+
+# ─── STRATEGY PROFILES (runtime switchable) ───────────────────────────────────
+_INDEX_RADAR_BASE = dict(INDEX_RADAR)
+_SWING_RADAR_BASE = dict(SWING_RADAR)
+STRATEGY_PROFILES = {
+    "legacy": {
+        "index_radar": {},
+        "swing_radar": {},
+    },
+    "balanced_v2": {
+        "index_radar": {
+            "dedup_minutes": 18,
+            "quality_floor": 58,
+            "trend_support_min_pct": 0.06,
+            "anti_chase_ce_pct": 0.10,
+            "anti_chase_pe_pct": 0.10,
+            "chg_min_pct": 0.18,
+            "chg_hi_strength_pct": 0.26,
+        },
+        "swing_radar": {
+            "min_score_log": 62,
+            "min_rr": 1.90,
+            "counter_trend_min_pc": 5,
+            "pcr_soft_min_pc": 5,
+            "vol_breakout_min": 1.05,
+        },
+    },
+}
+_ACTIVE_STRATEGY_PROFILE = ""
+
+
+def apply_strategy_profile(name: str | None) -> str:
+    """Apply strategy overrides in-place so live imports see updated values."""
+    global _ACTIVE_STRATEGY_PROFILE
+    key = str(name or "").strip().lower() or "balanced_v2"
+    if key not in STRATEGY_PROFILES:
+        key = "balanced_v2"
+    profile = STRATEGY_PROFILES.get(key, {})
+    INDEX_RADAR.clear()
+    INDEX_RADAR.update(_INDEX_RADAR_BASE)
+    INDEX_RADAR.update(profile.get("index_radar", {}))
+    SWING_RADAR.clear()
+    SWING_RADAR.update(_SWING_RADAR_BASE)
+    SWING_RADAR.update(profile.get("swing_radar", {}))
+    _ACTIVE_STRATEGY_PROFILE = key
+    return key
+
+
+def get_strategy_profile_name() -> str:
+    return _ACTIVE_STRATEGY_PROFILE or "balanced_v2"
+
+
+def get_strategy_profiles() -> list[str]:
+    return list(STRATEGY_PROFILES.keys())
+
 # ─── TELEGRAM ALERTS ──────────────────────────────────────────────────────────
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID",   "").strip()
+_morning_brief = os.getenv("MORNING_TELEGRAM_BRIEF", "1").strip().lower()
+MORNING_TELEGRAM_BRIEF = _morning_brief not in ("0", "false", "no", "off")
 
 # ─── WHATSAPP ALERTS (CallMeBot — free) ───────────────────────────────────────
 WHATSAPP_PHONE  = os.getenv("WHATSAPP_PHONE",  "").strip()
@@ -287,3 +385,4 @@ def get_market_status():
 
 # Run validation at import
 _validate_config()
+apply_strategy_profile(os.getenv("STRATEGY_PROFILE", "balanced_v2"))

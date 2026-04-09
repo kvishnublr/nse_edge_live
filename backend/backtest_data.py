@@ -90,6 +90,15 @@ def init_db():
             updated_ts REAL
         );
     """)
+    try:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_lsh_trade_date ON live_signal_history(trade_date)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_lsh_verdict_date ON live_signal_history(verdict, trade_date)"
+        )
+    except Exception:
+        pass
     conn.commit()
     conn.close()
 
@@ -505,6 +514,248 @@ def _gate_snapshot_json(gates: dict) -> str:
         return "{}"
 
 
+def swing_radar_candidates(
+    stocks: list,
+    indices: dict,
+    chain: dict,
+    _verdict: str,
+    _pass_count: int,
+    min_score: int = 60,
+) -> list:
+    """
+    Core Swing Radar stock filtering (same rules as live persist). Returns up to 12 picks.
+    """
+    if not stocks:
+        return []
+    try:
+        from config import SWING_RADAR as SWR
+    except Exception:
+        SWR = {
+            "min_score_log": 58,
+            "min_rr": 1.72,
+            "vix_strict_above": 22.0,
+            "vix_extra_min_score": 3,
+            "nifty_against_threshold": 0.45,
+            "counter_trend_min_pc": 4,
+            "rs_long_min_vs_nifty": 0.06,
+            "rs_short_max_vs_nifty": -0.06,
+            "pcr_soft_long_min": 0.82,
+            "pcr_soft_short_max": 1.22,
+            "pcr_soft_min_pc": 4,
+            "vol_breakout_min": 1.02,
+            "vol_breakout_min_vix": 1.10,
+            "oi_long_breakout_max_neg": -7.0,
+            "no_trade_bypass_min_score": 76,
+            "no_trade_bypass_min_pc": 3,
+            "weak_symbol_penalty": 8,
+            "recovery_vol_min": 1.0,
+        }
+
+    weak_syms: set[str] = set()
+    try:
+        weak_syms = {str(x).upper() for x in (get_signal_accuracy_filters().get("weak_symbols") or [])}
+    except Exception:
+        pass
+
+    vix = float((indices or {}).get("vix", 0) or 0)
+    pcr = float((chain or {}).get("pcr", 0) or 0)
+    nifty_chg = float((indices or {}).get("nifty_chg", 0) or 0)
+    verdict_raw = str(_verdict or "").upper().strip().replace(" ", "_")
+
+    min_log = int(SWR.get("min_score_log", min_score))
+    if vix >= float(SWR.get("vix_strict_above", 22.0)):
+        min_log += int(SWR.get("vix_extra_min_score", 5))
+
+    picks = []
+    skip_syms = {"NIFTY", "BANKNIFTY", "INDIAVIX"}
+    for s in stocks:
+        sym = str(s.get("symbol", "") or "").upper()
+        if not sym or sym in skip_syms:
+            continue
+        price = float(s.get("price", 0) or 0)
+        if price <= 0:
+            continue
+        chg = float(s.get("chg_pct", 0) or 0)
+        raw_score = int(s.get("score", 0) or 0)
+        penalty = int(SWR.get("weak_symbol_penalty", 10)) if sym in weak_syms else 0
+        rank_score = raw_score - penalty
+        if rank_score < min_log:
+            continue
+
+        pc = int(s.get("pc", 0) or 0)
+        vol_r = float(s.get("vol_ratio", 0) or 0)
+        rs = float(s.get("rs_pct", 0) or 0)
+        oi_p = float(s.get("oi_chg_pct", 0) or 0)
+        atr_pct = float(s.get("atr_pct", 0) or max(abs(chg) * 0.8, 1.2))
+        atr = max(price * atr_pct / 100.0, price * 0.006)
+        direction = "LONG" if chg >= 0 else "SHORT"
+        entry = price
+        if direction == "LONG":
+            stop = entry - atr * 1.5
+            target = entry + atr * 3
+        else:
+            stop = entry + atr * 1.5
+            target = entry - atr * 3
+        risk = abs(entry - stop)
+        reward = abs(target - entry)
+        rr = (reward / risk) if risk > 1e-9 else 0.0
+        if rr < float(SWR.get("min_rr", 1.85)):
+            continue
+
+        if verdict_raw == "NO_TRADE":
+            if raw_score < int(SWR.get("no_trade_bypass_min_score", 82)):
+                continue
+            if pc < int(SWR.get("no_trade_bypass_min_pc", 4)):
+                continue
+
+        nth = float(SWR.get("nifty_against_threshold", 0.38))
+        ctp = int(SWR.get("counter_trend_min_pc", 4))
+        if direction == "LONG" and nifty_chg <= -nth:
+            if rs < float(SWR.get("rs_long_min_vs_nifty", 0.12)) or pc < ctp:
+                continue
+        if direction == "SHORT" and nifty_chg >= nth:
+            if rs > float(SWR.get("rs_short_max_vs_nifty", -0.12)) or pc < ctp:
+                continue
+
+        if direction == "LONG" and pcr < float(SWR.get("pcr_soft_long_min", 0.88)):
+            if pc < int(SWR.get("pcr_soft_min_pc", 4)):
+                continue
+        if direction == "SHORT" and pcr > float(SWR.get("pcr_soft_short_max", 1.18)):
+            if pc < int(SWR.get("pcr_soft_min_pc", 4)):
+                continue
+
+        if chg >= 0.3:
+            setup = "Breakout"
+        elif chg <= -0.3:
+            setup = "Pullback"
+        else:
+            setup = "Recovery"
+
+        if setup == "Breakout":
+            v_need = float(
+                SWR.get("vol_breakout_min_vix", 1.22)
+                if vix >= float(SWR.get("vix_strict_above", 22.0))
+                else SWR.get("vol_breakout_min", 1.12)
+            )
+            if vol_r < v_need:
+                continue
+            if direction == "LONG" and oi_p < float(SWR.get("oi_long_breakout_max_neg", -5.5)):
+                continue
+        elif setup == "Recovery":
+            if vol_r < float(SWR.get("recovery_vol_min", 1.02)):
+                continue
+
+        sig_lbl = "EXECUTE" if pc >= 4 else "WATCH" if pc >= 3 else "SCAN"
+        picks.append(
+            {
+                "sym": sym,
+                "score": raw_score,
+                "rank_score": rank_score,
+                "pc": pc,
+                "price": price,
+                "chg": chg,
+                "vol_r": vol_r,
+                "entry": entry,
+                "stop": stop,
+                "target": target,
+                "setup": setup,
+                "direction": direction,
+                "sig_lbl": sig_lbl,
+            }
+        )
+
+    picks.sort(key=lambda x: -x["rank_score"])
+    return picks[:12]
+
+
+def log_swing_radar_triggers(
+    stocks: list,
+    gates: dict,
+    _verdict: str,
+    _pass_count: int,
+    indices: dict,
+    chain: dict,
+    min_score: int = 60,
+) -> int:
+    """
+    Persist Swing Radar setups into live_signal_history (quality-filtered).
+
+    Filters: min R:R, index vs stock RS when fighting tape, PCR soft alignment, VIX/volume on
+    breakouts, weak-symbol penalty from live outcome stats, NO_TRADE gate (bypass only
+    exceptional names). Mirrors frontend _renderSwingLive when SWING_Q is in sync.
+
+    Dedup: one row per (trade_date, symbol, setup, 2h_bucket) via UNIQUE signal_key + INSERT OR IGNORE.
+    """
+    if not stocks:
+        return 0
+
+    now = datetime.now(IST)
+    now_ts = time.time()
+    trade_date = now.strftime("%Y-%m-%d")
+    signal_time = now.strftime("%H:%M")
+    vix = float((indices or {}).get("vix", 0) or 0)
+    pcr = float((chain or {}).get("pcr", 0) or 0)
+    gate_json = _gate_snapshot_json(gates)
+    bucket_2h = int(now_ts // 7200)
+
+    picks = swing_radar_candidates(stocks, indices, chain, _verdict, _pass_count, min_score)
+
+    conn = get_conn()
+    inserted = 0
+    try:
+        for p in picks:
+            signal_key = f"SWING|{trade_date}|{p['sym']}|{p['setup']}|{bucket_2h}"
+            trig = (
+                f"Swing {p['setup']} | {p['sig_lbl']} | {p['chg']:+.2f}% | Vol×{p['vol_r']:.1f} | "
+                f"{p['pc']}/5 gates | score {p['score']}"
+            )
+            if p.get("rank_score", p["score"]) < p["score"]:
+                trig += f" | rank {p['rank_score']}"
+            strength = "hi" if p["score"] >= 80 else "md" if p["score"] >= 65 else "lo"
+            try:
+                cur = conn.execute(
+                    """
+                    INSERT OR IGNORE INTO live_signal_history
+                    (signal_key, trade_date, symbol, signal_type, trigger, strength, signal_time,
+                     entry_price, stop_loss, target_price, status, outcome, pnl_pts, pnl_pct,
+                     hold_minutes, gate_pass_count, gate_snapshot, verdict, vix, pcr, created_ts, updated_ts)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        signal_key,
+                        trade_date,
+                        p["sym"],
+                        p["direction"],
+                        trig,
+                        strength,
+                        signal_time,
+                        round(p["entry"], 2),
+                        round(p["stop"], 2),
+                        round(p["target"], 2),
+                        "OPEN",
+                        "OPEN",
+                        None,
+                        None,
+                        0,
+                        p["pc"],
+                        gate_json,
+                        "SWING_RADAR",
+                        vix,
+                        pcr,
+                        now_ts,
+                        now_ts,
+                    ),
+                )
+                if cur.rowcount == 1:
+                    inserted += 1
+            except Exception:
+                continue
+        conn.commit()
+    finally:
+        conn.close()
+    return inserted
+
+
 def log_live_spikes(spikes: list, gates: dict, verdict: str, pass_count: int, indices: dict, chain: dict):
     """Persist new live spike events with entry/SL/target snapshot."""
     if not spikes:
@@ -555,18 +806,32 @@ def log_live_spikes(spikes: list, gates: dict, verdict: str, pass_count: int, in
     return inserted
 
 
-def update_live_signal_outcomes(prices: dict, max_hold_minutes: int = 90):
-    """Update open spike signals against current market prices."""
+def update_live_signal_outcomes(
+    prices: dict, max_hold_minutes: int = 90, swing_max_hold_minutes: int = 10080
+):
+    """Update open signals against current market prices (intraday spikes + swing radar)."""
     if not prices:
         return 0
     conn = get_conn()
     now = datetime.now(IST)
     now_ts = time.time()
     rows = conn.execute(
-        "SELECT id, symbol, signal_type, signal_time, entry_price, stop_loss, target_price FROM live_signal_history WHERE status='OPEN'"
+        """SELECT id, symbol, signal_type, signal_time, entry_price, stop_loss, target_price,
+                  verdict, trade_date
+           FROM live_signal_history WHERE status='OPEN'"""
     ).fetchall()
     updated = 0
-    for sig_id, symbol, signal_type, signal_time, entry_price, stop_loss, target_price in rows:
+    for (
+        sig_id,
+        symbol,
+        signal_type,
+        signal_time,
+        entry_price,
+        stop_loss,
+        target_price,
+        verdict,
+        trade_date,
+    ) in rows:
         px = prices.get(symbol, {}) or {}
         last_price = float(px.get("price", 0) or 0)
         if last_price <= 0:
@@ -589,13 +854,28 @@ def update_live_signal_outcomes(prices: dict, max_hold_minutes: int = 90):
                 status = "CLOSED"
                 outcome = "SL HIT"
 
+        is_swing = str(verdict or "") == "SWING_RADAR"
+        max_hold = swing_max_hold_minutes if is_swing else max_hold_minutes
+        hold_minutes = 0
         try:
-            sig_dt = datetime.strptime(f"{now.strftime('%Y-%m-%d')} {signal_time}", "%Y-%m-%d %H:%M")
-            hold_minutes = int(max((now - IST.localize(sig_dt)).total_seconds() / 60, 0))
+            if is_swing and trade_date:
+                sig_dt = datetime.strptime(
+                    f"{str(trade_date).strip()} {signal_time}", "%Y-%m-%d %H:%M"
+                )
+                if sig_dt.tzinfo is None:
+                    sig_dt = IST.localize(sig_dt)
+                hold_minutes = int(max((now - sig_dt).total_seconds() / 60, 0))
+            else:
+                sig_dt = datetime.strptime(
+                    f"{now.strftime('%Y-%m-%d')} {signal_time}", "%Y-%m-%d %H:%M"
+                )
+                hold_minutes = int(
+                    max((now - IST.localize(sig_dt)).total_seconds() / 60, 0)
+                )
         except Exception:
             hold_minutes = 0
 
-        if not status and hold_minutes >= max_hold_minutes:
+        if not status and hold_minutes >= max_hold:
             status = "CLOSED"
             outcome = "EXPIRED"
 
@@ -625,22 +905,41 @@ def _clean_signal_text(val):
     return s.strip(" |")
 
 
-def get_live_signal_history(limit: int = 100, status: str | None = None):
+def get_live_signal_history(
+    limit: int = 100,
+    status: str | None = None,
+    verdict: str | None = None,
+    min_trade_date: str | None = None,
+):
     conn = get_conn()
     try:
         sql = "SELECT id, trade_date, symbol, signal_type, trigger, strength, signal_time, entry_price, stop_loss, target_price, exit_price, exit_time, status, outcome, pnl_pts, pnl_pct, hold_minutes, gate_pass_count, verdict, vix, pcr FROM live_signal_history"
         params = []
+        where = []
         if status and status.upper() != "ALL":
             f = status.upper()
             if f in ("OPEN", "CLOSED"):
-                sql += " WHERE status=?"
+                where.append("status=?")
                 params.append(f)
             elif f in ("TARGET HIT", "SL HIT", "EXPIRED", "OPEN"):
-                sql += " WHERE outcome=?"
+                where.append("outcome=?")
                 params.append(f)
             elif f == "BACKFILLED":
-                sql += " WHERE verdict=?"
+                where.append("verdict=?")
                 params.append(f)
+        if verdict:
+            vu = str(verdict).strip().upper()
+            if vu == "SWING_RADAR":
+                where.append("(verdict = ? OR IFNULL(signal_key,'') LIKE 'SWING|%')")
+                params.append("SWING_RADAR")
+            else:
+                where.append("verdict=?")
+                params.append(verdict)
+        if min_trade_date:
+            where.append("trade_date >= ?")
+            params.append(str(min_trade_date).strip()[:10])
+        if where:
+            sql += " WHERE " + " AND ".join(where)
         sql += " ORDER BY created_ts DESC LIMIT ?"
         params.append(int(limit))
         rows = conn.execute(sql, params).fetchall()
@@ -716,7 +1015,9 @@ def get_signal_accuracy_filters():
     conn = get_conn()
     try:
         rows = conn.execute(
-            "SELECT symbol, signal_time, outcome FROM live_signal_history WHERE status='CLOSED' AND outcome IN ('TARGET HIT','SL HIT','EXPIRED')"
+            """SELECT symbol, signal_time, outcome FROM live_signal_history
+               WHERE status='CLOSED' AND outcome IN ('TARGET HIT','SL HIT','EXPIRED')
+                 AND COALESCE(verdict,'') != 'SWING_RADAR'"""
         ).fetchall()
     finally:
         conn.close()

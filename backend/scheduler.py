@@ -861,14 +861,19 @@ def job_spikes():
         logger.warning(f"job_spikes: {e}")
 
 
-# ─── JOB: DAILY KITE TOKEN REFRESH (7:55 AM IST) ────────────────────────────
+# ─── JOB: DAILY KITE TOKEN REFRESH (7:55 AM IST, Mon–Fri) ─────────────────────
 def job_token_refresh():
     """
-    Refresh Kite access token every morning at 7:55 AM IST via Playwright
-    headless login. Reloads the new token into the live KiteConnect instance
-    so no restart is needed.
+    Refresh Kite access token every trading morning at 7:55 AM IST (Asia/Kolkata)
+    via Playwright + pyotp. Reloads the new token into the live KiteConnect
+    instance so no restart is needed.
+
+    Requires KITE_USER_ID, KITE_PASSWORD, KITE_TOTP_SECRET, KITE_API_KEY,
+    KITE_API_SECRET (Railway Variables or backend/.env). The app process must
+    be running at that time (use Railway “always on” or an external wake/ping
+    if your plan sleeps the service).
     """
-    logger.info("=== Daily token refresh starting (7:55 AM IST) ===")
+    logger.info("=== Daily token refresh starting (scheduled Mon–Fri 07:55 IST) ===")
     try:
         from auto_token import refresh_token
         ok = refresh_token()
@@ -984,6 +989,7 @@ def job_morning_briefing():
 def build_scheduler() -> BackgroundScheduler:
     sched = BackgroundScheduler(
         timezone="Asia/Kolkata",
+        # Default: tight misfire window for intraday jobs.
         job_defaults={"coalesce": True, "max_instances": 1, "misfire_grace_time": 5},
     )
     sched.add_job(job_prices,        "interval", seconds=1,   id="prices")
@@ -992,8 +998,20 @@ def build_scheduler() -> BackgroundScheduler:
     sched.add_job(job_fii,           "interval", seconds=300, id="fii")
     sched.add_job(job_spikes,        "interval", seconds=10,  id="spikes")
     sched.add_job(job_confluence_idle, "interval", seconds=45, id="confluence_idle")
-    # Daily token refresh at 7:55 AM IST — runs before market open (9:15 AM)
-    sched.add_job(job_token_refresh, "cron", hour=7, minute=55, id="token_refresh")
+    # Daily token refresh Mon–Fri 7:55 IST — before cash market open (9:15).
+    # Large misfire_grace_time: if the host wakes late (e.g. Railway cold start),
+    # the job still runs instead of being dropped.
+    sched.add_job(
+        job_token_refresh,
+        "cron",
+        hour=7,
+        minute=55,
+        day_of_week="mon-fri",
+        id="token_refresh",
+        misfire_grace_time=28800,
+        coalesce=True,
+        max_instances=1,
+    )
     # Pre-open briefing: global markets, checklist, key names (Telegram)
     sched.add_job(
         job_morning_briefing,

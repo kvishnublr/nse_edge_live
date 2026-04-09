@@ -24,7 +24,7 @@
   --am:#ffaa00;--am-d:rgba(255,170,0,.11);--am-b:rgba(255,170,0,.26);
   --bl:#38beff;--bl-d:rgba(56,190,255,.10);--bl-b:rgba(56,190,255,.24);
   --pu:#a78bfa;--pu-d:rgba(167,139,250,.10);--pu-b:rgba(167,139,250,.24);
-  --t0:#d8e8f8;--t1:#7a9ab8;--t2:#3d5c78;--t3:#253856;
+  --t0:#d8e8f8;--t1:#7a9ab8;--t2:#5e8fb0;--t3:#3f6480;
   --fn:'IBM Plex Mono',monospace;--fh:'Syne',sans-serif;
 }
 /* ── LIGHT MODE ─────────────────────────────────────────────── */
@@ -35,7 +35,7 @@
   --st:#c40f2e;--st-d:rgba(196,15,46,.08);--st-b:rgba(196,15,46,.28);
   --am:#a85200;--am-d:rgba(168,82,0,.08);--am-b:rgba(168,82,0,.28);
   --bl:#0061a8;--bl-d:rgba(0,97,168,.08);--bl-b:rgba(0,97,168,.28);
-  --t0:#0b1c30;--t1:#2b4d6e;--t2:#527899;--t3:#8aabca;
+  --t0:#0b1c30;--t1:#2b4d6e;--t2:#2e5c82;--t3:#527899;
 }
 /* smooth transition between modes */
 html,body,#tb,.pn,#center,.tp,.gate,.rpk,.je,.stc,.msc,.acard,.mi,
@@ -81,11 +81,11 @@ html,body,#tb,.pn,#center,.tp,.gate,.rpk,.je,.stc,.msc,.acard,.mi,
 .light .ldot{animation:pulse-l 1.5s ease-in-out infinite}
 @keyframes pulse-l{0%,100%{box-shadow:0 0 0 0 rgba(0,110,58,.5)}60%{box-shadow:0 0 0 5px rgba(0,110,58,0)}}
 /* toggle button */
-.theme-tog{width:30px;height:17px;border-radius:9px;border:1px solid var(--b1);background:var(--s3);cursor:pointer;position:relative;flex-shrink:0;transition:all .2s}
-.theme-tog::after{content:'';position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;background:var(--t1);transition:all .2s}
-.light .theme-tog{background:var(--bl-d);border-color:var(--bl-b)}
-.light .theme-tog::after{left:15px;background:var(--bl)}
-html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:var(--fn);font-size:11px;color:var(--t0);display:flex;flex-direction:column}
+.theme-tog{width:30px;height:16px;border-radius:999px;border:1px solid var(--b1);background:var(--s2);cursor:pointer;position:relative;flex-shrink:0;transition:all .2s}
+.theme-tog::after{content:'';position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:var(--t2);transition:all .2s}
+.light .theme-tog{background:#e2e8f0;border-color:#cbd5e1}
+.light .theme-tog::after{left:18px;background:var(--bl)}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:var(--fn);font-size:12px;color:var(--t0);display:flex;flex-direction:column}
 ::-webkit-scrollbar{width:3px;height:3px}
 ::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -105,43 +105,128 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 #tv-container{flex:1;min-height:0}
 .tv-link{cursor:pointer;transition:color .12s}
 .tv-link:hover{color:var(--go)!important;text-decoration:underline;text-underline-offset:2px}
-/* TOPBAR */
-#tb{height:36px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:var(--s1);border-bottom:1px solid var(--b1);flex-shrink:0}
-.tbl{display:flex;align-items:center;gap:14px}
-.logo{display:flex;align-items:center;gap:10px;cursor:default;user-select:none}
-.logo-icon{flex-shrink:0;filter:drop-shadow(0 0 6px rgba(0,255,136,0.4))}
-.logo-text{display:flex;flex-direction:column;line-height:1.15}
-.logo-name{font-family:'Syne',sans-serif;font-size:17px;font-weight:800;background:linear-gradient(135deg,#00ff88,#00cc6a);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:1px}
+/* TOPBAR — compact elegant strip */
+#tb{
+  height:32px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 10px 0 12px;background:var(--s1);border-bottom:1px solid var(--b1);flex-shrink:0;
+  gap:8px;
+}
+.tbl{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
+.logo{display:flex;align-items:center;gap:8px;cursor:default;user-select:none;flex-shrink:0}
+.logo-icon{flex-shrink:0;width:20px;height:20px;filter:drop-shadow(0 0 4px rgba(0,255,136,0.35))}
+.logo-text{display:flex;flex-direction:column;line-height:1}
+.logo-name{font-family:'Syne',sans-serif;font-size:14px;font-weight:800;background:linear-gradient(135deg,#00ff88,#00cc6a);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:.6px}
 .arrow{stroke:#22c55e;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
 :root.light .arrow{stroke:#16a34a}
-.sep{width:1px;height:16px;background:var(--b2)}
-.lpill{display:flex;align-items:center;gap:5px;font-size:9px;font-weight:600;color:var(--go);padding:3px 10px;background:rgba(0,232,122,0.1);border:1px solid rgba(0,232,122,0.3);border-radius:12px}
-.ldot{width:6px;height:6px;border-radius:50%;background:var(--go);animation:pulse 1.5s ease-in-out infinite;box-shadow:0 0 8px var(--go)}
+.sep{width:1px;height:13px;background:var(--b1);opacity:.85;flex-shrink:0}
+.lpill{display:flex;align-items:center;gap:4px;font-size:7.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--go);padding:2px 8px;background:rgba(0,232,122,.08);border:1px solid rgba(0,232,122,.28);border-radius:999px;flex-shrink:0}
+.ldot{width:5px;height:5px;border-radius:50%;background:var(--go);animation:pulse 1.5s ease-in-out infinite;box-shadow:0 0 6px rgba(0,232,122,.45)}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(0,232,122,.5)}60%{box-shadow:0 0 0 5px rgba(0,232,122,0)}}
 @keyframes dot-execute{0%,100%{box-shadow:0 0 0 0 rgba(0,232,122,.8)}70%{box-shadow:0 0 0 6px rgba(0,232,122,0)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes dot-watch{0%,100%{box-shadow:0 0 0 0 rgba(255,170,0,.7)}70%{box-shadow:0 0 0 5px rgba(255,170,0,0)}}
 #right.rp-execute #rp-state-dot,#right.rp-execute #rs-dot{animation:dot-execute 2s ease-in-out infinite}
 #right.rp-watch #rp-state-dot,#right.rp-watch #rs-dot{animation:dot-watch 3s ease-in-out infinite}
-.zlbl{font-size:9px;color:var(--t2)}
-.tbr{display:flex;align-items:center;gap:12px}
-.clk{font-size:10px;color:var(--t1);font-weight:500;letter-spacing:.5px}
-.mtog{display:flex;background:linear-gradient(180deg,var(--s2),var(--s1));border:1px solid var(--b1);border-radius:6px;overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,0.2)}
-.mb{padding:5px 14px;font-family:var(--fn);font-size:9px;font-weight:600;letter-spacing:1.5px;border:none;cursor:pointer;color:var(--t2);background:transparent;transition:all .2s ease}
-.mb.on{background:linear-gradient(135deg,#00e87a,#00c463);color:#04110a;box-shadow:0 2px 12px rgba(0,232,122,0.3)}
-.tbdate-wrap{display:flex;align-items:center;gap:7px;padding:3px 8px;border:1px solid var(--b1);border-radius:5px;background:linear-gradient(180deg,var(--s2),var(--s1))}
-.tbdate-label{font-size:9px;color:var(--bl);letter-spacing:1.2px;font-weight:700;text-transform:uppercase}
-#tb-date{background:var(--s3);border:1px solid var(--bl-b);color:var(--t0);font-family:var(--fn);font-size:10px;font-weight:600;padding:4px 8px;border-radius:4px;outline:none;cursor:pointer;width:124px;box-shadow:inset 0 0 0 1px rgba(56,190,255,.05)}
-#tb-date:hover,#tb-date:focus{border-color:var(--bl);box-shadow:0 0 0 3px rgba(56,190,255,.08)}
-#tb-live-btn{display:none;padding:4px 11px;font-family:var(--fn);font-size:9px;font-weight:700;border:1px solid var(--go);color:var(--go);background:var(--go-d);border-radius:4px;cursor:pointer;letter-spacing:.6px}
+.zlbl{font-size:7.5px;font-weight:700;color:var(--t2);line-height:1.2;max-width:72px;text-align:left;letter-spacing:.02em;flex-shrink:0}
+.tbr{display:flex;align-items:center;gap:5px;flex-shrink:0}
+.clk{
+  font-size:9px;color:var(--t1);font-weight:600;letter-spacing:.02em;
+  font-variant-numeric:tabular-nums;
+  padding:3px 8px;border-radius:999px;border:1px solid var(--b1);background:var(--s2);
+  white-space:nowrap;
+}
+.mtog{
+  display:inline-flex;align-items:center;gap:2px;
+  background:var(--s2);
+  border:1px solid var(--b1);border-radius:999px;
+  padding:2px;flex-shrink:0;
+}
+.mb{
+  min-width:48px;height:22px;padding:0 8px;
+  font-family:var(--fn);font-size:8.5px;font-weight:800;letter-spacing:.06em;
+  border:none;border-radius:999px;cursor:pointer;color:var(--t2);background:transparent;
+  transition:background .15s,color .15s;
+}
+.mb:not(.on):hover{background:rgba(56,190,255,.1);color:var(--t0)}
+.mb.on{
+  background:var(--go-d);
+  color:var(--go);
+  border:1px solid var(--go-b);
+}
+.tbdate-wrap{
+  display:flex;align-items:center;gap:6px;padding:2px 8px 2px 10px;
+  border:1px solid var(--b1);border-radius:999px;background:var(--s2);
+  min-width:0;flex-shrink:1;
+}
+.tbdate-label{font-size:7px;color:var(--bl);letter-spacing:.1em;font-weight:800;text-transform:uppercase;flex-shrink:0}
+#tb-date{
+  background:var(--s1);border:1px solid var(--b1);color:var(--t0);
+  font-family:var(--fn);font-size:9px;font-weight:600;padding:3px 6px;border-radius:8px;
+  outline:none;cursor:pointer;width:112px;flex-shrink:0;
+}
+#tb-date:hover,#tb-date:focus{border-color:var(--bl);box-shadow:0 0 0 2px rgba(56,190,255,.12)}
+#tb-backtest-btn{height:22px!important;padding:0 8px!important;font-size:8px!important;border-radius:999px!important;min-width:0!important}
+#tb-live-btn{
+  display:none;height:22px;padding:0 9px;font-family:var(--fn);font-size:8px;font-weight:800;
+  border:1px solid var(--go-b);color:var(--go);background:var(--go-d);border-radius:999px;cursor:pointer;letter-spacing:.05em;
+  flex-shrink:0;
+}
 #tb-live-btn:hover{background:var(--go);color:#04110a}
 
-/* Topbar action button (no inline styles) */
-.tbbtn{padding:4px 10px;font-family:var(--fn);font-size:8.5px;font-weight:700;border:1px solid var(--b1);border-radius:6px;cursor:pointer;color:var(--t1);background:transparent;letter-spacing:.6px}
-.tbbtn:hover{background:var(--s2);border-color:var(--b2);color:var(--t0)}
-.tbbtn:focus{outline:none;border-color:var(--bl);box-shadow:0 0 0 3px rgba(56,190,255,.10)}
-.tbbtn.primary{border-color:var(--bl-b);color:var(--bl);background:var(--bl-d)}
-.tbbtn.primary:hover{background:var(--bl);border-color:var(--bl);color:#fff}
+/* Topbar action chips */
+.tbbtn{
+  height:26px;padding:0 9px;font-family:var(--fn);font-size:8.5px;font-weight:800;border:1px solid var(--b1);
+  border-radius:999px;cursor:pointer;color:var(--t2);background:var(--s2);letter-spacing:.04em;
+  transition:border-color .15s,background .15s,color .15s;flex-shrink:0;
+}
+.tbbtn:hover{border-color:var(--b2);background:var(--s3);color:var(--t0)}
+.tbbtn:focus{outline:none;border-color:var(--bl);box-shadow:0 0 0 2px rgba(56,190,255,.12)}
+.tbbtn.primary{border-color:rgba(56,190,255,.45);color:var(--t0);background:rgba(56,190,255,.14)}
+.tbbtn.primary:hover{background:rgba(56,190,255,.22);border-color:var(--bl);color:var(--t0)}
+
+#strategy-prof-btn{
+  min-width:0;max-width:100px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  border-color:var(--am-b);
+  background:var(--am-d);
+  color:var(--am);
+  text-shadow:none;
+  padding:0 10px;
+}
+#strategy-prof-btn:hover{
+  border-color:var(--am);
+  background:rgba(255,170,0,.14);
+}
+
+/* Utility micro-buttons — one family */
+.tb-util{
+  display:inline-flex;align-items:center;justify-content:center;
+  height:26px;min-width:26px;padding:0 7px;margin:0;
+  font-family:var(--fn);font-size:7.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+  border:1px solid var(--b1);border-radius:8px;cursor:pointer;
+  color:var(--t2);background:var(--s2);
+  transition:border-color .15s,background .15s,color .15s;
+}
+.tb-util:hover{border-color:var(--bl-b);color:var(--t0);background:var(--s3)}
+.tb-util.on{border-color:var(--bl-b);background:rgba(56,190,255,.12);color:var(--bl)}
+.light .tb-util.on{border-color:#38bdf8;background:rgba(14,165,233,.14);color:#0369a1}
+.tb-util.tb-util-ico{min-width:26px;padding:0;font-size:11px;font-weight:700;letter-spacing:0;text-transform:none}
+
+.light .mtog{background:#f1f5f9;border-color:#cbd5e1}
+.light .mb:not(.on):hover{background:#e2e8f0;color:#0a1728}
+.light .clk{background:#fff;border-color:#cbd5e1;color:#142a44}
+.light .tbdate-wrap{background:#f8fafc;border-color:#cbd5e1}
+.light #tb-date{background:#fff;border-color:#cbd5e1;color:#0a1728}
+.light .tbbtn{background:#f8fafc;border-color:#cbd5e1;color:#274a6c}
+.light .tbbtn:hover{background:#f1f5f9;border-color:#94a3b8;color:#081322}
+.light .tbbtn.primary{background:rgba(14,165,233,.12);border-color:#7dd3fc;color:#0369a1}
+.light .tb-util{background:#f8fafc;border-color:#cbd5e1;color:#355676}
+.light .tb-util:hover{background:#f1f5f9;border-color:#7dd3fc;color:#081322}
+.light #strategy-prof-btn{
+  background:#fffbeb;
+  border-color:#fcd34d;color:#92400e;text-shadow:none;
+}
+
 
 /* Day Performance modal (full screen, blurred background) */
 #perf-modal{display:none;position:fixed;inset:0;z-index:99998}
@@ -202,6 +287,130 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .perf-pill.bl{border-color:var(--bl-b);background:var(--bl-d);color:var(--bl)}
 .perf-pill.am{border-color:var(--am-b);background:var(--am-d);color:var(--am)}
 
+/* =========================================================
+   Readability + Contrast System (global audit pass)
+   ========================================================= */
+:root{
+  --bg:#0a111b;
+  --s1:#111a27;
+  --s2:#172334;
+  --s3:#1f2d42;
+  --s4:#273950;
+  --b1:#2f4766;
+  --b2:#3d5a7f;
+  --t0:#f1f7ff;
+  --t1:#c7d9ee;
+  --t2:#9db8d6;
+  --t3:#7393b4;
+}
+:root.light{
+  --bg:#f7f9fd;
+  --s1:#ffffff;
+  --s2:#eef3fa;
+  --s3:#e5edf8;
+  --s4:#dce7f5;
+  --b1:#c7d5e7;
+  --b2:#aebfd7;
+  --t0:#081322;
+  --t1:#142a44;
+  --t2:#274a6c;
+  --t3:#3f6489;
+}
+
+html,body{
+  font-size:14px;
+  line-height:1.5;
+  color:var(--t0);
+}
+
+/* Core text hierarchy */
+h1,h2,h3,.perf-title,.logo-name{color:var(--t0)}
+.muted,.meta,.subtle{color:var(--t2)}
+.disabled,[disabled]{color:var(--t3);opacity:.85}
+
+/* Raise minimum readable sizes in high-traffic UI elements */
+.tbbtn,.mb,.lpill,.zlbl,.clk,.tbdate-label,#tb-date,#tb-live-btn,
+.perf-sub,.perf-k,.perf-sec-h b,.perf-sec-h span,.perf-sec-row,.perf-sec-meta,
+.perf-fbtn,.perf-dlbtn,.perf-pill,.tvi,#tv-date-lbl,#tv-close{
+  font-size:12px !important;
+  line-height:1.35;
+}
+.perf-table{font-size:13px}
+.perf-table th{font-size:12px;color:var(--t1);background:rgba(0,0,0,.5)}
+.light .perf-table th{background:#e9f0fa;color:var(--t1)}
+.perf-table td{color:var(--t0)}
+
+/* Table readability: clear row separation + zebra + hover */
+.perf-table tbody tr:nth-child(odd){background:rgba(255,255,255,.02)}
+.perf-table tbody tr:nth-child(even){background:rgba(255,255,255,.045)}
+.perf-table tbody tr:hover{background:rgba(56,190,255,.10)}
+.light .perf-table tbody tr:nth-child(odd){background:rgba(17,52,88,.025)}
+.light .perf-table tbody tr:nth-child(even){background:rgba(17,52,88,.055)}
+.light .perf-table tbody tr:hover{background:rgba(0,97,168,.10)}
+
+/* Global table text visibility for all legacy table blocks */
+table th{color:var(--t1)}
+table td{color:var(--t0)}
+
+/* Inputs/buttons readability */
+button,input,select,textarea{
+  color:var(--t0);
+  border-color:var(--b1);
+}
+button{font-weight:700}
+
+/* Surface contrast normalization */
+.perf-card,.perf-sec,#tb,.tp,.pn,.acard,.mi,.oip{
+  border-color:var(--b1) !important;
+}
+.light .perf-card,.light .perf-sec,.light #tb,.light .tp,.light .pn,.light .acard,.light .mi,.light .oip{
+  border-color:var(--b1) !important;
+}
+
+/* Light theme hardening: avoid washed-out text */
+.light html, .light body{
+  color:var(--t0);
+}
+.light .tbbtn,
+.light .mb,
+.light .zlbl,
+.light .clk,
+.light .tbdate-label,
+.light .perf-sub,
+.light .perf-k,
+.light .perf-sec-h b,
+.light .perf-sec-h span,
+.light .perf-sec-row .l,
+.light .perf-sec-meta,
+.light .sw-mhist-hd-sub,
+.light .sw-mhist-acard .k,
+.light .sw-mhist-acard .s,
+.light .sw-hfbtn,
+.light .sw-mtbl thead th{
+  color:var(--t1) !important;
+}
+.light .perf-table td,
+.light .sw-mtbl tbody td,
+.light table td{
+  color:var(--t0) !important;
+}
+.light .perf-table td[style*='color:var(--t2)'],
+.light .sw-mtbl td[style*='color:var(--t2)']{
+  color:var(--t1) !important;
+}
+.light .perf-pill,
+.light .sw-hfbtn{
+  border-color:#9fb6d3 !important;
+}
+.light .perf-table th,
+.light .sw-mtbl thead th{
+  background:#e2ebf8 !important;
+}
+.light .perf-table tbody tr:hover td,
+.light .sw-mtbl tbody tr:hover td{
+  background:rgba(0,97,168,.14) !important;
+}
+
 /* GRID */
 #grid{flex:1;display:grid;grid-template-columns:40px 1fr 38px;overflow:hidden;transition:grid-template-columns .42s cubic-bezier(.4,0,.2,1)}
 #grid.panels-open{grid-template-columns:260px 1fr 38px}
@@ -231,10 +440,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 }
 #right-strip:hover{background:var(--s2)}
 #rs-dot{width:9px;height:9px;border-radius:50%;background:var(--t2);transition:background .4s,box-shadow .4s;flex-shrink:0}
-.rs-metric{writing-mode:vertical-rl;text-orientation:mixed;font-size:7px;font-weight:700;letter-spacing:1.5px;color:var(--t2);white-space:nowrap;transform:rotate(180deg);line-height:1}
+.rs-metric{writing-mode:vertical-rl;text-orientation:mixed;font-size:8px;font-weight:700;letter-spacing:1.5px;color:var(--t1);white-space:nowrap;transform:rotate(180deg);line-height:1}
 .rs-val{font-family:var(--fh);font-size:10px;font-weight:800;color:var(--t1);writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:-.5px}
 #rs-tally{font-family:var(--fh);font-size:13px;font-weight:900;writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:-1px}
-.rs-label-rotate{writing-mode:vertical-rl;transform:rotate(180deg);font-size:7px;letter-spacing:1.5px;font-weight:700;color:var(--t2)}
+.rs-label-rotate{writing-mode:vertical-rl;transform:rotate(180deg);font-size:8px;letter-spacing:1.5px;font-weight:700;color:var(--t1)}
 
 /* Full content hidden when collapsed */
 /* #right-content defined below in RIGHT PANEL section */
@@ -261,8 +470,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 }
 #left-strip:hover .gs-expand-btn{background:var(--bl);color:#fff;transform:scale(1.05)}
 .gs-label{
-  writing-mode:vertical-rl;text-orientation:mixed;font-size:7px;font-weight:700;
-  letter-spacing:2.5px;color:var(--t2);margin-bottom:10px;
+  writing-mode:vertical-rl;text-orientation:mixed;font-size:8px;font-weight:700;
+  letter-spacing:2.5px;color:var(--t1);margin-bottom:10px;
 }
 .gs-pip{
   width:10px;height:10px;border-radius:3px;margin:2px 0;
@@ -326,11 +535,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .vgo{border:1px solid var(--go-b);background:var(--go-d);color:var(--go)}
 .vst{border:1px solid var(--st-b);background:var(--st-d);color:var(--st)}
 .vam{border:1px solid var(--am-b);background:var(--am-d);color:var(--am)}
-.vtag{font-size:7px;font-weight:700;letter-spacing:2.5px;opacity:.7;margin-bottom:5px}
+.vtag{font-size:7px;font-weight:700;letter-spacing:2.5px;opacity:.88;margin-bottom:5px}
 .vword{font-family:var(--fh);font-size:22px;font-weight:900;letter-spacing:3px;line-height:1}
-.vsub{font-size:8px;opacity:.65;margin-top:5px;line-height:1.5}
+.vsub{font-size:8px;opacity:.82;margin-top:5px;line-height:1.5}
 .vconf-row{display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.07)}
-.vconf-lbl{font-size:7px;font-weight:600;letter-spacing:1.5px;opacity:.6}
+.vconf-lbl{font-size:7px;font-weight:600;letter-spacing:1.5px;opacity:.78}
 .vconf-val{display:flex;align-items:center;gap:4px}
 .vdirs{display:flex;gap:6px;margin-top:8px}
 .vdir{flex:1;padding:4px;text-align:center;border-radius:3px;font-size:8px;font-weight:700;letter-spacing:1.5px;border:1px solid var(--b1);color:var(--t2);cursor:pointer}
@@ -384,14 +593,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   padding:8px 10px;border-top:1px solid var(--b1);
   background:linear-gradient(180deg,var(--s2),var(--s1));flex-shrink:0;
 }
-.slbl{font-size:7px;color:var(--t2);letter-spacing:1.5px;margin-bottom:3px;font-weight:600}
+.slbl{font-size:8px;color:var(--t1);letter-spacing:1.5px;margin-bottom:3px;font-weight:600}
 .sdots{display:flex;gap:3px}
-.sdot{width:20px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:800;transition:all .3s}
+.sdot{width:20px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;transition:all .3s}
 .sdot.go{background:var(--go);color:#000;box-shadow:0 0 8px rgba(0,232,122,.3)}
 .sdot.st{background:var(--st);color:#fff;box-shadow:0 0 8px rgba(255,51,85,.3)}
 .sdot.am{background:var(--am-d);color:var(--am);border:1px solid var(--am-b)}
 .sdot.wt{background:var(--bl-d);color:var(--bl);border:1px solid var(--bl-b)}
-.sdot.off{background:var(--s3);color:var(--t3);border:1px solid var(--b1)}
+.sdot.off{background:var(--s3);color:var(--t2);border:1px solid var(--b1)}
 .snum{font-family:var(--fh);font-size:20px;font-weight:900;line-height:1}
 .snum.go{color:var(--go)}.snum.am{color:var(--am)}.snum.st{color:var(--st)}
 .pn{display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--b1)}
@@ -399,7 +608,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
 /* PANEL HEADERS */
 .ph{display:flex;align-items:center;justify-content:space-between;padding:0 10px;height:28px;flex-shrink:0;background:linear-gradient(180deg,var(--s3),var(--s2));border-bottom:1px solid var(--b1)}
-.pht{font-size:7px;font-weight:700;letter-spacing:2px;color:var(--t2)}
+.pht{font-size:8px;font-weight:700;letter-spacing:2px;color:var(--t1)}
 .bd{font-size:7px;font-weight:600;letter-spacing:.3px;padding:1px 5px;border-radius:2px}
 .bg{background:var(--go-d);color:var(--go);border:1px solid var(--go-b)}
 .ocdom{font-size:9px;padding:3px 9px;border-radius:3px;font-weight:800;letter-spacing:1px;display:inline-flex;align-items:center;min-height:20px}
@@ -414,9 +623,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .vgo{border:1px solid var(--go-b);background:var(--go-d);color:var(--go)}
 .vst{border:1px solid var(--st-b);background:var(--st-d);color:var(--st)}
 .vam{border:1px solid var(--am-b);background:var(--am-d);color:var(--am)}
-.vtag{font-size:8px;font-weight:600;letter-spacing:2px;opacity:.65;margin-bottom:4px}
+.vtag{font-size:8px;font-weight:600;letter-spacing:2px;opacity:.88;margin-bottom:4px}
 .vword{font-family:var(--fh);font-size:26px;font-weight:800;letter-spacing:4px;line-height:1}
-.vsub{font-size:9px;opacity:.6;margin-top:5px;line-height:1.4}
+.vsub{font-size:9px;opacity:.82;margin-top:5px;line-height:1.4}
 .vdirs{display:flex;gap:6px;margin-top:9px}
 .vdir{flex:1;padding:5px;text-align:center;border-radius:3px;font-size:9px;font-weight:600;letter-spacing:2px;border:1px solid var(--b1);color:var(--t2);cursor:pointer}
 .vdir.lon{background:var(--go);color:#000;border-color:var(--go)}
@@ -454,7 +663,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
 /* SCORE STRIP */
 #ss{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;border-top:1px solid var(--b1);background:var(--s2);flex-shrink:0}
-.slbl{font-size:8px;color:var(--t2);letter-spacing:1.5px;margin-bottom:3px}
+.slbl{font-size:9px;color:var(--t1);letter-spacing:1.5px;margin-bottom:3px}
 .sdots{display:flex;gap:3px}
 .sdot{width:22px;height:22px;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;transition:all .3s}
 .sdot.go{background:var(--go);color:#000}.sdot.st{background:var(--st);color:#fff}
@@ -471,7 +680,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 #pb{display:grid;grid-template-columns:repeat(5,1fr);border-bottom:1px solid var(--b1);flex-shrink:0}
 .pbc{padding:7px 12px;border-right:1px solid var(--b1)}
 .pbc:last-child{border-right:none}
-.pbk{font-size:8px;color:var(--t2);letter-spacing:1.5px;margin-bottom:2px}
+.pbk{font-size:8px;color:var(--t1);letter-spacing:1.5px;margin-bottom:2px}
 .pbv{font-size:12px;font-weight:600}
 .pbs{font-size:9px;color:var(--t2);margin-top:1px}
 
@@ -554,7 +763,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   gap:0;
   font-size:8px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
   font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  cursor:pointer;color:rgba(255,255,255,.38);
+  cursor:pointer;color:rgba(255,255,255,.52);
   border:none;border-radius:0;
   transition:color .22s ease,background .22s ease;
   white-space:nowrap;flex-shrink:0;
@@ -831,8 +1040,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 :root.light .tabs-arr{color:rgba(51,65,85,.35);border-color:rgba(15,23,42,.06);background:transparent}
 :root.light .tabs-arr:hover:not(:disabled){color:#0f172a;background:rgba(15,23,42,.04)}
 :root.light .tab{
-  color:rgba(71,85,105,.72);
-  font-weight:600;letter-spacing:.14em;font-size:7.5px;
+  color:rgba(51,65,85,.90);
+  font-weight:600;letter-spacing:.14em;font-size:8px;
 }
 :root.light .tab:hover:not(.on){color:#334155;background:rgba(15,23,42,.03)}
 :root.light .tab.on{color:#0f172a;font-weight:600}
@@ -1033,7 +1242,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .cepe-badge.avoid{background:var(--s3);color:var(--t2);border-color:var(--b1)}
 .cepe-badge.hedge{background:rgba(56,190,255,.18);color:#8fd8ff;border-color:rgba(56,190,255,.32)}
 .cepe-sigrow{margin-bottom:10px}
-.cepe-siglbl{display:block;font-size:7px;color:var(--t3);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;font-weight:700}
+.cepe-siglbl{display:block;font-size:7.5px;color:var(--t2);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;font-weight:700}
 .cepe-sigtrack{height:6px;border-radius:6px;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.06);overflow:hidden}
 .cepe-sigtrack.ce .cepe-sigfill{background:linear-gradient(90deg,rgba(0,180,95,.4),var(--go));box-shadow:0 0 14px rgba(0,232,122,.35)}
 .cepe-sigtrack.pe .cepe-sigfill{background:linear-gradient(90deg,rgba(200,40,70,.4),var(--st));box-shadow:0 0 14px rgba(255,71,102,.3)}
@@ -1049,7 +1258,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .light .cepe-prem-rupee{background:rgba(0,0,0,.06);color:var(--t0)}
 .cepe-pricegrid{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-bottom:4px}
 .cepe-kv{display:flex;flex-direction:column;gap:2px}
-.cepe-kv .cepe-lbl{font-size:7px;color:var(--t3);letter-spacing:.4px;text-transform:uppercase;font-weight:700}
+.cepe-kv .cepe-lbl{font-size:7.5px;color:var(--t2);letter-spacing:.4px;text-transform:uppercase;font-weight:700}
 .cepe-kv .cepe-val{font-size:11px;font-weight:800;color:var(--t1);font-variant-numeric:tabular-nums}
 .cepe-kv .cepe-val small{font-size:8px;font-weight:600;opacity:.72}
 .cepe-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
@@ -1134,7 +1343,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .kz-pred-card.idx{border-left:3px solid #22d3ee}
 .kz-pred-meta{display:flex;justify-content:space-between;gap:8px;margin-bottom:4px;flex-wrap:wrap}
 .kz-pred-kind{font-size:7px;font-weight:800;letter-spacing:1px;color:var(--t2);text-transform:uppercase}
-.kz-pred-time{font-size:7px;color:var(--t3);font-variant-numeric:tabular-nums}
+.kz-pred-time{font-size:7.5px;color:var(--t2);font-variant-numeric:tabular-nums}
 .kz-pred-sym{font-size:11px;font-weight:800;color:var(--t0)}
 .light #kz-opp-popup .kz-opp-inner{background:#f4f8fc;border-color:rgba(0,120,70,.35)}
 .light .kz-pred-card{background:rgba(255,255,255,.65)}
@@ -1164,11 +1373,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .kz-pill.go{color:var(--go);border-color:rgba(0,232,122,.35);background:rgba(0,232,122,.06)}
 .kz-pill.am{color:var(--am);border-color:rgba(255,170,0,.35);background:rgba(255,170,0,.06)}
 .kz-pill.st{color:var(--st);border-color:rgba(255,51,85,.35);background:rgba(255,51,85,.05)}
-.kz-hint{flex:1;min-width:120px;text-align:right;color:var(--t3);font-size:7.5px;letter-spacing:.2px}
+.kz-hint{flex:1;min-width:120px;text-align:right;color:var(--t2);font-size:8px;letter-spacing:.2px}
 .kz-sess-wrap{margin-top:6px}
 .kz-sess-bar{height:5px;border-radius:3px;background:var(--s3);overflow:hidden;border:1px solid var(--b1)}
 .kz-sess-fill{height:100%;background:linear-gradient(90deg,rgba(255,170,0,.85),rgba(0,232,122,.75),rgba(56,190,255,.5));width:0%;transition:width .45s ease;border-radius:2px}
-.kz-sess-lbl{display:flex;justify-content:space-between;font-size:7px;color:var(--t3);margin-top:3px;letter-spacing:.4px}
+.kz-sess-lbl{display:flex;justify-content:space-between;font-size:7.5px;color:var(--t2);margin-top:3px;letter-spacing:.4px}
 .zcard.kz-card-live{box-shadow:inset 0 0 0 2px currentColor,0 4px 18px rgba(0,0,0,.12)}
 .zcard.kz-card-live .zt{text-decoration:underline;text-underline-offset:2px}
 
@@ -1424,7 +1633,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   background:rgba(0,0,0,.15);border:1px solid rgba(255,255,255,.05);
 }
 .cf-brief-li::before{content:'→';position:absolute;left:9px;top:9px;font-size:9px;color:var(--bl);opacity:.75}
-.cf-brief-li.cf-brief-disclaimer{font-size:9px;color:var(--t3);font-weight:600;font-style:italic;border-style:dashed;opacity:.95}
+.cf-brief-li.cf-brief-disclaimer{font-size:9px;color:var(--t2);font-weight:600;font-style:italic;border-style:dashed;opacity:.95}
 .cf-brief-li.cf-brief-disclaimer::before{content:'!';color:var(--am)}
 .cf-brief-muted{color:var(--t2);font-style:italic}
 .cf-breadth-movers{display:grid;grid-template-columns:1fr 1.2fr;gap:14px}
@@ -1468,7 +1677,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   transition:color .15s;
 }
 .cf-news-item a:hover{color:var(--bl);text-decoration:underline;text-underline-offset:3px}
-.cf-news-meta{display:block;font-size:8px;color:var(--t3);margin-top:5px;font-weight:600}
+.cf-news-meta{display:block;font-size:8px;color:var(--t2);margin-top:5px;font-weight:600}
 /* News cards — headline vs source + keyword highlights */
 .cf-news-card{
   margin-bottom:12px;padding:12px 12px 11px;border-radius:12px;
@@ -1487,7 +1696,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   padding:4px 9px;border-radius:999px;background:rgba(56,190,255,.12);color:var(--bl);border:1px solid rgba(56,190,255,.22);
   text-transform:uppercase;
 }
-.cf-news-time{display:block;font-size:8px;color:var(--t3);margin-top:8px;font-weight:600;font-variant-numeric:tabular-nums}
+.cf-news-time{display:block;font-size:8px;color:var(--t2);margin-top:8px;font-weight:600;font-variant-numeric:tabular-nums}
 .cf-news-kw{
   font-weight:800;color:#fef3c7;background:linear-gradient(180deg,rgba(250,204,21,.22),rgba(245,158,11,.14));
   padding:0 3px;border-radius:3px;box-decoration-break:clone;-webkit-box-decoration-break:clone;
@@ -1559,7 +1768,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .cf-spike-lvv.t1{color:var(--bl)}
 .cf-spike-lvv.t2{color:var(--go)}
 .cf-spike-foot{margin-top:8px;font-size:8px;color:var(--t2);line-height:1.45;font-weight:600}
-.cf-spike-hint{font-size:8px;color:var(--t3);margin:0 0 8px;line-height:1.45}
+.cf-spike-hint{font-size:8px;color:var(--t2);margin:0 0 8px;line-height:1.45}
 .cf-spk-fbar{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}
 .cf-spk-fbtn{
   font-size:8px;font-weight:900;letter-spacing:.6px;padding:5px 9px;border-radius:999px;
@@ -1596,7 +1805,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 }
 .cf-spike-chip b{font-family:var(--fh);font-size:10px}
 .cf-chip--ghost{opacity:.75}
-.cf-desk-foot{font-size:8px;color:var(--t3);margin:14px 0 0;line-height:1.5;text-align:center}
+.cf-desk-foot{font-size:8px;color:var(--t2);margin:14px 0 0;line-height:1.5;text-align:center}
 .light .cf-desk{background:linear-gradient(165deg,#fff,#f0f4fc);border-color:rgba(124,58,237,.2);box-shadow:0 16px 40px rgba(30,64,175,.08)}
 .light .cf-desk-title{background:linear-gradient(135deg,#1e1b4b,#4c1d95 60%,#0369a1);-webkit-background-clip:text;background-clip:text}
 .light .cf-news-col{background:#fff;border-color:rgba(0,0,0,.08)}
@@ -1744,7 +1953,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .sr-score.s-lo{background:var(--s3);color:var(--t2);border:1px solid var(--b1)}
 .sr-sig-dot{display:inline-flex;align-items:center;gap:3px;font-size:7.5px;padding:1px 5px;border-radius:2px;font-weight:600}
 .sr-sig-dot.on{background:rgba(0,232,122,.12);color:var(--go);border:1px solid rgba(0,232,122,.25)}
-.sr-sig-dot.off{background:var(--s3);color:var(--t3);border:1px solid var(--b1)}
+.sr-sig-dot.off{background:var(--s3);color:var(--t2);border:1px solid var(--b1)}
 .sr-lvl{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:3px;margin:5px 0 4px}
 .sr-lvl-box{border-radius:2px;padding:3px 5px;text-align:center}
 .sr-lvl-k{font-size:7px;color:var(--t2);letter-spacing:.4px}
@@ -1805,9 +2014,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 /* Pastel price strip — high contrast; numbers only (premiums = ₹) */
 .ir-strip{display:flex;border-radius:8px;overflow:hidden;gap:1px;flex-wrap:wrap;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.06)}
 .ir-strip-cell{flex:1;min-width:56px;padding:8px 4px;text-align:center;display:flex;flex-direction:column;justify-content:center;gap:2px}
-.ir-strip-lbl{font-size:6.5px;font-weight:800;letter-spacing:.55px;text-transform:uppercase;opacity:.85}
+.ir-strip-lbl{font-size:7.5px;font-weight:800;letter-spacing:.55px;text-transform:uppercase;opacity:.92}
 .ir-strip-val{font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.15;white-space:nowrap}
-.ir-strip-sub{font-size:6px;font-weight:700;opacity:.75;margin-top:1px}
+.ir-strip-sub{font-size:7px;font-weight:700;opacity:.85;margin-top:1px}
 .ir-strip-entry{background:rgba(255,255,255,.06);color:var(--t0)}
 .ir-strip-entry .ir-strip-lbl{color:var(--t2)}
 .ir-strip-sl{background:var(--st-d);color:var(--t0)}
@@ -1829,7 +2038,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .light .ir-strip-t2 .ir-strip-lbl{color:#15803d}
 .light .ir-strip-ltp{background:#cffafe;color:#0e7490}
 .light .ir-strip-ltp .ir-strip-lbl{color:#0f766e}
-.ir-strip-foot{font-size:6.5px;color:var(--t2);text-align:center;margin-top:-4px;letter-spacing:.2px}
+.ir-strip-foot{font-size:7.5px;color:var(--t2);text-align:center;margin-top:-4px;letter-spacing:.2px}
 .ir-card-foot{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap;padding-top:2px;border-top:1px solid var(--b1);margin-top:2px;padding-top:8px}
 .ir-foot-l{font-size:8.5px;color:var(--t2);line-height:1.5;max-width:58%}
 .ir-foot-r{font-size:8.5px;text-align:right;color:var(--t2);line-height:1.45;font-variant-numeric:tabular-nums}
@@ -1895,7 +2104,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .hm-cell:hover{transform:scale(1.03);box-shadow:0 0 10px rgba(0,0,0,.4)}
 .hm-sym{font-size:9px;font-weight:700;letter-spacing:.5px;text-align:center}
 .hm-pct{font-size:14px;font-weight:800}
-.hm-sec{font-size:7px;opacity:.7;letter-spacing:.3px}
+.hm-sec{font-size:8px;opacity:.88;letter-spacing:.3px}
 
 /* EXPIRY CALENDAR */
 .cal-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
@@ -1912,10 +2121,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 .kbd{background:var(--s3);border:1px solid var(--b1);border-radius:3px;padding:1px 6px;font-family:var(--fn);font-size:9px;color:var(--t0);font-weight:600}
 
 /* SOUND TOGGLE */
-.sound-btn{width:24px;height:14px;border-radius:7px;border:1px solid var(--b1);background:var(--s3);cursor:pointer;position:relative;transition:all .2s}
-.sound-btn::after{content:'';position:absolute;top:1px;left:1px;width:10px;height:10px;border-radius:50%;background:var(--t2);transition:all .2s}
-.sound-btn.on{background:var(--go-d);border-color:var(--go)}
-.sound-btn.on::after{left:11px;background:var(--go)}
+.sound-btn{width:30px;height:16px;border-radius:999px;border:1px solid var(--b1);background:var(--s2);cursor:pointer;position:relative;transition:all .2s;flex-shrink:0}
+.sound-btn::after{content:'';position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:var(--t2);transition:all .2s}
+.sound-btn.on{background:var(--go-d);border-color:var(--go-b)}
+.sound-btn.on::after{left:18px;background:var(--go)}
 
 /* OI HEATMAP in chain tab */
 .oihm-bar{height:10px;border-radius:2px;margin-bottom:2px;transition:width .4s}
@@ -1958,7 +2167,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   <div class="tbl">
     <div class="logo">
       <!-- STOCKR.IN - Modern Pulse Arrow -->
-      <svg class="logo-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg class="logo-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" style="stop-color:#00ff88"/>
@@ -1981,22 +2190,24 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <div class="tbdate-wrap">
       <span class="tbdate-label">Date View</span>
       <input type="date" id="tb-date" onchange="tbDateChange(this.value)">
-      <button id="tb-live-btn" onclick="tbGoLive()">&#9654; Back To Live</button>
+      <button type="button" id="tb-backtest-btn" class="tbbtn" style="display:none" onclick="sw('backtest', document.querySelector('.tab.tab-bt'))">BT</button>
+      <button type="button" id="tb-live-btn" onclick="tbGoLive()">Live</button>
     </div>
   </div>
   <div class="tbr">
     <span class="clk" id="clk">--:--:-- IST</span>
     <div class="mtog">
-      <button class="mb on" id="bi" onclick="setMode('intraday')">INTRADAY</button>
-      <button class="mb" id="bp" onclick="setMode('positional')">POSITIONAL</button>
+      <button class="mb on" id="bi" onclick="setMode('intraday')">INTRA</button>
+      <button class="mb" id="bp" onclick="setMode('positional')">POSI</button>
     </div>
     <button class="sound-btn on" id="sound-tog" onclick="toggleSound()" title="Sound alerts (EXECUTE signal)"></button>
-    <button class="tbbtn primary" onclick="openDayPerf()" title="Full-day performance (all alerts)">DAY PERF</button>
-    <button onclick="exportCSV()" title="Export visible data as CSV" style="padding:2px 8px;font-family:var(--fn);font-size:8px;font-weight:600;border:1px solid var(--b1);border-radius:3px;cursor:pointer;color:var(--t1);background:transparent;letter-spacing:.5px">⬇ CSV</button>
-    <button onclick="testTelegram()" title="Test Telegram alert" style="padding:2px 8px;font-family:var(--fn);font-size:8px;border:1px solid var(--b1);border-radius:3px;cursor:pointer;color:var(--t2);background:transparent">✈ TG</button>
-    <button onclick="testWhatsapp()" title="Test WhatsApp alert" style="padding:2px 8px;font-family:var(--fn);font-size:8px;border:1px solid var(--b1);border-radius:3px;cursor:pointer;color:var(--t2);background:transparent">📱 WA</button>
-    <button onclick="toggleSidePanels()" id="side-tog" title="Toggle side panels (Gates + Macro)" style="padding:2px 8px;font-family:var(--fn);font-size:8px;font-weight:600;border:1px solid var(--b1);border-radius:3px;cursor:pointer;color:var(--t2);background:transparent;letter-spacing:.5px">⊞ PANELS</button>
-    <button onclick="showShortcuts()" title="Keyboard shortcuts (Press ?)" style="padding:2px 8px;font-family:var(--fn);font-size:8px;border:1px solid var(--b1);border-radius:3px;cursor:pointer;color:var(--t2);background:transparent">⌨</button>
+    <button class="tbbtn" id="strategy-prof-btn" onclick="toggleStrategyProfile()" title="Switch strategy profile">🧪 BALANCED V2</button>
+    <button class="tbbtn primary" onclick="openDayPerf()" title="Full-day performance (all alerts)">DAY</button>
+    <button type="button" class="tb-util" onclick="exportCSV()" title="Export CSV">CSV</button>
+    <button type="button" class="tb-util" onclick="testTelegram()" title="Telegram test">TG</button>
+    <button type="button" class="tb-util" onclick="testWhatsapp()" title="WhatsApp test">WA</button>
+    <button type="button" class="tb-util" onclick="toggleSidePanels()" id="side-tog" title="Side panels">PAN</button>
+    <button type="button" class="tb-util tb-util-ico" onclick="showShortcuts()" title="Shortcuts (?)">?</button>
     <button class="theme-tog" id="theme-tog" onclick="toggleTheme()" title="Toggle light/dark mode"></button>
   </div>
 </div>
@@ -2004,7 +2215,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 <!-- HISTORICAL MODE BANNER — shown when a past date is selected from topbar -->
 <div id="hist-banner">
   <div class="hb-dot"></div>
-  <span class="hb-lbl">HISTORICAL</span>
+  <span class="hb-lbl" id="hist-banner-lbl">BACKTEST</span>
   <span class="hb-date" id="hist-banner-date">—</span>
   <span class="hb-note">· Live WS paused · All panels show data for this date</span>
   <button class="hb-back" onclick="tbGoLive()">&#9654; BACK TO LIVE</button>
@@ -2563,13 +2774,16 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   </div>
 
   <!-- TAB: SWING RADAR -->
-  <div class="tp" id="tp-swing" style="padding:0;gap:0;flex-direction:column;overflow:hidden;flex:1;min-height:0">
+  <div class="tp" id="tp-swing" style="padding:0;gap:0;flex-direction:column;overflow-x:hidden;overflow-y:auto;flex:1;min-height:0">
   <style>
   /* ── SWING RADAR ────────────────────────────────────── */
   #sw-topbar{display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--b1);flex-shrink:0;background:var(--s1)}
   #sw-topbar .sw-title{font-family:var(--fh);font-size:11px;font-weight:700;letter-spacing:2px;color:var(--pu)}
   #sw-topbar .sw-tag{font-family:var(--fn);font-size:7px;color:var(--t2);border:1px solid var(--b2);border-radius:10px;padding:1px 8px;letter-spacing:.5px}
   .sw-legend{display:flex;gap:8px;margin-left:auto;align-items:center}
+  .sw-hist-topbtn{border:1px solid var(--pu-b);background:var(--pu-d);color:var(--pu);border-radius:8px;padding:4px 10px;font-size:10px;font-weight:900;letter-spacing:.6px;cursor:pointer;flex-shrink:0}
+  .sw-hist-topbtn:hover{filter:brightness(1.08);border-color:var(--pu)}
+  .light .sw-hist-topbtn{color:#5b21b6;background:#ede9fe;border-color:#c4b5fd}
   .sw-leg{display:flex;align-items:center;gap:4px;font-size:7px;color:var(--t2)}
   .sw-leg-dot{width:8px;height:8px;border-radius:50%}
   /* Carousel wrapper — primary focus */
@@ -2610,8 +2824,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   .sw-sig{font-size:7px;font-weight:700;padding:1px 6px;border-radius:2px}
   /* Empty state */
   #sw-empty{display:none;flex:1;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:var(--t2);font-size:9px}
-  .sw-hfbtn{border:1px solid var(--b2);background:var(--s2);color:var(--t2);border-radius:4px;padding:3px 8px;cursor:pointer;font:inherit;font-weight:700}
-  .sw-hfbtn.on{border-color:var(--pu);color:var(--t0);background:var(--s3)}
+  .sw-hfbtn{border:1px solid var(--b2);background:var(--s2);color:var(--t1);border-radius:6px;padding:4px 10px;cursor:pointer;font:inherit;font-weight:800;font-size:12px;line-height:1.25}
+  .sw-hfbtn.on{border-color:var(--pu);color:var(--t0);background:var(--s3);box-shadow:0 0 0 2px rgba(167,139,250,.15) inset}
   .light .sw-hfbtn{background:#f1f5f9;border-color:#cbd5e1}
   .light .sw-hfbtn.on{border-color:#6366f1;color:#0f172a;background:#e0e7ff}
   /* Swing history dock — blurred teaser + CTA */
@@ -2622,7 +2836,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   .sw-hist-dock-sum .sw-sum-kpi{display:flex;flex-wrap:wrap;gap:12px 18px;font-size:9px;font-weight:800}
   .sw-hist-dock-sum .sw-sum-kpi b{font-weight:900;color:var(--t0)}
   .sw-hist-dock-sum .sw-sum-kpi .pos{color:var(--go)} .sw-hist-dock-sum .sw-sum-kpi .neg{color:var(--st)}
-  .sw-hist-blurzone{position:relative;min-height:92px;padding:12px 14px 14px;display:flex;align-items:center;justify-content:center}
+  .sw-hist-blurzone{position:relative;min-height:122px;padding:20px 14px 14px;display:flex;align-items:flex-end;justify-content:center}
   .sw-hist-blurzone::before{
     content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(56,190,255,.06),rgba(167,139,250,.05));
     filter:blur(18px);opacity:.85;transform:scale(1.08);pointer-events:none;
@@ -2636,6 +2850,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     padding:12px 22px;border-radius:999px;color:#0a0f18;
     background:linear-gradient(135deg,#7dd3fc,#a78bfa 55%,#c4b5fd);box-shadow:0 8px 28px rgba(56,190,255,.25),0 0 0 1px rgba(255,255,255,.12) inset;
     transition:transform .15s,filter .15s;
+    margin-top:10px;
   }
   .sw-hist-openbtn:hover{transform:translateY(-1px);filter:brightness(1.06)}
   .light .sw-hist-openbtn{color:#0f172a}
@@ -2644,7 +2859,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   .sw-mhist-ov{position:absolute;inset:0;background:rgba(0,0,0,.68);backdrop-filter:blur(8px)}
   .sw-mhist-panel{
     position:absolute;left:50%;top:20px;transform:translateX(-50%);
-    width:min(980px,calc(100vw - 20px));max-height:calc(100vh - 40px);
+    width:min(1360px,calc(100vw - 20px));max-height:calc(100vh - 40px);
     border-radius:20px;border:1px solid rgba(255,255,255,.12);
     background:linear-gradient(168deg,rgba(22,30,52,.99),rgba(8,12,22,.97));
     box-shadow:0 28px 80px rgba(0,0,0,.65);
@@ -2652,39 +2867,60 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   }
   .sw-mhist-hd{display:flex;align-items:flex-start;gap:12px;padding:16px 18px;border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0}
   .sw-mhist-hd-ttl{font-family:var(--fh);font-size:15px;font-weight:900;letter-spacing:2px;color:var(--t0);line-height:1.25}
-  .sw-mhist-hd-sub{font-size:8.5px;color:var(--t3);font-weight:700;margin-top:4px;max-width:640px;line-height:1.45}
+  .sw-mhist-hd-sub{font-size:12px;color:var(--t1);font-weight:700;margin-top:4px;max-width:760px;line-height:1.5}
   .sw-mhist-x{margin-left:auto;border:1px solid rgba(255,255,255,.16);background:rgba(0,0,0,.22);color:var(--t1);border-radius:10px;padding:7px 12px;cursor:pointer;font-weight:900;font-size:9px}
   .sw-mhist-x:hover{filter:brightness(1.12)}
   .sw-mhist-analytics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.06);flex-shrink:0;background:rgba(0,0,0,.18)}
   @media(max-width:900px){.sw-mhist-analytics{grid-template-columns:repeat(2,1fr)}}
   .sw-mhist-acard{border-radius:14px;padding:12px 12px 10px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(165deg,rgba(30,42,68,.9),rgba(14,20,36,.75))}
-  .sw-mhist-acard .k{font-size:7px;font-weight:900;letter-spacing:1.2px;color:var(--t3);text-transform:uppercase}
+  .sw-mhist-acard .k{font-size:11px;font-weight:900;letter-spacing:.8px;color:var(--t2);text-transform:uppercase}
   .sw-mhist-acard .v{margin-top:6px;font-size:15px;font-weight:900;color:var(--t0);font-variant-numeric:tabular-nums}
   .sw-mhist-acard .v.pos{color:var(--go)} .sw-mhist-acard .v.neg{color:var(--st)}
-  .sw-mhist-acard .s{margin-top:4px;font-size:8px;color:var(--t2);font-weight:600;line-height:1.35}
-  .sw-mhist-fwrap{padding:10px 16px 0;flex-shrink:0;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:7px;font-weight:800}
-  .sw-mhist-fwrap span{color:var(--t3);margin-right:4px}
+  .sw-mhist-acard .s{margin-top:4px;font-size:12px;color:var(--t1);font-weight:600;line-height:1.45}
+  .sw-mhist-fwrap{padding:10px 16px 0;flex-shrink:0;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12px;font-weight:800}
+  .sw-mhist-fwrap span{color:var(--t1);margin-right:4px}
+  .sw-date-ctl{display:inline-flex;align-items:center;gap:6px;margin-left:8px}
+  .sw-date-ctl label{font-size:11px;color:var(--t2);font-weight:800;letter-spacing:.4px}
+  .sw-date-ctl input[type="date"]{height:28px;padding:0 8px;border:1px solid var(--b1);border-radius:6px;background:var(--s2);color:var(--t0);font-size:12px;font-weight:700}
+  .sw-date-btn{height:28px;padding:0 10px;border:1px solid var(--b1);border-radius:6px;background:var(--s3);color:var(--t1);font-size:12px;font-weight:800;cursor:pointer}
+  .sw-date-btn:hover{border-color:var(--b2);color:var(--t0)}
+  .sw-btbuild-btn{height:28px;padding:0 12px;border:1px solid var(--pu-b);border-radius:6px;background:var(--pu-d);color:var(--pu);font-size:11px;font-weight:900;letter-spacing:.4px;cursor:pointer}
+  .sw-btbuild-btn:hover{filter:brightness(1.08);border-color:var(--pu)}
+  .light .sw-btbuild-btn{color:#5b21b6;background:#ede9fe;border-color:#c4b5fd}
+  .sw-mhist-note{margin:8px 16px 0;padding:8px 10px;border:1px dashed var(--b2);border-radius:8px;background:rgba(56,190,255,.06);color:var(--t1);font-size:12px;line-height:1.45}
+  .light .sw-mhist-note{background:rgba(0,97,168,.06)}
   .sw-mhist-bd{padding:10px 14px 16px;overflow:auto;flex:1;min-height:0}
-  .sw-mtbl{width:100%;border-collapse:collapse;font-size:9px;border-radius:14px;overflow:hidden}
+  .sw-mode-badge{display:none;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;border:1px solid var(--pu-b);background:var(--pu-d);color:var(--pu);font-size:10px;font-weight:900;letter-spacing:.9px}
+  .sw-mode-badge.on{display:inline-flex}
+  .light .sw-mode-badge{border-color:#7c3aed55;background:#f3e8ff;color:#6b21a8}
+  .sw-mtbl{width:100%;border-collapse:collapse;font-size:13px;border-radius:14px;overflow:hidden}
   .sw-mtbl thead th{
     position:sticky;top:0;z-index:1;
     background:linear-gradient(180deg,rgba(36,48,72,.98),rgba(22,30,48,.95));
     padding:10px 8px;text-align:left;border-bottom:1px solid rgba(255,255,255,.1);
     color:var(--t0);font-weight:900;letter-spacing:.7px;font-size:7.5px;text-transform:uppercase;
   }
-  .sw-mtbl tbody td{padding:9px 8px;border-bottom:1px solid rgba(37,56,86,.32);color:var(--t1);vertical-align:middle}
-  .sw-mtbl tbody tr:hover td{background:rgba(56,190,255,.05)}
+  .sw-mtbl tbody td{padding:10px 9px;border-bottom:1px solid rgba(37,56,86,.45);color:var(--t0);vertical-align:middle}
+  .sw-mtbl tbody tr:nth-child(odd) td{background:rgba(255,255,255,.02)}
+  .sw-mtbl tbody tr:nth-child(even) td{background:rgba(255,255,255,.045)}
+  .sw-mtbl tbody tr:hover td{background:rgba(56,190,255,.12)}
   .light .sw-mhist-panel{background:linear-gradient(168deg,#f8faff,#eef2ff);border-color:rgba(0,0,0,.1)}
   .light .sw-mhist-ov{background:rgba(15,23,42,.45)}
   .light .sw-mhist-acard{background:#fff;border-color:rgba(0,0,0,.08)}
   .light .sw-mtbl thead th{background:linear-gradient(180deg,#f1f5f9,#e2e8f0);color:#0f172a}
+  .light .sw-mtbl tbody td{color:#0a1728;border-bottom-color:rgba(10,23,40,.12)}
+  .light .sw-mtbl tbody tr:nth-child(odd) td{background:rgba(10,23,40,.015)}
+  .light .sw-mtbl tbody tr:nth-child(even) td{background:rgba(10,23,40,.04)}
+  .light .sw-mtbl tbody tr:hover td{background:rgba(0,97,168,.10)}
   </style>
 
   <!-- Top bar -->
   <div id="sw-topbar">
     <span class="sw-title">SWING RADAR</span>
     <span class="sw-tag">POSITIONAL · 2–8 DAY HOLDS</span>
+    <span id="sw-backtest-badge" class="sw-mode-badge">◈ BACKTEST</span>
     <span style="font-size:7px;color:var(--t3);border-left:1px solid var(--b1);padding-left:10px">Top <b>12</b> F&amp;O names by score · <b style="color:var(--go)">Q+</b> = passes stricter swing log filter (R:R · tape · PCR · vol)</span>
+    <button type="button" class="sw-hist-topbtn" onclick="swOpenHistModal()" title="Open swing log, filters, ₹20K P&amp;L">HISTORY</button>
     <div class="sw-legend">
       <div class="sw-leg"><div class="sw-leg-dot" style="background:var(--go)"></div>HIGH</div>
       <div class="sw-leg"><div class="sw-leg-dot" style="background:var(--am)"></div>MODERATE</div>
@@ -2705,15 +2941,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
   <div class="sw-hist-dock" id="sw-hist-dock">
     <div class="sw-hist-dock-sum">
       <div>
-        <div class="sw-sum-ttl">SWING LOG · ₹1L MODEL</div>
-        <div class="sw-sum-meta" id="sw-teaser-meta">History pulls <b>365 days</b> (cap 5000 rows). Each closed row = ₹1L notional P&amp;L model. Data exists only for dates the backend logged swings.</div>
+        <div class="sw-sum-ttl">SWING LOG · ₹20K MODEL</div>
+        <div class="sw-sum-meta" id="sw-teaser-meta">History pulls up to <b>3 years</b> (cap 25,000 rows). Add <b>BACKTEST</b> swings via Swing history → <b>BUILD FROM BACKTEST</b> (needs Backtest Download + Kite). ₹20K model P&amp;L per closed row.</div>
       </div>
       <div class="sw-sum-kpi" id="sw-teaser-kpi">
         <span><b>—</b> stored</span><span><b class="pos">—</b> live</span><span><b>—</b> closed P&amp;L</span><span><b>—</b> win rate</span>
       </div>
     </div>
     <div class="sw-hist-blurzone">
-      <button type="button" class="sw-hist-openbtn" onclick="swOpenHistModal()">Full history · filters · ₹1L analysis</button>
+      <button type="button" class="sw-hist-openbtn" onclick="swOpenHistModal()">Full history · filters · ₹20K analysis</button>
     </div>
   </div>
 
@@ -4274,19 +4510,19 @@ entry_time    strike  type  entry  max   exit  return%
   </div>
 </div>
 
-<!-- Swing history + ₹1L analytics modal -->
+<!-- Swing history + ₹20K analytics modal -->
 <div id="sw-hist-modal" role="dialog" aria-modal="true" aria-label="Swing history" onclick="if(event.target && event.target.classList && event.target.classList.contains('sw-mhist-ov')) swCloseHistModal()">
   <div class="sw-mhist-ov"></div>
   <div class="sw-mhist-panel" onclick="event.stopPropagation()">
     <div class="sw-mhist-hd">
       <div>
         <div class="sw-mhist-hd-ttl">Swing history</div>
-        <div class="sw-mhist-hd-sub">Loads up to <b>1 year</b> of stored swings (≤5000 rows) · Score ≥ 58 log · de-dup ~2h · 🟢 ENTER = 4+/5 gates · ₹1L model below · DB only has rows from days this app was running.</div>
+        <div class="sw-mhist-hd-sub">Loads up to <b>3 years</b> of live + backtest swings (≤25,000 rows). Live rows = days the app was running. Use <b>BUILD FROM BACKTEST</b> to replay Swing Radar on <b>backtest.db</b> (NIFTY/VIX/PCR/FII + Kite daily bars) and fill history. ₹20K model below.</div>
       </div>
       <button type="button" class="sw-mhist-x" onclick="swCloseHistModal()">Close</button>
     </div>
     <div class="sw-mhist-analytics" id="sw-mhist-analytics"></div>
-    <div class="sw-mhist-fwrap" id="sw-mhist-fbar" style="display:none">
+    <div class="sw-mhist-fwrap" id="sw-mhist-fbar">
       <span>FILTER</span>
       <button type="button" class="sw-hfbtn on" data-f="ALL" onclick="swSetSwingHistFilter('ALL')">ALL</button>
       <button type="button" class="sw-hfbtn" data-f="OPEN" onclick="swSetSwingHistFilter('OPEN')">⏳ LIVE</button>
@@ -4294,9 +4530,19 @@ entry_time    strike  type  entry  max   exit  return%
       <button type="button" class="sw-hfbtn" data-f="SL" onclick="swSetSwingHistFilter('SL')">🛑 SL</button>
       <button type="button" class="sw-hfbtn" data-f="EXP" onclick="swSetSwingHistFilter('EXP')">⏱ EXP</button>
       <button type="button" class="sw-hfbtn" data-f="ENTER" onclick="swSetSwingHistFilter('ENTER')">🟢 ENTER ONLY</button>
-      <button type="button" class="sw-hfbtn" data-f="WATCH" onclick="swSetSwingHistFilter('WATCH')">🟡 WATCH</button>
+      <button type="button" class="sw-hfbtn" data-f="WATCH" onclick="swSetSwingHistFilter('WATCH')">🟡 WATCH ONLY</button>
+      <div class="sw-date-ctl">
+        <label for="sw-date-from">FROM</label>
+        <input type="date" id="sw-date-from">
+        <label for="sw-date-to">TO</label>
+        <input type="date" id="sw-date-to">
+        <button type="button" class="sw-date-btn" onclick="swApplyDateRange()">APPLY</button>
+        <button type="button" class="sw-date-btn" onclick="swResetDateRange()">CLEAR</button>
+        <button type="button" class="sw-btbuild-btn" onclick="swRunSwingBacktestBuild()" title="Replay Swing Radar on historical data (requires Backtest Download + Kite)">BUILD FROM BACKTEST</button>
+      </div>
       <span id="sw-mhist-count" style="margin-left:auto;color:var(--t3);font-weight:700"></span>
     </div>
+    <div class="sw-mhist-note">Note: P&amp;L uses per-stock model quantity = floor(₹20,000 / entry). Backtest rows are tagged <b>BACKTEST</b> in the trigger; ensure <b>Backtest Download</b> (3Y macro) ran first. Empty FROM/TO → server uses ~last 3 years.</div>
     <div class="sw-mhist-bd" id="sw-mhist-body">
       <div style="padding:20px;text-align:center;color:var(--t3)">Loading…</div>
     </div>
@@ -5109,7 +5355,9 @@ renderStocks();
 
 window._swingHistFilter = window._swingHistFilter || 'ALL';
 window._swingHistRows = window._swingHistRows || [];
-window._SWING_CAPITAL_INR = 100000;
+window._SWING_CAPITAL_INR = 20000;
+window._swingDateFrom = window._swingDateFrom || '';
+window._swingDateTo = window._swingDateTo || '';
 let _swingHistRefreshT = 0;
 
 function swHistParseTier(trigger){
@@ -5130,6 +5378,18 @@ function swHistTierFromRow(row){
   return '';
 }
 
+function swSwingEntryDecision(row){
+  const tier = swHistTierFromRow(row);
+  const g = Number(row.gate_pass_count);
+  if(tier === 'EXECUTE' || (!Number.isNaN(g) && g >= 4)){
+    return {key:'YES', label:'YES · ENTERABLE', hint:'Meets entry rule (4+/5 gates)'};
+  }
+  if(tier === 'WATCH' || (!Number.isNaN(g) && g === 3)){
+    return {key:'WATCH', label:'WATCH · WAIT', hint:'Monitor only; not a direct entry yet'};
+  }
+  return {key:'NO', label:'NO · SCAN', hint:'Scanner hit only; do not enter yet'};
+}
+
 function swSwingRowPnlPct(row){
   let pct = row.pnl_pct != null ? Number(row.pnl_pct) : null;
   if(pct != null && !Number.isNaN(pct)) return pct;
@@ -5143,19 +5403,38 @@ function swSwingRowPnlPct(row){
   return null;
 }
 
+function swSwingModelQty(row){
+  const cap = Number(window._SWING_CAPITAL_INR) || 20000;
+  const e = Number(row.entry_price || 0);
+  if(e <= 0) return 0;
+  return Math.max(0, Math.floor(cap / e));
+}
+
 function swSwingRowInr1L(row){
-  const cap = Number(window._SWING_CAPITAL_INR) || 100000;
+  const cap = Number(window._SWING_CAPITAL_INR) || 20000;
   const oc = String(row.outcome || '').toUpperCase();
   const st = String(row.status || '').toUpperCase();
   if(st === 'OPEN' || oc === 'OPEN') return null;
   if(oc === 'LOGGED') return null;
-  const pct = swSwingRowPnlPct(row);
-  if(pct == null || Number.isNaN(pct)) return null;
-  return Math.round(cap * (pct / 100) * 100) / 100;
+  const e = Number(row.entry_price || 0);
+  if(e <= 0) return null;
+  const qty = swSwingModelQty(row);
+  if(qty <= 0) return null;
+  const x = Number(row.exit_price || 0);
+  const long = String(row.signal_type || 'LONG').toUpperCase() !== 'SHORT';
+  let pts = Number(row.pnl_pts);
+  if(Number.isNaN(pts)){
+    if(x > 0){
+      pts = long ? (x - e) : (e - x);
+    }else{
+      return null;
+    }
+  }
+  return Math.round((pts * qty) * 100) / 100;
 }
 
 function swSwingComputeAnalytics(rows){
-  const cap = Number(window._SWING_CAPITAL_INR) || 100000;
+  const cap = Number(window._SWING_CAPITAL_INR) || 20000;
   const all = rows || [];
   let live = 0, snap = 0;
   const closed = [];
@@ -5203,7 +5482,7 @@ function swUpdateHistTeaser(){
   if(!kpi) return;
   const rows = window._swingHistRows || [];
   if(!rows.length){
-    kpi.innerHTML = '<span><b>0</b> stored</span><span><b class="pos">0</b> live</span><span><b>—</b> closed P&amp;L (₹1L)</span><span><b>—</b> win rate</span>';
+    kpi.innerHTML = '<span><b>0</b> stored</span><span><b class="pos">0</b> live</span><span><b>—</b> closed P&amp;L (₹20K)</span><span><b>—</b> win rate</span>';
     return;
   }
   const A = swSwingComputeAnalytics(rows);
@@ -5229,7 +5508,7 @@ function swRenderSwingAnalyticsHtml(){
     return;
   }
   el.innerHTML =
-    '<div class="sw-mhist-acard"><div class="k">Total P&amp;L · ₹1L each</div><div class="v ' + tiCls + '">' + (A.closedN ? swFmtInr(ti) : '—') + '</div><div class="s">Sum of model P&amp;L on all <b>closed</b> rows (target, stop, or time exit). Not compounded.</div></div>' +
+    '<div class="sw-mhist-acard"><div class="k">Total P&amp;L · ₹20K each stock</div><div class="v ' + tiCls + '">' + (A.closedN ? swFmtInr(ti) : '—') + '</div><div class="s">Sum of model P&amp;L on all <b>closed</b> rows (target, stop, or time exit).</div></div>' +
     '<div class="sw-mhist-acard"><div class="k">Win rate</div><div class="v">' + (A.wr != null ? A.wr + '%' : '—') + '</div><div class="s">Targets vs stops among closed trades with a clear outcome (excludes time-expire only from W/L ratio).</div></div>' +
     '<div class="sw-mhist-acard"><div class="k">Avg win / loss</div><div class="v" style="font-size:12px">' + (A.avgWin != null ? swFmtInr(A.avgWin) : '—') + ' <span style="color:var(--t3)">/</span> ' + (A.avgLoss != null ? swFmtInr(A.avgLoss) : '—') + '</div><div class="s">Mean ₹ impact per winning target vs losing stop (₹' + A.cap.toLocaleString('en-IN') + ' notionals).</div></div>' +
     '<div class="sw-mhist-acard"><div class="k">Book</div><div class="v" style="font-size:11px">' + A.live + ' live · ' + A.closedN + ' closed</div><div class="s">Hits <b>' + A.wins + '</b> · Stops <b>' + A.losses + '</b> · Exp <b>' + A.exp + '</b>' + (A.snap ? ' · Snapshots <b>' + A.snap + '</b>' : '') + '</div></div>' +
@@ -5242,6 +5521,24 @@ function swSetSwingHistFilter(f){
     b.classList.toggle('on', (b.getAttribute('data-f') || '') === window._swingHistFilter);
   });
   swRenderSwingHistTable();
+}
+
+function swApplyDateRange(){
+  const f = document.getElementById('sw-date-from');
+  const t = document.getElementById('sw-date-to');
+  window._swingDateFrom = (f && f.value) ? f.value : '';
+  window._swingDateTo = (t && t.value) ? t.value : '';
+  loadSwingTriggerHistory();
+}
+
+function swResetDateRange(){
+  window._swingDateFrom = '';
+  window._swingDateTo = '';
+  const f = document.getElementById('sw-date-from');
+  const t = document.getElementById('sw-date-to');
+  if(f) f.value = '';
+  if(t) t.value = '';
+  loadSwingTriggerHistory();
 }
 
 function swRenderSwingHistTable(){
@@ -5257,17 +5554,26 @@ function swRenderSwingHistTable(){
     const oc = String(row.outcome || '').toUpperCase();
     const st = String(row.status || '').toUpperCase();
     const tier = swHistTierFromRow(row);
+    const d = String(row.trade_date || '');
+    const f = String(window._swingDateFrom || '');
+    const t = String(window._swingDateTo || '');
+    if(f && d && d < f) return false;
+    if(t && d && d > t) return false;
     if(filt === 'ALL') return true;
     if(filt === 'OPEN') return st === 'OPEN' || oc === 'OPEN';
     if(filt === 'HIT') return oc === 'TARGET HIT';
     if(filt === 'SL') return oc === 'SL HIT';
     if(filt === 'EXP') return oc === 'EXPIRED';
     if(filt === 'ENTER') return tier === 'EXECUTE';
-    if(filt === 'WATCH') return tier === 'WATCH' || tier === 'SCAN';
+    if(filt === 'WATCH') return tier === 'WATCH';
     return true;
   };
   const shown = rows.filter(passF);
-  if(cntEl) cntEl.textContent = shown.length + ' / ' + rows.length + ' shown';
+  const rangePnl = shown.reduce((a,r)=>{
+    const v = swSwingRowInr1L(r);
+    return a + (v == null ? 0 : v);
+  },0);
+  if(cntEl) cntEl.textContent = shown.length + ' / ' + rows.length + ' shown · Range P&L ' + swFmtInr(rangePnl);
 
   if(!rows.length){
     if(fbar) fbar.style.display = 'none';
@@ -5276,10 +5582,11 @@ function swRenderSwingHistTable(){
   }
   if(fbar) fbar.style.display = 'flex';
 
-  const tierHtml = tier => {
-    if(tier === 'EXECUTE') return '<span style="color:var(--go);font-weight:800">🟢 ENTER</span>';
-    if(tier === 'WATCH') return '<span style="color:var(--am);font-weight:800">🟡 WATCH</span>';
-    if(tier === 'SCAN') return '<span style="color:var(--t3);font-weight:700">⚪ SCAN</span>';
+  const tierHtml = row => {
+    const d = swSwingEntryDecision(row);
+    if(d.key === 'YES') return '<span title="' + esc(d.hint) + '" style="color:var(--go);font-weight:800">🟢 ' + esc(d.label) + '</span>';
+    if(d.key === 'WATCH') return '<span title="' + esc(d.hint) + '" style="color:var(--am);font-weight:800">🟡 ' + esc(d.label) + '</span>';
+    if(d.key === 'NO') return '<span title="' + esc(d.hint) + '" style="color:var(--t2);font-weight:700">⚪ ' + esc(d.label) + '</span>';
     return '<span style="color:var(--t3)">—</span>';
   };
   const outcomeHtml = row => {
@@ -5299,10 +5606,10 @@ function swRenderSwingHistTable(){
   };
 
   el.innerHTML = '<div style="overflow-x:auto;border-radius:14px;border:1px solid rgba(255,255,255,.08)"><table class="sw-mtbl"><thead><tr>' +
-    '<th>Date</th><th>Sym</th><th>Time</th><th>Enter?</th><th>Gates</th><th>Side</th>' +
+    '<th>Date</th><th>Sym</th><th>Entry Time</th><th>Exit Time</th><th>Tradable?</th><th>Gates</th><th>Side</th>' +
     '<th style="text-align:right">Entry</th><th style="text-align:right">SL</th><th style="text-align:right">Tgt</th>' +
     '<th>Result</th><th style="text-align:right">Exit</th><th style="text-align:right">Pts</th><th style="text-align:right">%</th>' +
-    '<th style="text-align:right">₹1L</th><th>Note</th></tr></thead><tbody>' +
+    '<th style="text-align:right">Qty (₹20K)</th><th style="text-align:right">P&amp;L (₹20K)</th><th>Note</th></tr></thead><tbody>' +
     shown.map(row => {
       const side = row.signal_type === 'SHORT' ? 'SHORT' : 'LONG';
       const cSide = side === 'LONG' ? 'var(--go)' : 'var(--st)';
@@ -5320,6 +5627,7 @@ function swRenderSwingHistTable(){
       const pPct = swSwingRowPnlPct(row);
       const pctStr = pPct != null && !Number.isNaN(pPct) ? (pPct >= 0 ? '+' : '') + pPct.toFixed(2) + '%' : '—';
       const pctC = pPct > 0 ? 'var(--go)' : pPct < 0 ? 'var(--st)' : 'var(--t2)';
+      const qty = swSwingModelQty(row);
       const inr = swSwingRowInr1L(row);
       const inrStr = inr == null ? '—' : swFmtInr(inr);
       const inrC = inr > 0 ? 'var(--go)' : inr < 0 ? 'var(--st)' : 'var(--t2)';
@@ -5327,7 +5635,8 @@ function swRenderSwingHistTable(){
         '<td style="color:var(--t1)">' + esc(row.trade_date) + '</td>' +
         '<td style="font-weight:800;color:var(--t0)">' + esc(row.symbol) + '</td>' +
         '<td style="font-variant-numeric:tabular-nums">' + esc(row.signal_time) + '</td>' +
-        '<td>' + tierHtml(tier) + '</td>' +
+        '<td style="font-variant-numeric:tabular-nums;color:var(--t1)">' + esc(row.exit_time || '—') + '</td>' +
+        '<td>' + tierHtml(row) + '</td>' +
         '<td style="text-align:center;font-weight:800">' + (g === '' ? '—' : g + '/5') + '</td>' +
         '<td style="color:' + cSide + ';font-weight:800">' + side + '</td>' +
         '<td style="text-align:right">' + ep + '</td>' +
@@ -5337,6 +5646,7 @@ function swRenderSwingHistTable(){
         '<td style="text-align:right;color:var(--t2)">' + xp + '</td>' +
         '<td style="text-align:right;font-weight:800;color:' + pnlC + '">' + pnl + '</td>' +
         '<td style="text-align:right;font-weight:700;color:' + pctC + '">' + pctStr + '</td>' +
+        '<td style="text-align:right;font-weight:800;color:var(--t1)">' + (qty > 0 ? qty : '—') + '</td>' +
         '<td style="text-align:right;font-weight:900;color:' + inrC + ';font-variant-numeric:tabular-nums">' + inrStr + '</td>' +
         '<td style="color:var(--t2);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:8px" title="' + tr + '">' + tr.slice(0,48) + (tr.length > 48 ? '…' : '') + '</td>' +
         '</tr>';
@@ -5346,6 +5656,10 @@ function swRenderSwingHistTable(){
 function swRenderSwingHistModalContent(){
   swRenderSwingAnalyticsHtml();
   swRenderSwingHistTable();
+  const f = document.getElementById('sw-date-from');
+  const t = document.getElementById('sw-date-to');
+  if(f) f.value = window._swingDateFrom || '';
+  if(t) t.value = window._swingDateTo || '';
   document.querySelectorAll('#sw-mhist-fbar .sw-hfbtn').forEach(b => {
     b.classList.toggle('on', (b.getAttribute('data-f') || '') === window._swingHistFilter);
   });
@@ -5356,13 +5670,13 @@ function swOpenHistModal(){
   if(!m) return;
   m.style.display = 'block';
   document.body.style.overflow = 'hidden';
+  const fb = document.getElementById('sw-mhist-fbar');
+  if(fb) fb.style.removeProperty('display');
   if(window._swingHistRows && window._swingHistRows.length)
     swRenderSwingHistModalContent();
   else{
     const body = document.getElementById('sw-mhist-body');
     if(body) body.innerHTML = '<div style="padding:28px;text-align:center;color:var(--t3)">Loading swing log…</div>';
-    const fb = document.getElementById('sw-mhist-fbar');
-    if(fb) fb.style.display = 'none';
     const an = document.getElementById('sw-mhist-analytics');
     if(an) an.innerHTML = '';
   }
@@ -5384,7 +5698,15 @@ document.addEventListener('keydown', function(ev){
 
 async function loadSwingTriggerHistory(){
   const base = (window._backendBase || '').replace(/\/$/, '');
-  const url = (base ? base : '') + '/api/signals/history?limit=5000&days=365&status=ALL&verdict=SWING_RADAR';
+  const q = new URLSearchParams({
+    limit: '25000',
+    days: '1095',
+    status: 'ALL',
+    verdict: 'SWING_RADAR',
+  });
+  if(window._swingDateFrom) q.set('from_date', String(window._swingDateFrom));
+  if(window._swingDateTo) q.set('to_date', String(window._swingDateTo));
+  const url = (base ? base : '') + '/api/signals/history?' + q.toString();
   const modalOpen = (function(){
     const m = document.getElementById('sw-hist-modal');
     return m && m.style.display === 'block';
@@ -5395,13 +5717,49 @@ async function loadSwingTriggerHistory(){
     const rows = d.rows || [];
     window._swingHistRows = rows;
     swUpdateHistTeaser();
-    if(modalOpen) swRenderSwingHistModalContent();
+    if(modalOpen){
+      const fb2 = document.getElementById('sw-mhist-fbar');
+      if(fb2) fb2.style.removeProperty('display');
+      swRenderSwingHistModalContent();
+    }
   }catch(e){
     swUpdateHistTeaser();
     if(modalOpen){
       const el = document.getElementById('sw-mhist-body');
       if(el) el.innerHTML = '<div style="padding:22px;text-align:center;color:var(--st)">Could not load swing history — check backend.</div>';
     }
+  }
+}
+
+async function swRunSwingBacktestBuild(){
+  const base = (window._backendBase || '').replace(/\/$/, '');
+  const f = document.getElementById('sw-date-from');
+  const t = document.getElementById('sw-date-to');
+  const body = {};
+  if(f && f.value) body.from_date = f.value;
+  if(t && t.value) body.to_date = t.value;
+  const cnt = document.getElementById('sw-mhist-count');
+  if(cnt) cnt.textContent = 'Running backtest (may take 1–3 min)…';
+  try{
+    const r = await fetch((base ? base : '') + '/api/signals/swing-backtest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json().catch(function(){ return {}; });
+    if(!r.ok){
+      const msg = d.error || ('HTTP ' + r.status);
+      if(cnt) cnt.textContent = msg;
+      if(typeof notify === 'function') notify(msg);
+      return;
+    }
+    const ins = d.inserted != null ? d.inserted : 0;
+    if(cnt) cnt.textContent = 'Inserted ' + ins + ' BT rows · symbols ' + (d.symbols_loaded || '—');
+    if(typeof notify === 'function') notify('Swing backtest: inserted ' + ins + ' rows (BACKTEST · SWING_RADAR).');
+    loadSwingTriggerHistory();
+  }catch(e){
+    if(cnt) cnt.textContent = 'Request failed';
+    if(typeof notify === 'function') notify('Swing backtest request failed');
   }
 }
 
@@ -7727,11 +8085,11 @@ setTimeout(()=>notify('STOCKR.IN  ready — Connecting to live data...'),400);
 (function startLiveData(){
   const _backendBase = window.location.hostname === 'kvishnublr.github.io'
     ? 'https://nse-edge-backend.fly.dev'
-    : 'http://localhost:8000';
+    : 'http://localhost:8765';
   window._backendBase = _backendBase;
   const WS_URL = window.location.hostname === 'kvishnublr.github.io'
     ? 'wss://nse-edge-backend.fly.dev/ws'
-    : 'ws://localhost:8000/ws';
+    : 'ws://localhost:8765/ws';
 
   let ws = null;
   let reconnectDelay = 2000;
@@ -9015,6 +9373,7 @@ function _topActiveStocks(stocks){
   // Start
   bootstrapLiveState();
   connect();
+  setTimeout(refreshStrategyProfileUI, 700);
 })();
 
 // ═══════════════════════════════════════════════
@@ -9058,7 +9417,7 @@ function generateMockChartData(){}
 // ═══════════════════════════════════════════════
 const API = window.location.hostname === 'kvishnublr.github.io'
   ? 'https://nse-edge-backend.fly.dev'
-  : 'http://localhost:8000';
+  : 'http://localhost:8765';
 
 (function bt2Init(){
   const to   = new Date();
@@ -9124,7 +9483,7 @@ async function bt2Run() {
     const wr   = d.metrics?.win_rate_pct || 0;
     notify(sigs ? `Backtest: ${sigs} signals · WR ${wr}%` : 'Backtest complete — no signals in range (try ⬇ DOWNLOAD DATA first)');
   } catch(e) {
-    notify('Backtest failed — is backend running on port 8000?');
+    notify('Backtest failed — is backend running on port 8765?');
     if(showEl) showEl.textContent = 'Backend offline';
     if(tradesEl) tradesEl.innerHTML = `<tr><td colspan="18" style="text-align:center;padding:20px;color:var(--st);font-size:9px">
       Backend not reachable. Start backend with <b>start.sh</b> then retry.
@@ -9333,10 +9692,16 @@ async function tbDateChange(val) {
   // Enter historical mode — freeze live WS updates
   window._histMode = true;
   document.getElementById('tb-live-btn').style.display = 'inline-block';
+  const btBtn = document.getElementById('tb-backtest-btn');
+  if(btBtn) btBtn.style.display = 'inline-block';
   document.getElementById('live-pill').style.opacity = '0.35';
   const banner = document.getElementById('hist-banner');
   banner.style.display = 'flex';
+  const bannerLbl = document.getElementById('hist-banner-lbl');
+  if(bannerLbl) bannerLbl.textContent = 'BACKTEST';
   document.getElementById('hist-banner-date').textContent = val;
+  const swBt = document.getElementById('sw-backtest-badge');
+  if(swBt) swBt.classList.add('on');
 
   notify('Loading ' + val + ' data...');
 
@@ -9346,6 +9711,10 @@ async function tbDateChange(val) {
     if(d.error) { notify('No data for ' + val + ': ' + d.error); return; }
     window._histData = d;    // cache for mode-switch re-render
     window._histDate = val;  // cache date for header
+    try{
+      const btTab = document.querySelector('.tab.tab-bt');
+      if(btTab) sw('backtest', btTab);
+    }catch(e){}
 
     // ── Direct topbar price update (bypass handle race conditions) ──────────
     if(d.prices) {
@@ -10467,14 +10836,51 @@ function toggleTheme() {
 }
 if(localStorage.getItem('nse-theme') === 'light') document.documentElement.classList.add('light');
 
+window._strategyProfile = 'balanced_v2';
+async function refreshStrategyProfileUI(){
+  try{
+    const r = await fetch((window._backendBase || '') + '/api/strategy/profile');
+    const j = await r.json();
+    const active = String(j.active || 'balanced_v2').toLowerCase();
+    window._strategyProfile = active;
+    const btn = document.getElementById('strategy-prof-btn');
+    if(btn){
+      btn.textContent = active === 'balanced_v2' ? '🧪 BALANCED V2' : '🧪 LEGACY';
+      btn.style.borderColor = active === 'balanced_v2' ? 'var(--go-b)' : 'var(--am-b)';
+      btn.style.color = active === 'balanced_v2' ? 'var(--go)' : 'var(--am)';
+      btn.style.background = active === 'balanced_v2' ? 'var(--go-d)' : 'var(--am-d)';
+    }
+  }catch(e){}
+}
+
+async function toggleStrategyProfile(){
+  const next = window._strategyProfile === 'balanced_v2' ? 'legacy' : 'balanced_v2';
+  try{
+    const r = await fetch((window._backendBase || '') + '/api/strategy/profile?name=' + encodeURIComponent(next), {method:'POST'});
+    const j = await r.json();
+    if(j && j.ok){
+      await refreshStrategyProfileUI();
+      notify('Strategy profile: ' + String(j.active || next).toUpperCase());
+    }else{
+      notify('Could not switch strategy profile');
+    }
+  }catch(e){
+    notify('Strategy switch failed');
+  }
+}
+
 function tbGoLive() {
   window._histMode = false;
   window._histData = null;
   window._histDate = null;
   document.getElementById('tb-date').value = '';
   document.getElementById('tb-live-btn').style.display = 'none';
+  const btBtn = document.getElementById('tb-backtest-btn');
+  if(btBtn) btBtn.style.display = 'none';
   document.getElementById('live-pill').style.opacity = '1';
   document.getElementById('hist-banner').style.display = 'none';
+  const swBt = document.getElementById('sw-backtest-badge');
+  if(swBt) swBt.classList.remove('on');
   // Restore journal
   if(typeof renderLog === 'function') renderLog();
   const logBtn = document.querySelector('#tp-journal .btn-g');
@@ -10622,7 +11028,12 @@ async function tokenBannerRefresh() {
       if(icon) icon.textContent = '✓';
       setTimeout(() => { const b = document.getElementById('token-banner'); if(b) b.style.display='none'; }, 4000);
     } else {
-      if(msg)  msg.textContent = 'Auto-refresh failed: ' + (d.msg||'unknown') + ' — check KITE_USER_ID / KITE_PASSWORD / KITE_TOTP_SECRET in Railway env vars';
+      const m = d.msg || 'unknown';
+      const depHint = /pyotp|playwright|pip install|not installed|No module named/i.test(m);
+      const tail = depHint
+        ? ' Reinstall backend dependencies (pip install -r backend/requirements.txt) or redeploy the Docker image.'
+        : ' — check KITE_USER_ID / KITE_PASSWORD / KITE_TOTP_SECRET in Railway env vars';
+      if(msg)  msg.textContent = 'Auto-refresh failed: ' + m + tail;
       if(msg)  msg.style.color = '#ff3355';
       if(icon) icon.textContent = '⚠';
       if(btn)  btn.style.display = 'inline';

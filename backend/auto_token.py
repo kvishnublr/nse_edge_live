@@ -18,9 +18,9 @@ Integrated usage (called from feed.py on auth failure):
 """
 
 import os
+import re
 import sys
 import logging
-import pyotp
 
 from dotenv import load_dotenv, set_key
 
@@ -72,19 +72,46 @@ def _do_refresh(env_file: str = _ENV_FILE) -> bool:
         return False
 
     try:
-        from playwright.sync_api import sync_playwright
+        import pyotp
     except ImportError:
-        logger.error("auto_token: playwright not installed. Run: pip install playwright && playwright install chromium")
+        logger.error(
+            "auto_token: pyotp is not installed. "
+            "Run: pip install pyotp  (included in backend/requirements.txt — reinstall or redeploy the image)."
+        )
         return False
 
-    connect_url = f"https://kite.trade/connect/login?api_key={api_key}&v=3"
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        logger.error(
+            "auto_token: Playwright Python package missing. "
+            "Local: pip install -r backend/requirements.txt && playwright install chromium "
+            "(or: python -m playwright install chromium). "
+            "Railway/Docker: rebuild the image from the repo Dockerfile (includes browser install)."
+        )
+        return False
+
+    # Same entry URL as generate_token.py (kite.trade can differ and break redirects)
+    connect_url = f"https://kite.zerodha.com/connect/login?v=3&api_key={api_key}"
     request_token = None
 
     captured_url = []
 
+    def _capture(u: str) -> None:
+        if not u or "request_token" not in u:
+            return
+        if u not in captured_url:
+            captured_url.append(u)
+
+    # TOTP secret: strip whitespace; pyotp accepts standard Base32
+    totp_secret = "".join(totp_secret.split()).upper()
+
     try:
+        headless = os.getenv("PLAYWRIGHT_KITE_HEADLESS", "true").strip().lower() not in (
+            "0", "false", "no",
+        )
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(headless=headless)
             context = browser.new_context(
                 user_agent=(
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -94,50 +121,100 @@ def _do_refresh(env_file: str = _ENV_FILE) -> bool:
             )
             page = context.new_page()
 
-            # ── Listen for all navigations to capture request_token URL ─────
-            def on_request(request):
-                if "request_token" in request.url:
-                    captured_url.append(request.url)
+            # Capture request_token from any network activity / navigation / redirects
+            page.on("request", lambda req: _capture(req.url))
 
-            page.on("request", on_request)
+            def _on_response(res):
+                _capture(res.url)
+                try:
+                    loc = res.headers.get("location") or res.headers.get("Location")
+                    if loc:
+                        _capture(loc)
+                except Exception:
+                    pass
 
-            # Also intercept and abort 127.0.0.1 so browser doesn't crash
-            context.route("**/127.0.0.1/**", lambda route, req: (
-                captured_url.append(req.url) or route.abort()
-            ))
-            context.route("**localhost**", lambda route, req: (
-                captured_url.append(req.url) or route.abort()
-            ))
+            page.on("response", _on_response)
+
+            def _on_frame(frame):
+                try:
+                    _capture(frame.url)
+                except Exception:
+                    pass
+
+            page.on("framenavigated", _on_frame)
+
+            # Abort local redirect targets (app redirect URL) but keep the URL text.
+            # Globs like **127.0.0.1** often fail to match; use regex on full URL.
+            def _route_local(route, req):
+                _capture(req.url)
+                route.abort()
+
+            for rx in (
+                re.compile(r"https?://127\.0\.0\.1(?::\d+)?(?:/|\?|$)"),
+                re.compile(r"https?://localhost(?::\d+)?(?:/|\?|$)"),
+            ):
+                context.route(rx, _route_local)
 
             # ── Step 1: Navigate to Kite Connect login ────────────────────────
             logger.info("auto_token: opening Kite login page...")
-            page.goto(connect_url, wait_until="networkidle", timeout=30000)
+            page.goto(connect_url, wait_until="domcontentloaded", timeout=45000)
 
             # ── Step 2: Enter user ID and password ────────────────────────────
-            page.fill('input[type="text"]', user_id)
+            user_sel = (
+                'input#userid, input[name="user_id"], input[type="text"]'
+            )
+            page.wait_for_selector(user_sel, timeout=20000)
+            page.fill(user_sel, user_id)
             page.fill('input[type="password"]', password)
             page.click('button[type="submit"]')
             logger.info("auto_token: password submitted")
 
             # ── Step 3: Wait for TOTP field and fill it ───────────────────────
-            totp_selector = 'input[type="number"], input[placeholder*="TOTP"], input[placeholder*="totp"], input[autocomplete="one-time-code"]'
-            page.wait_for_selector(totp_selector, timeout=15000)
+            totp_selector = (
+                'input[type="number"], input[type="tel"], input[type="text"], '
+                'input[placeholder*="TOTP"], input[placeholder*="totp"], '
+                'input[autocomplete="one-time-code"], input#totp'
+            )
+            page.wait_for_selector(totp_selector, timeout=25000)
             totp_value = pyotp.TOTP(totp_secret).now()
             page.fill(totp_selector, totp_value)
-            logger.info(f"auto_token: TOTP {totp_value} filled")
+            logger.info("auto_token: TOTP submitted (6-digit code generated from secret)")
 
-            # Submit if button is clickable, otherwise TOTP auto-submits on 6 digits
+            # Submit if button exists; else Enter (some flows auto-submit)
             try:
-                page.locator('button[type="submit"]').click(timeout=5000)
+                page.locator('button[type="submit"]').first.click(timeout=4000)
             except Exception:
-                pass
+                try:
+                    page.keyboard.press("Enter")
+                except Exception:
+                    pass
 
-            # ── Step 4: Wait up to 20s for redirect URL to be captured ────────
+            # ── Step 4: Wait for redirect URL (up to ~90s) ────────────────────
+            from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+            def _url_has_token(u: str) -> bool:
+                return bool(u and "request_token=" in u)
+
+            try:
+                page.wait_for_url(_url_has_token, timeout=90_000)
+            except PlaywrightTimeoutError:
+                logger.info("auto_token: wait_for_url timed out; polling page URL…")
+
             import time as _time
-            for _ in range(40):
+            for _ in range(180):
+                if captured_url:
+                    break
+                _capture(page.url)
                 if captured_url:
                     break
                 _time.sleep(0.5)
+
+            if not captured_url:
+                try:
+                    logger.error(f"auto_token: final page URL: {page.url}")
+                    logger.error(f"auto_token: page title: {page.title()!r}")
+                except Exception:
+                    pass
 
     except Exception as e:
         if not captured_url:
@@ -152,8 +229,12 @@ def _do_refresh(env_file: str = _ENV_FILE) -> bool:
     logger.info(f"auto_token: captured redirect: {final_url[:60]}...")
 
     from urllib.parse import urlparse, parse_qs
-    params = parse_qs(urlparse(final_url).query)
+    parsed = urlparse(final_url)
+    params = parse_qs(parsed.query)
     token_list = params.get("request_token")
+    if not token_list and parsed.fragment:
+        params = parse_qs(parsed.fragment)
+        token_list = params.get("request_token")
     if not token_list:
         logger.error(f"auto_token: request_token not found in URL: {final_url}")
         return False
@@ -172,8 +253,9 @@ def _do_refresh(env_file: str = _ENV_FILE) -> bool:
         logger.error(f"auto_token: generate_session failed: {e}")
         return False
 
-    # ── Step 6: Persist to .env ───────────────────────────────────────────────
+    # ── Step 6: Persist to .env + current process env (scheduler / live reload) ─
     set_key(env_file, "KITE_ACCESS_TOKEN", access_token)
+    os.environ["KITE_ACCESS_TOKEN"] = access_token
     root_env = os.path.normpath(os.path.join(os.path.dirname(env_file), "..", ".env"))
     if os.path.isfile(root_env):
         set_key(root_env, "KITE_ACCESS_TOKEN", access_token)

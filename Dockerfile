@@ -8,13 +8,11 @@ RUN apt-get update && apt-get install -y \
     wget curl gnupg ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# ── Python deps ───────────────────────────────────────────────────────────────
+# ── Python deps + Playwright browser (same interpreter via python -m) ────────
 COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# ── Install Playwright + Chromium (with all system deps auto-resolved) ────────
-RUN pip install playwright \
-    && playwright install --with-deps chromium
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir "pyotp==2.9.0" \
+    && python -m playwright install --with-deps chromium
 
 # ── App source ────────────────────────────────────────────────────────────────
 COPY backend/ ./backend/

@@ -18,6 +18,9 @@ _IST = pytz.timezone("Asia/Kolkata")
 
 # ─── TELEGRAM ALERT ───────────────────────────────────────────────────────────
 _last_telegram_verdict = None   # debounce — only alert on verdict change
+_stock_exec_alert_ts: dict[str, float] = {}
+STOCK_EXECUTE_TELEGRAM_COOLDOWN_SEC = 1800  # per symbol
+
 
 def _send_telegram(msg: str):
     from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
@@ -31,6 +34,11 @@ def _send_telegram(msg: str):
         )
     except Exception as e:
         logger.debug(f"Telegram send failed: {e}")
+
+
+def send_telegram_message(msg: str) -> None:
+    """Public hook for scheduler / other modules (same path as verdict alerts)."""
+    _send_telegram(msg)
 
 
 # ─── WHATSAPP ALERT (CallMeBot) ───────────────────────────────────────────────
@@ -128,6 +136,7 @@ state = {
     "last_stocks": [],
     "last_fii":    None,
     "last_updated": 0,
+    "confluence":  None,  # experimental: multi-factor intraday snapshot (confluence_engine.py)
 }
 
 # ─── PRICE HISTORY HELPERS ────────────────────────────────────────────────────
@@ -497,7 +506,6 @@ def detect_spikes(stocks: list, prev: dict, gates: dict | None = None, verdict: 
     spikes   = []
 
     # Spike radar is FULLY independent of gates — fires on price/vol/OI merit only.
-    # Score floor: 45. Strict vol threshold (2.5×) to avoid low-quality signals.
     gate_score_floor = 45
 
     try:
@@ -514,22 +522,29 @@ def detect_spikes(stocks: list, prev: dict, gates: dict | None = None, verdict: 
     else:
         time_bucket = "late_1300_plus"
 
-    # Only skip if the accuracy filter explicitly marks this bucket as weak AND has data
+    # Weak session buckets from historical accuracy: slightly tighten floor, do not zero the radar.
     weak_buckets = acc_filters.get("weak_buckets", set())
     if weak_buckets and time_bucket in weak_buckets:
-        return []
+        gate_score_floor = 48
 
     for s in stocks:
         sym       = s.get("symbol", "")
         price     = s.get("price", 0)
-        chg_pct   = s.get("chg_pct", 0)
-        oi_pct    = s.get("oi_chg_pct", 0)
-        vol       = s.get("volume", 1) or 1
-        prev_vol  = prev.get(sym, {}).get("volume", vol) or vol
-        vm        = vol / prev_vol if prev_vol else 1.0
+        chg_pct   = float(s.get("chg_pct", 0) or 0)
+        oi_pct    = float(s.get("oi_chg_pct", 0) or 0)
+        vol       = float(s.get("volume", 0) or 0)
+        prev_vol  = float((prev.get(sym) or {}).get("volume", 0) or 0)
+        if vol <= 0:
+            vol = 1.0
+        if prev_vol <= 0:
+            prev_vol = vol
+        # Backtest uses 1m vol / rolling avg. Live cumulative vol / prev tick stays ~1.0 — useless.
+        # Use fetcher vol_ratio (cum vs 20d daily avg) and max with tick ramp for sudden prints.
+        vol_ratio = float(s.get("vol_ratio", 0) or 0)
+        vm_tick   = vol / max(prev_vol, 1.0)
+        vm        = max(vol_ratio, vm_tick)
         stock_pc  = int(s.get("pc", 0) or 0)
-        if sym in acc_filters.get("weak_symbols", set()):
-            continue
+        sym_floor = gate_score_floor + (6 if sym in acc_filters.get("weak_symbols", set()) else 0)
 
         sp_type = sig = trigger = ""
 
@@ -539,15 +554,21 @@ def detect_spikes(stocks: list, prev: dict, gates: dict | None = None, verdict: 
         if not (t_start <= candle_min <= t_end):
             continue
 
-        price_th = TH.get("spike_price_pct", 0.2)
-        # Live vol_th raised to 2.5× — the GATE 1.5× is calibrated for 1-min candles
-        # in backtest; live vol is cumulative intraday so 2.5× filters noise better.
-        vol_th   = 2.5
-        oi_th    = TH.get("spike_oi_pct", 12.0)
+        price_th = float(TH.get("spike_price_pct", 0.2))
+        vol_th   = float(TH.get("spike_vol_mult", 1.5))
+        oi_th    = float(TH.get("spike_oi_pct", 12.0))
+
+        # Session chg_pct is slower than 1m bar open→close — stricter when vol surge is only mild.
+        if vm >= 3.5:
+            price_min = price_th
+        elif vm >= vol_th * 1.25:
+            price_min = max(price_th, 0.25)
+        elif vm >= vol_th:
+            price_min = max(price_th, 0.22)
+        else:
+            price_min = 0.35
 
         # Detect spike type — price+vol spike takes priority, then OI-only
-        # Require strong price move (>=0.5%) when vol is only 2.5-3×; relax for vol>=4×
-        price_min = 0.5 if vm < 4.0 else price_th
         if abs(chg_pct) >= price_min and vm >= vol_th:
             sp_type = "buy" if chg_pct > 0 else "sell"
             sig     = "LONG" if chg_pct > 0 else "SHORT"
@@ -566,17 +587,21 @@ def detect_spikes(stocks: list, prev: dict, gates: dict | None = None, verdict: 
 
         # Score and floor — spikes fire on merit regardless of gate state
         score = _score_spike(vm, chg_pct, sym, candle_min)
-        if score < gate_score_floor:
+        if score < sym_floor:
             continue
 
-        # Confirmation — OI-aware: if OI data is stale, require stronger price or vol
+        # Confirmation — align with UI (vol vs avg day + direction); avoid blocking everything on tick vol ~1×.
         oi_available = abs(oi_pct) >= 1.0
         if oi_available:
-            same_dir_oi  = (chg_pct > 0 and oi_pct > 0) or (chg_pct < 0 and oi_pct < 0)
-            has_confirmation = same_dir_oi or vm >= 4.0
+            same_dir_oi = (chg_pct > 0 and oi_pct > 0) or (chg_pct < 0 and oi_pct < 0)
+            has_confirmation = (
+                same_dir_oi
+                or vm >= 2.5
+                or vol_ratio >= vol_th
+                or abs(chg_pct) >= 0.70
+            )
         else:
-            # OI stale — need strong price (>=1.0%) OR very high volume (>=4×)
-            has_confirmation = vm >= 4.0 or abs(chg_pct) >= 1.0
+            has_confirmation = vm >= 2.5 or vol_ratio >= vol_th or abs(chg_pct) >= 0.85
         if not has_confirmation:
             continue
 
@@ -655,8 +680,13 @@ def run_signal_engine(indices: dict, chain: dict, fii: dict,
     verdict, sub, pass_cnt = compute_verdict(gates)
 
     gates_dict = {i + 1: g for i, g in enumerate(gates)}
+    prev_stocks_list = state.get("last_stocks", []) or []
+    prev_verdict_by_sym = {
+        str(s.get("symbol", "")): str(s.get("verdict", ""))
+        for s in prev_stocks_list
+    }
     stocks = _annotate_live_stocks(stocks, gates_dict, verdict)
-    prev   = {s["symbol"]: s for s in state.get("last_stocks", [])}
+    prev   = {s["symbol"]: s for s in prev_stocks_list}
     new_spikes = detect_spikes(stocks, prev, gates_dict, verdict)
 
     # Preserve today's spikes across the session — don't wipe them when the
@@ -705,6 +735,32 @@ def run_signal_engine(indices: dict, chain: dict, fii: dict,
 
     spikes = merged_spikes
     state["spikes_date"] = today_str
+
+    # Per-stock EXECUTE → Telegram (edge detect, cooldown per symbol)
+    global _stock_exec_alert_ts
+    now_ts = time.time()
+    cd = STOCK_EXECUTE_TELEGRAM_COOLDOWN_SEC
+    for s in stocks:
+        sym = str(s.get("symbol", "")).strip()
+        if not sym or sym in ("NIFTY", "BANKNIFTY", "INDIAVIX"):
+            continue
+        if s.get("verdict") != "EXECUTE":
+            continue
+        if prev_verdict_by_sym.get(sym) == "EXECUTE":
+            continue
+        last_t = _stock_exec_alert_ts.get(sym, 0)
+        if now_ts - last_t < cd:
+            continue
+        _stock_exec_alert_ts[sym] = now_ts
+        px = float(s.get("price", 0) or s.get("ltp", 0) or 0)
+        chg = float(s.get("chg_pct", 0) or 0)
+        pc_s = int(s.get("pc", 0) or 0)
+        msg = (
+            f"🎯 <b>STOCK EXECUTE — {sym}</b>\n"
+            f"₹{px:.2f} ({chg:+.2f}%) · {pc_s}/5 on name · Global: {verdict}\n"
+            f"<i>Confirm liquidity and your rules before entry.</i>"
+        )
+        _send_telegram(msg)
 
     # Build intel ticker
     ticker = []

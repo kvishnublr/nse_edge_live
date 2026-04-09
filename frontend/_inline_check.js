@@ -1001,10 +1001,10 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
 (function startLiveData(){
   const _backendBase = window.location.hostname === 'kvishnublr.github.io'
     ? 'https://nse-edge-backend.fly.dev'
-    : 'http://localhost:8000';
+    : 'http://localhost:8765';
   const WS_URL = window.location.hostname === 'kvishnublr.github.io'
     ? 'wss://nse-edge-backend.fly.dev/ws'
-    : 'ws://localhost:8000/ws';
+    : 'ws://localhost:8765/ws';
 
   let ws = null;
   let reconnectDelay = 2000;
@@ -1883,7 +1883,7 @@ function generateMockChartData(){}
 // ═══════════════════════════════════════════════
 const API = window.location.hostname === 'kvishnublr.github.io'
   ? 'https://nse-edge-backend.fly.dev'
-  : 'http://localhost:8000';
+  : 'http://localhost:8765';
 
 (function bt2Init(){
   const to   = new Date();

@@ -23,7 +23,10 @@ import fetcher
 import signals
 import scheduler as sched
 from feed import feed_manager, get_all_prices
-from config import HOST, PORT, KITE_API_KEY, KITE_ACCESS_TOKEN, is_market_open, get_market_status
+from config import (
+    HOST, PORT, KITE_API_KEY, KITE_ACCESS_TOKEN, is_market_open, get_market_status,
+    apply_strategy_profile, get_strategy_profile_name, get_strategy_profiles,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -332,9 +335,18 @@ async def lifespan(app: FastAPI):
     except Exception as _e:
         logger.warning(f"Index signal restore failed (non-critical): {_e}")
 
-    # Start scheduler
+    # Start scheduler (includes Mon–Fri 07:55 IST Kite token auto-refresh)
     job_scheduler = sched.build_scheduler()
     job_scheduler.start()
+    try:
+        _tj = job_scheduler.get_job("token_refresh")
+        if _tj and _tj.next_run_time:
+            logger.info(
+                "  Kite token auto-refresh: Mon–Fri 07:55 Asia/Kolkata (next: %s)",
+                _tj.next_run_time.strftime("%Y-%m-%d %H:%M %Z"),
+            )
+    except Exception:
+        pass
 
     logger.info("=" * 55)
     logger.info(f"  WebSocket : ws://{HOST}:{PORT}/ws")
@@ -358,6 +370,8 @@ ALLOWED_ORIGINS = [
     "http://127.0.0.1:8080",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
+    "http://localhost:8765",
+    "http://127.0.0.1:8765",
     "https://kvishnublr.github.io",   # GitHub Pages
     "null",   # file:// protocol sends Origin: null
 ] + _extra_origins
@@ -868,8 +882,28 @@ async def get_state():
         "fii":         signals.state.get("last_fii"),
         "spikes":        signals.state.get("spikes", []),
         "index_signals": signals.state.get("index_signals", []),
+        "strategy_profile": get_strategy_profile_name(),
         "position_size_lots": signals.state.get("position_size_lots", 0),
         "position_size_rupees": signals.state.get("position_size_rupees", 0),
+    })
+
+
+@app.get("/api/strategy/profile")
+async def get_strategy_profile():
+    return JSONResponse({
+        "active": get_strategy_profile_name(),
+        "available": get_strategy_profiles(),
+    })
+
+
+@app.post("/api/strategy/profile")
+async def set_strategy_profile(name: str):
+    active = apply_strategy_profile(name)
+    logger.info("Strategy profile switched to: %s", active)
+    return JSONResponse({
+        "ok": True,
+        "active": active,
+        "available": get_strategy_profiles(),
     })
 
 
@@ -1280,9 +1314,43 @@ async def get_live_picks():
 
 
 @app.get("/api/signals/history")
-async def get_signals_history(limit: int = 100, status: str = "ALL"):
+async def get_signals_history(
+    limit: int = 100,
+    status: str = "ALL",
+    verdict: str | None = None,
+    days: int | None = None,
+    from_date: str | None = None,
+    to_date: str | None = None,
+):
     import backtest_data as bd
-    rows = bd.get_live_signal_history(limit=limit, status=status)
+    import datetime as _dt
+    try:
+        limit = max(1, min(int(limit), 50_000))
+    except Exception:
+        limit = 100
+    min_trade_date = None
+    if from_date:
+        min_trade_date = str(from_date).strip()[:10]
+    elif days is not None:
+        try:
+            raw = int(days)
+            if raw > 0:
+                d = min(raw, 365 * 12)
+                min_trade_date = (_dt.date.today() - _dt.timedelta(days=d)).isoformat()
+        except Exception:
+            min_trade_date = None
+    rows = bd.get_live_signal_history(
+        limit=limit,
+        status=status,
+        verdict=verdict,
+        min_trade_date=min_trade_date,
+    )
+    if from_date:
+        fd = str(from_date).strip()[:10]
+        rows = [r for r in rows if str(r.get("trade_date") or "") >= fd]
+    if to_date:
+        td = str(to_date).strip()[:10]
+        rows = [r for r in rows if str(r.get("trade_date") or "") <= td]
     return JSONResponse({"rows": rows, "count": len(rows)})
 
 
@@ -1320,6 +1388,48 @@ async def backfill_signals_history(days: int = 7):
     inserted = bd.import_historical_spike_results(payload.get("results", []))
     rows = bd.get_live_signal_history(limit=100, status="ALL")
     return JSONResponse({"inserted": inserted, "rows": rows, "count": len(rows), "from_date": from_date, "to_date": to_date})
+
+
+@app.post("/api/signals/swing-backtest")
+async def swing_radar_backtest_api(request: Request):
+    """
+    Replay Swing Radar on historical dates using backtest.db (NIFTY/VIX/PCR/FII) + Kite daily bars.
+    Inserts closed rows (signal_key BT-SWING|...) into live_signal_history with verdict SWING_RADAR.
+    Requires Kite access and prior /api/backtest/download for index/macro series.
+    JSON body (optional): from_date, to_date (YYYY-MM-DD), max_forward_days (3–30, default 12).
+    Default range: last ~3 years ending today.
+    """
+    import swing_radar_backtest as srb
+    from datetime import datetime, timedelta
+    from feed import get_kite
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    ist = pytz.timezone("Asia/Kolkata")
+    today = datetime.now(ist).date()
+    to_d = str(body.get("to_date") or today.isoformat())[:10]
+    from_d = str(body.get("from_date") or (today - timedelta(days=1095)).isoformat())[:10]
+    try:
+        max_fd = int(body.get("max_forward_days") or 12)
+    except Exception:
+        max_fd = 12
+    max_fd = max(3, min(max_fd, 30))
+
+    kite = get_kite()
+    if not kite:
+        return JSONResponse({"error": "Kite not available"}, status_code=503)
+
+    loop = asyncio.get_running_loop()
+
+    def _run():
+        return srb.run_swing_radar_backtest(kite, from_d, to_d, max_forward_days=max_fd)
+
+    result = await loop.run_in_executor(None, _run)
+    if result.get("error"):
+        return JSONResponse(result, status_code=400)
+    return JSONResponse(result)
 
 
 @app.get("/api/chain/{symbol}")
