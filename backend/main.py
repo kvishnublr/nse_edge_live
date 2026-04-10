@@ -171,99 +171,9 @@ async def lifespan(app: FastAPI):
     # populated even when the server starts after market hours.
     if kite:
         try:
-            import statistics as _stat
-            from signals import _score_spike
-            from feed import KITE_TOKENS
-            from config import FNO_SYMBOLS
-            import datetime as _dt
-            today_str = _dt.date.today().isoformat()
-            backfill = []
-            from config import GATE as _GATE
-            _t_start = _GATE.get("spike_time_start", 570)
-            _t_end   = _GATE.get("spike_time_end",   840)
-            _score_floor = 45
-            _vol_th = 2.5   # same as live detection — higher than 1.5× config
-            _dedup_window = 20  # minutes — one signal per symbol+dir per 20 min
-
-            # Track last signal time per (symbol, direction) for deduplication
-            _last_sig_min = {}  # {(sym, sp_type): minute}
-
-            for sym in FNO_SYMBOLS[2:]:
-                tok = KITE_TOKENS.get(sym)
-                if not tok:
-                    continue
-                try:
-                    candles = kite.historical_data(tok, today_str, today_str, "minute")
-                    if len(candles) < 10:
-                        continue
-                    vols = [c['volume'] for c in candles if c['volume'] > 0]
-                    if not vols:
-                        continue
-                    avg_vol = _stat.mean(vols)
-                    open_px = candles[0]['open']
-                    for i, c in enumerate(candles):
-                        t = c['date']
-                        cm = t.hour * 60 + t.minute
-                        if not (_t_start <= cm <= _t_end):
-                            continue
-                        price   = c['close']
-                        vol     = c['volume'] or 0
-                        vm      = vol / avg_vol if avg_vol else 0
-                        # chg_pct = candle move from open (cumulative intraday)
-                        chg_pct = (price - open_px) / open_px * 100 if open_px else 0
-                        # Price threshold: relaxed for very high volume (4×+)
-                        price_min = 0.5 if vm < 4.0 else 0.2
-                        if abs(chg_pct) < price_min or vm < _vol_th:
-                            continue
-                        # OI unavailable in backfill — require price>=1.0% or vol>=4×
-                        if vm < 4.0 and abs(chg_pct) < 1.0:
-                            continue
-                        score = _score_spike(vm, chg_pct, sym, cm)
-                        if score < _score_floor:
-                            continue
-                        sp_type = "buy" if chg_pct > 0 else "sell"
-                        # 20-min deduplication — skip if same symbol+dir fired recently
-                        key = (sym, sp_type)
-                        if key in _last_sig_min and cm - _last_sig_min[key] < _dedup_window:
-                            continue
-                        _last_sig_min[key] = cm
-                        sig     = "LONG" if chg_pct > 0 else "SHORT"
-                        trigger = f"Price {'+' if chg_pct>0 else ''}{chg_pct:.2f}% | Vol {vm:.1f}x"
-                        # Outcome: T1=+0.5% buy / −0.5% sell; SL=−0.5% buy / +0.5% sell
-                        entry = price
-                        t1_px = entry * 1.005 if sp_type == "buy" else entry * 0.995
-                        sl_px = entry * 0.995  if sp_type == "buy" else entry * 1.005
-                        outcome = None
-                        for j in range(i + 1, min(i + 31, len(candles))):
-                            fc = candles[j]
-                            if sp_type == "buy":
-                                if fc['low']  <= sl_px: outcome = "HIT SL"; break
-                                if fc['high'] >= t1_px: outcome = "HIT T1"; break
-                            else:
-                                if fc['high'] >= sl_px: outcome = "HIT SL"; break
-                                if fc['low']  <= t1_px: outcome = "HIT T1"; break
-                        if outcome is None:
-                            outcome = "EXPIRED"
-                        backfill.append({
-                            "symbol":   sym,
-                            "time":     t.strftime("%H:%M"),
-                            "price":    round(price, 2),
-                            "chg_pct":  round(chg_pct, 2),
-                            "vol_mult": round(vm, 1),
-                            "oi_pct":   0.0,
-                            "type":     sp_type,
-                            "trigger":  trigger,
-                            "signal":   sig,
-                            "strength": "hi" if score >= 70 else "md",
-                            "score":    score,
-                            "pc":       3,
-                            "outcome":  outcome,
-                        })
-                except Exception:
-                    pass
+            today_str = datetime.datetime.now(pytz.timezone("Asia/Kolkata")).date().isoformat()
+            backfill = signals.build_today_spikes_from_kite_history(kite)
             if backfill:
-                backfill.sort(key=lambda x: -x["score"])
-                backfill = backfill[:30]
                 signals.state["spikes"] = backfill
                 signals.state["spikes_date"] = today_str
                 logger.info(f"  Backfilled {len(backfill)} spikes from today's history")
@@ -619,12 +529,13 @@ async def index_radar_ml_status():
 async def index_signals_backtest(request: Request):
     """
     Run Index Radar on Kite 1-min data; rules match live INDEX_RADAR (see config.py).
-    Outcome: T1 / SL / EXPIRED use outcome_index_pct on the underlying within 45 minutes.
+    Outcome: forward scan uses outcome_t1_index_pct / outcome_sl_index_pct on the underlying
+    (fallback: outcome_index_pct for both) within 45 minutes; matches live index fallback + plan mults.
     """
     import sqlite3 as _sq, datetime as _dt, time as _t
     from collections import defaultdict
 
-    from config import INDEX_RADAR as IR_BT
+    from config import INDEX_RADAR, INDEX_RADAR_HIGH_ACCURACY, _INDEX_RADAR_BASE
     from index_radar_logic import (
         build_minute_close_map,
         cm_from_candle,
@@ -635,6 +546,17 @@ async def index_signals_backtest(request: Request):
     body = await request.json()
     from_date = body.get("from_date", (_dt.date.today() - _dt.timedelta(days=30)).isoformat())
     to_date   = body.get("to_date",   _dt.date.today().isoformat())
+    preset = str(body.get("preset") or "default").strip().lower()
+    # Default: match live engine (INDEX_RADAR includes active strategy profile).
+    # High accuracy: file baseline + INDEX_RADAR_HIGH_ACCURACY only — same as profile "index_precision",
+    # not stacked on balanced_v2 (stacking produced impossible thresholds and zero signals).
+    IR_BT = dict(INDEX_RADAR)
+    if preset in ("high_accuracy", "precision", "ha"):
+        IR_BT = dict(_INDEX_RADAR_BASE)
+        IR_BT.update(INDEX_RADAR_HIGH_ACCURACY)
+        preset = "high_accuracy"
+    else:
+        preset = "default"
 
     try:
         from feed import get_kite
@@ -689,7 +611,9 @@ async def index_signals_backtest(request: Request):
 
     total_inserted = 0
     results = []
-    _ix_out = float(IR_BT.get("outcome_index_pct", 0.25))
+    _ix_base = float(IR_BT.get("outcome_index_pct", 0.25))
+    _ix_t1_th = float(IR_BT["outcome_t1_index_pct"]) if IR_BT.get("outcome_t1_index_pct") is not None else _ix_base
+    _ix_sl_th = float(IR_BT["outcome_sl_index_pct"]) if IR_BT.get("outcome_sl_index_pct") is not None else _ix_base
     filter_stats: dict = defaultdict(int)
 
     for sym, tok, lot_sz, step in CONFIGS:
@@ -776,9 +700,12 @@ async def index_signals_backtest(request: Request):
                 entry = round(px * 0.007, 1)
                 if entry < 20:
                     entry = 20.0
-                sl = round(entry * 0.70, 2)
-                t1 = round(entry * 1.50, 2)
-                t2 = round(entry * 2.00, 2)
+                sl_m = float(IR_BT.get("opt_sl_mult", 0.70))
+                t1_m = float(IR_BT.get("opt_t1_mult", 1.50))
+                t2_m = float(IR_BT.get("opt_t2_mult", 2.00))
+                sl = round(entry * sl_m, 2)
+                t1 = round(entry * t1_m, 2)
+                t2 = round(entry * t2_m, 2)
                 rr = round((t1 - entry) / max(entry - sl, 0.01), 1)
 
                 if IR_BT.get("ml_filter_enabled"):
@@ -809,16 +736,17 @@ async def index_signals_backtest(request: Request):
                 for j in range(i + 1, min(i + 46, len(mkt))):
                     fc = mkt[j]
                     fmv = (fc["close"] - entry_idx_px) / entry_idx_px * 100
-                    if (is_ce and fmv >= _ix_out) or (not is_ce and fmv <= -_ix_out):
+                    if (is_ce and fmv >= _ix_t1_th) or (not is_ce and fmv <= -_ix_t1_th):
                         outcome = "HIT_T1"
                         break
-                    if (is_ce and fmv <= -_ix_out) or (not is_ce and fmv >= _ix_out):
+                    if (is_ce and fmv <= -_ix_sl_th) or (not is_ce and fmv >= _ix_sl_th):
                         outcome = "HIT_SL"
                         break
                 if outcome is None:
                     outcome = "EXPIRED"
 
-                sig_id = f"{sym}_{day.replace('-', '')}_{c['date'].strftime('%H%M')}_{sig_type}"
+                _id_sfx = "_HA" if preset == "high_accuracy" else ""
+                sig_id = f"{sym}_{day.replace('-', '')}_{c['date'].strftime('%H%M')}_{sig_type}{_id_sfx}"
                 sig_time = c["date"].strftime("%H:%M")
                 lot_pnl = round((t1 - entry) * lot_sz)
                 now_ts = _t.time()
@@ -864,6 +792,8 @@ async def index_signals_backtest(request: Request):
         "from": from_date,
         "to": to_date,
         "filter_stats": fs_sorted,
+        "preset": preset,
+        "note": "Win rate = HIT_T1 / (HIT_T1+HIT_SL) on underlying move within 45m; not a guarantee of future performance.",
     })
 
 
@@ -882,6 +812,7 @@ async def get_state():
         "fii":         signals.state.get("last_fii"),
         "spikes":        signals.state.get("spikes", []),
         "index_signals": signals.state.get("index_signals", []),
+        "adv_index": signals.state.get("adv_index"),
         "strategy_profile": get_strategy_profile_name(),
         "position_size_lots": signals.state.get("position_size_lots", 0),
         "position_size_rupees": signals.state.get("position_size_rupees", 0),
@@ -966,10 +897,8 @@ async def day_performance(date: str = None):
 
     rows = []
     sections = {}
-    capital_total = 100000.0
-    section_count = 3.0  # SPIKE, SWING, INDEX_RADAR
-    trade_slots_per_section = 4.0
-    per_trade_budget = capital_total / section_count / trade_slots_per_section
+    # Model sizing for stock rows (user-facing): fixed ₹10,000 per signal.
+    stock_notional_per_signal = 10000.0
 
     # ── Spikes + Swing (live_signal_history) ───────────────────────────────
     try:
@@ -1006,9 +935,8 @@ async def day_performance(date: str = None):
         sec = "SWING" if str(d.get("verdict") or "") == "SWING_RADAR" else "SPIKE"
         lot_sz = int((_LOT_SIZES or {}).get(str(sym or "").upper(), 1) or 1)
         pnl_inr = float(pnl_pts or 0) * lot_sz
-        # 1L model: section budget split equally, then 1/4th per trade slot.
-        qty_model_raw = int(per_trade_budget / max(entry, 0.01)) if entry > 0 else 0
-        qty_model = (qty_model_raw // max(lot_sz, 1)) * max(lot_sz, 1) if lot_sz > 1 else qty_model_raw
+        # Stock quantity model: units = floor(₹10,000 / entry).
+        qty_model = int(stock_notional_per_signal / max(entry, 0.01)) if entry > 0 else 0
         pnl_model = float(pnl_pts or 0) * float(qty_model or 0)
         row = {
             "section": sec,
@@ -1109,7 +1037,8 @@ async def day_performance(date: str = None):
             else:
                 pnl = 0.0
                 unit_move = 0.0
-        qty_model_raw = int(per_trade_budget / max(entry, 0.01)) if entry > 0 else 0
+        # Keep option sizing as lot-aware notional approximation.
+        qty_model_raw = int(stock_notional_per_signal / max(entry, 0.01)) if entry > 0 else 0
         qty_model = (qty_model_raw // max(lot, 1)) * max(lot, 1) if lot > 1 else qty_model_raw
         pnl_model = float(unit_move or 0) * float(qty_model or 0)
         row = {
@@ -1190,10 +1119,7 @@ async def day_performance(date: str = None):
         "sections": {k: {**v, "pnl_inr": round(v["pnl_inr"]), "pnl_model_inr": round(v.get("pnl_model_inr", 0.0))} for k, v in sections.items()},
         "rows": rows,
         "capital_model": {
-            "capital_total": int(capital_total),
-            "section_count": int(section_count),
-            "trade_slots_per_section": int(trade_slots_per_section),
-            "per_trade_budget": round(per_trade_budget, 2),
+            "stock_notional_per_signal": int(stock_notional_per_signal),
         },
         "validation": {
             "ok": len(issues) == 0,
@@ -1201,6 +1127,117 @@ async def day_performance(date: str = None):
             "issues": issues[:100],
         },
     })
+
+
+@app.get("/api/trading-policy")
+async def trading_policy():
+    """One-page evidence: Index Radar walk-forward, live-only spikes vs backfill, EXECUTE stats, sample gates."""
+    try:
+        from trading_policy import build_trading_policy_report
+    except ImportError:
+        build_trading_policy_report = None
+    if not build_trading_policy_report:
+        return JSONResponse({"error": "trading_policy module missing"}, status_code=500)
+    return JSONResponse(build_trading_policy_report())
+
+
+@app.get("/api/adv-index/snapshot")
+async def adv_index_snapshot():
+    """Fresh NIFTY 50 weighted OI + cash composite (may take 1–2s; also cached in /api/state ~75s)."""
+    from feed import get_kite
+    import adv_index_engine as _aix
+
+    kite = get_kite()
+    if not kite:
+        return JSONResponse({"error": "Kite not available"}, status_code=503)
+    return JSONResponse(_aix.compute_live_snapshot(kite))
+
+
+@app.post("/api/adv-index/backtest")
+async def adv_index_backtest(request: Request):
+    """
+    30D (default) walk-forward: weighted 5m cash breadth → NIFTY path.
+    OI term is *not* in history — see response methodology (live adds OI).
+    """
+    from feed import get_kite
+    import adv_index_engine as _aix
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    days = int((body or {}).get("days", 30))
+    days = max(5, min(120, days))
+    export_csv = bool((body or {}).get("export_csv", False))
+    kite = get_kite()
+    if not kite:
+        return JSONResponse({"error": "Kite not available"}, status_code=503)
+    return JSONResponse(_aix.run_adv_index_backtest(kite, days=days, export_csv=export_csv))
+
+
+@app.get("/api/adv-index/backtest-last-csv")
+async def adv_index_backtest_last_csv():
+    """Download last CSV written by POST /api/adv-index/backtest with export_csv true."""
+    import adv_index_engine as _aix
+
+    p = _aix.DEFAULT_BACKTEST_CSV
+    if not os.path.isfile(str(p)):
+        return JSONResponse({"error": "No CSV yet — run backtest with export_csv: true"}, status_code=404)
+    return FileResponse(
+        str(p),
+        media_type="text/csv",
+        filename="adv_index_backtest_last.csv",
+    )
+
+
+@app.get("/api/adv-index/backtest-csv-info")
+async def adv_index_backtest_csv_info():
+    """Whether last backtest CSV exists (for UI download link without re-running)."""
+    import adv_index_engine as _aix
+
+    p = _aix.DEFAULT_BACKTEST_CSV
+    sp = str(p)
+    if not os.path.isfile(sp):
+        return JSONResponse({"exists": False, "path": sp})
+    try:
+        st = os.stat(sp)
+        return JSONResponse({
+            "exists": True,
+            "path": sp,
+            "size_bytes": int(st.st_size),
+            "modified_ts": int(st.st_mtime),
+        })
+    except OSError:
+        return JSONResponse({"exists": False, "path": sp})
+
+
+@app.get("/api/adv-index/history")
+async def adv_index_history_api(
+    trade_date: str | None = None,
+    from_date: str | None = None,
+    to_date: str | None = None,
+    limit: int = 500,
+):
+    """Persisted ADV INDEX snapshots (OI-inclusive live path) for forward analysis."""
+    import adv_index_history as _aixh
+
+    rows = _aixh.fetch_history(
+        trade_date=trade_date,
+        from_date=from_date,
+        to_date=to_date,
+        limit=limit,
+    )
+    return JSONResponse({"count": len(rows), "rows": rows})
+
+
+@app.get("/api/adv-index/history/{row_id}")
+async def adv_index_history_one(row_id: int):
+    import adv_index_history as _aixh
+
+    row = _aixh.fetch_history_row_full(row_id)
+    if not row:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    return JSONResponse(row)
 
 
 @app.get("/api/live-picks")
@@ -1354,6 +1391,100 @@ async def get_signals_history(
     return JSONResponse({"rows": rows, "count": len(rows)})
 
 
+@app.post("/api/signals/history/reset-spikes-today")
+async def reset_signals_history_spikes_today():
+    """
+    Wipe live_signal_history and index_signal_history, then repopulate:
+    - Spikes: today's list from Kite 1-min rebuild (cold-start rules) or in-memory spikes.
+    - Index radar: today's rows from memory if index_signals_date matches today (IST).
+    """
+    import backtest_data as bd
+    from feed import get_kite, feed_manager
+
+    try:
+        bd.wipe_live_signal_history()
+        bd.wipe_index_signal_history()
+    except Exception as e:
+        logger.error(f"wipe signal/index history: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+    kite = None
+    if not getattr(feed_manager, "_demo_mode", False):
+        try:
+            kite = get_kite()
+        except Exception as e:
+            logger.warning(f"reset-spikes-today: no Kite ({e})")
+
+    spikes: list = []
+    source = "none"
+    if kite:
+        try:
+            spikes = signals.build_today_spikes_from_kite_history(kite)
+            if spikes:
+                source = "kite"
+        except Exception as e:
+            logger.warning(f"reset-spikes-today Kite rebuild failed: {e}")
+
+    today_ist = datetime.datetime.now(pytz.timezone("Asia/Kolkata")).date().isoformat()
+    if not spikes and signals.state.get("spikes_date") == today_ist:
+        spikes = list(signals.state.get("spikes") or [])
+        if spikes:
+            source = "state"
+
+    gates = signals.state.get("gates") or {}
+    verdict = signals.state.get("verdict") or "WAIT"
+    pass_cnt = int(signals.state.get("pass_count") or 0)
+    indices = signals.state.get("last_macro") or {}
+    chain = signals.state.get("last_chain") or {}
+
+    try:
+        inserted = bd.log_live_spikes(spikes, gates, verdict, pass_cnt, indices, chain)
+    except Exception as e:
+        logger.error(f"log_live_spikes after reset: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+    if spikes:
+        signals.state["spikes"] = spikes
+        signals.state["spikes_date"] = today_ist
+        try:
+            broadcast({"type": "spikes", "data": spikes, "ts": time.time()})
+        except Exception:
+            pass
+
+    index_inserted = 0
+    ix_source = "none"
+    if signals.state.get("index_signals_date") == today_ist:
+        ix_list = list(signals.state.get("index_signals") or [])
+        try:
+            index_inserted = bd.replace_index_signal_rows(ix_list, today_ist)
+            ix_source = "state" if ix_list else "none"
+        except Exception as e:
+            logger.error(f"replace_index_signal_rows after reset: {e}", exc_info=True)
+            return JSONResponse({"error": str(e)}, status_code=500)
+    else:
+        signals.state["index_signals"] = []
+        signals.state["index_signals_date"] = today_ist
+    try:
+        broadcast({
+            "type": "index_spikes",
+            "data": signals.state.get("index_signals", []),
+            "ts": time.time(),
+        })
+    except Exception:
+        pass
+
+    return JSONResponse({
+        "ok": True,
+        "trade_date": today_ist,
+        "cleared_all": True,
+        "inserted_rows": inserted,
+        "spike_count": len(spikes),
+        "source": source,
+        "index_inserted_rows": index_inserted,
+        "index_source": ix_source,
+    })
+
+
 @app.get("/api/signals/accuracy-filters")
 async def get_signal_accuracy_filters_api():
     import backtest_data as bd
@@ -1372,22 +1503,59 @@ async def backfill_signals_history(days: int = 7):
     from datetime import datetime, timedelta
     ist = pytz.timezone('Asia/Kolkata')
     today = datetime.now(ist).date()
-    from_date = str(today - timedelta(days=max(2, min(days, 30))))
+    days = max(2, min(int(days), 180))
+    from_date = str(today - timedelta(days=days))
     to_date = str(today - timedelta(days=1))
-    resp = await spikes_backtest(from_date=from_date, to_date=to_date, vol_min=2.0, price_min=0.3, trend_filter=True, time_from="09:15", time_to="14:30", min_score=45)
-    if getattr(resp, "status_code", 200) >= 400:
+    # spikes_backtest accepts max 30-day windows for minute data; run in chunks.
+    inserted = 0
+    chunk_meta = []
+    cur_start = datetime.strptime(from_date, "%Y-%m-%d").date()
+    end_date = datetime.strptime(to_date, "%Y-%m-%d").date()
+    while cur_start <= end_date:
+        cur_end = min(cur_start + timedelta(days=29), end_date)
+        resp = await spikes_backtest(
+            from_date=str(cur_start),
+            to_date=str(cur_end),
+            vol_min=2.0,
+            price_min=0.3,
+            trend_filter=True,
+            time_from="09:15",
+            time_to="14:30",
+            min_score=45,
+            early_fail_min=8,
+            early_fail_adverse_pct=0.18,
+            no_ft_min=15,
+            no_ft_min_fav_pct=0.12,
+        )
+        if getattr(resp, "status_code", 200) >= 400:
+            try:
+                payload = json.loads(resp.body.decode("utf-8"))
+            except Exception:
+                payload = {"error": "Backfill source failed"}
+            return JSONResponse(payload, status_code=resp.status_code)
         try:
             payload = json.loads(resp.body.decode("utf-8"))
         except Exception:
-            payload = {"error": "Backfill source failed"}
-        return JSONResponse(payload, status_code=resp.status_code)
-    try:
-        payload = json.loads(resp.body.decode("utf-8"))
-    except Exception:
-        return JSONResponse({"error": "Invalid backfill payload"}, status_code=500)
-    inserted = bd.import_historical_spike_results(payload.get("results", []))
+            return JSONResponse({"error": "Invalid backfill payload"}, status_code=500)
+        ins = bd.import_historical_spike_results(payload.get("results", []))
+        inserted += int(ins or 0)
+        chunk_meta.append({
+            "from_date": str(cur_start),
+            "to_date": str(cur_end),
+            "inserted": int(ins or 0),
+            "signals": int((payload.get("summary") or {}).get("total", 0)),
+        })
+        cur_start = cur_end + timedelta(days=1)
     rows = bd.get_live_signal_history(limit=100, status="ALL")
-    return JSONResponse({"inserted": inserted, "rows": rows, "count": len(rows), "from_date": from_date, "to_date": to_date})
+    return JSONResponse({
+        "inserted": inserted,
+        "rows": rows,
+        "count": len(rows),
+        "from_date": from_date,
+        "to_date": to_date,
+        "days": days,
+        "chunks": chunk_meta,
+    })
 
 
 @app.post("/api/signals/swing-backtest")
@@ -1642,6 +1810,12 @@ async def token_status():
 async def token_refresh_manual():
     """Manually trigger a Kite token refresh via Playwright headless login."""
     import asyncio as _aio
+    from pathlib import Path
+    from dotenv import load_dotenv
+
+    _envp = Path(__file__).resolve().parent / ".env"
+    if _envp.is_file():
+        load_dotenv(_envp, override=False)
 
     # Pre-flight: check all required credentials are present
     missing = [k for k in ("KITE_USER_ID","KITE_PASSWORD","KITE_TOTP_SECRET","KITE_API_KEY","KITE_API_SECRET")
@@ -1658,7 +1832,7 @@ async def token_refresh_manual():
         # Capture auto_token log output to surface real errors
         log_stream = io.StringIO()
         h = logging.StreamHandler(log_stream)
-        h.setLevel(logging.ERROR)
+        h.setLevel(logging.WARNING)
         logging.getLogger("auto_token").addHandler(h)
         try:
             from auto_token import refresh_token
@@ -2401,6 +2575,11 @@ async def spikes_backtest(
     time_from: str = "09:30", # OPTIMIZED v2
     time_to: str = "14:00",   # OPTIMIZED v2
     min_score: int = 45,
+    early_fail_min: int = 8,
+    early_fail_adverse_pct: float = 0.18,
+    no_ft_min: int = 15,
+    no_ft_min_fav_pct: float = 0.12,
+    universe: str = "AUTO",
 ):
     """
     Backtest Spike Radar strategy using 1-min OHLCV candles from Kite.
@@ -2409,11 +2588,13 @@ async def spikes_backtest(
     - Score 0-100 based on vol quality, price momentum, symbol, time slot
     - 20-min cooldown per symbol per day
     - Entry: next candle open; SL=-0.25%, T1=+0.30%, T2=+0.60%; 45-candle window
+    - Production exits: early fail + no-follow-through guard
     """
     import asyncio
     from datetime import datetime, timedelta
     from feed import get_kite
-    from config import KITE_TOKENS, FNO_SYMBOLS
+    from config import KITE_TOKENS, FNO_SYMBOLS, GATE as TH
+    import fetcher as _fetcher
 
     def _score_spike_bt(vol_mult: float, chg_pct: float, sym: str, candle_min: int) -> int:
         """Score a spike 0-100 for backtest (mirrors signals._score_spike)."""
@@ -2476,16 +2657,33 @@ async def spikes_backtest(
 
         def _run():
             results = []
-            summary = {"total": 0, "hit_t1": 0, "hit_t2": 0, "hit_sl": 0, "expired": 0}
+            summary = {
+                "total": 0, "hit_t1": 0, "hit_t2": 0, "hit_sl": 0, "expired": 0,
+                "early_fail": 0, "no_follow_through": 0
+            }
             score_accumulator = []
             symbols_ok = 0
             symbols_failed = 0
             last_error = None
 
-            symbols = [s for s in FNO_SYMBOLS if s in KITE_TOKENS and s not in ("INDIAVIX", "NIFTY", "BANKNIFTY")]
+            u = str(universe or "AUTO").upper()
+            if u == "AUTO":
+                u = str(TH.get("spike_universe", "FNO") or "FNO").upper()
+            if u == "NIFTY200":
+                n200_map = _fetcher.get_nifty200_kite_tokens(kite) or {}
+                symbol_tokens = {s: t for s, t in n200_map.items()}
+            else:
+                symbol_tokens = {
+                    s: KITE_TOKENS[s]
+                    for s in FNO_SYMBOLS
+                    if s in KITE_TOKENS and s not in ("INDIAVIX", "NIFTY", "BANKNIFTY")
+                }
+            symbols = sorted(symbol_tokens.keys())
 
             for sym in symbols:
-                token = KITE_TOKENS[sym]
+                token = symbol_tokens.get(sym)
+                if not token:
+                    continue
                 try:
                     candles = kite.historical_data(token, fd, td, "minute")
                     symbols_ok += 1
@@ -2589,11 +2787,23 @@ async def spikes_backtest(
 
                     result = "EXPIRED"
                     exit_p = None
+                    max_fav_pct = 0.0
+                    max_adv_pct = 0.0
 
                     # Check next 45 candles (45 min)
                     for k in range(i + 1, min(i + 46, len(candles))):
                         hi = candles[k]["high"]
                         lo = candles[k]["low"]
+                        close_k = candles[k].get("close", entry)
+                        bars_in_trade = k - i
+                        if is_buy:
+                            fav_pct = ((hi - entry) / entry) * 100 if entry else 0.0
+                            adv_pct = ((entry - lo) / entry) * 100 if entry else 0.0
+                        else:
+                            fav_pct = ((entry - lo) / entry) * 100 if entry else 0.0
+                            adv_pct = ((hi - entry) / entry) * 100 if entry else 0.0
+                        max_fav_pct = max(max_fav_pct, fav_pct)
+                        max_adv_pct = max(max_adv_pct, adv_pct)
                         if is_buy:
                             if lo <= sl:
                                 result = "HIT_SL"; exit_p = sl; break
@@ -2608,6 +2818,17 @@ async def spikes_backtest(
                                 result = "HIT_T2"; exit_p = t2; break
                             if lo <= t1:
                                 result = "HIT_T1"; exit_p = t1; break
+
+                        # Early-fail: if move goes adverse quickly without follow-through.
+                        if bars_in_trade >= max(1, int(early_fail_min)) and max_adv_pct >= max(0.05, float(early_fail_adverse_pct)):
+                            result = "EARLY_FAIL"
+                            exit_p = round(close_k, 2)
+                            break
+                        # No-follow-through: enough time has passed but no impulse developed.
+                        if bars_in_trade >= max(3, int(no_ft_min)) and max_fav_pct < max(0.05, float(no_ft_min_fav_pct)):
+                            result = "NO_FOLLOW"
+                            exit_p = round(close_k, 2)
+                            break
 
                     pnl_pct = 0.0
                     if exit_p:
@@ -2638,6 +2859,8 @@ async def spikes_backtest(
                     if result == "HIT_T1":   summary["hit_t1"] += 1
                     elif result == "HIT_T2": summary["hit_t2"] += 1
                     elif result == "HIT_SL": summary["hit_sl"] += 1
+                    elif result == "EARLY_FAIL": summary["early_fail"] += 1
+                    elif result == "NO_FOLLOW": summary["no_follow_through"] += 1
                     else:                    summary["expired"] += 1
 
                     score_accumulator.append(score)
@@ -2649,7 +2872,9 @@ async def spikes_backtest(
             results.sort(key=lambda x: x["time"], reverse=True)
 
             hits      = summary["hit_t1"] + summary["hit_t2"]
+            resolved  = hits + summary["hit_sl"] + summary["early_fail"] + summary["no_follow_through"]
             win_rate  = round(hits / summary["total"] * 100, 1) if summary["total"] else 0
+            resolved_win_rate = round(hits / resolved * 100, 1) if resolved else 0
             avg_pnl   = round(sum(r["pnl_pct"] for r in results) / len(results), 3) if results else 0
             avg_score = round(sum(score_accumulator) / len(score_accumulator), 1) if score_accumulator else 0
             expect    = round(
@@ -2662,13 +2887,14 @@ async def spikes_backtest(
                 return {"error": f"Token expired or invalid — all {symbols_failed} symbol fetches failed. Last error: {last_error}"}
 
             return {
-                "summary":  {**summary, "win_rate": win_rate, "avg_pnl": avg_pnl,
+                "summary":  {**summary, "win_rate": win_rate, "resolved_win_rate": resolved_win_rate, "avg_pnl": avg_pnl,
                              "expectancy_pct": expect, "avg_score": avg_score,
                              "symbols_ok": symbols_ok, "symbols_failed": symbols_failed},
                 "results":  results[:500],
                 "from_date": from_date,
                 "to_date":   to_date,
                 "params": {
+                    "universe": u,
                     "vol_min": vol_min,
                     "price_min": price_min,
                     "trend_filter": trend_filter,
@@ -2680,6 +2906,10 @@ async def spikes_backtest(
                     "t2_pct": 0.60,
                     "exit_candles": 45,
                     "cooldown_min": 20,
+                    "early_fail_min": early_fail_min,
+                    "early_fail_adverse_pct": early_fail_adverse_pct,
+                    "no_ft_min": no_ft_min,
+                    "no_ft_min_fav_pct": no_ft_min_fav_pct,
                 },
             }
 
@@ -2688,6 +2918,286 @@ async def spikes_backtest(
 
     except Exception as e:
         logger.error(f"Spike backtest error: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/spikes/report")
+async def spikes_report(
+    days: int = 90,
+    universe: str = "AUTO",
+    nifty200: int = 0,
+    vol_min: float = 1.5,
+    price_min: float = 0.2,
+    trend_filter: bool = True,
+    time_from: str = "09:30",
+    time_to: str = "14:00",
+    min_score: int = 45,
+    early_fail_min: int = 8,
+    early_fail_adverse_pct: float = 0.18,
+    no_ft_min: int = 15,
+    no_ft_min_fav_pct: float = 0.12,
+):
+    """
+    Run spike backtest over `days` (calendar days, ending yesterday IST) in ≤30-day chunks
+    (Kite 1-min limit). Aggregates summaries across chunks; omits per-trade rows to keep payload small.
+    """
+    from datetime import datetime as _dt, timedelta as _td
+
+    try:
+        if days < 1 or days > 366:
+            return JSONResponse({"error": "days must be between 1 and 366"}, status_code=400)
+
+        uni = "NIFTY200" if int(nifty200) else str(universe or "AUTO")
+
+        ist = pytz.timezone("Asia/Kolkata")
+        today = _dt.now(ist).date()
+        td = today - _td(days=1)
+        fd = td - _td(days=days - 1)
+
+        agg = {
+            "total": 0,
+            "hit_t1": 0,
+            "hit_t2": 0,
+            "hit_sl": 0,
+            "expired": 0,
+            "early_fail": 0,
+            "no_follow_through": 0,
+        }
+        symbols_ok = 0
+        symbols_failed = 0
+        w_pnl = 0.0
+        w_score = 0.0
+        chunk_rows = []
+
+        cur = fd
+        while cur <= td:
+            chunk_to = min(cur + _td(days=30), td)
+            s_from = cur.strftime("%Y-%m-%d")
+            s_to = chunk_to.strftime("%Y-%m-%d")
+
+            resp = await spikes_backtest(
+                from_date=s_from,
+                to_date=s_to,
+                vol_min=vol_min,
+                price_min=price_min,
+                trend_filter=trend_filter,
+                time_from=time_from,
+                time_to=time_to,
+                min_score=min_score,
+                early_fail_min=early_fail_min,
+                early_fail_adverse_pct=early_fail_adverse_pct,
+                no_ft_min=no_ft_min,
+                no_ft_min_fav_pct=no_ft_min_fav_pct,
+                universe=uni,
+            )
+            if resp.status_code >= 400:
+                return resp
+            payload = json.loads(resp.body.decode())
+            if payload.get("error"):
+                return JSONResponse(payload, status_code=500)
+
+            summ = payload.get("summary") or {}
+            t = int(summ.get("total") or 0)
+            for k in agg:
+                agg[k] += int(summ.get(k) or 0)
+            symbols_ok += int(summ.get("symbols_ok") or 0)
+            symbols_failed += int(summ.get("symbols_failed") or 0)
+            if t:
+                w_pnl += float(summ.get("avg_pnl") or 0) * t
+                w_score += float(summ.get("avg_score") or 0) * t
+
+            chunk_rows.append({
+                "from_date": s_from,
+                "to_date": s_to,
+                "summary": summ,
+            })
+
+            cur = chunk_to + _td(days=1)
+
+        hits = agg["hit_t1"] + agg["hit_t2"]
+        resolved = hits + agg["hit_sl"] + agg["early_fail"] + agg["no_follow_through"]
+        win_rate = round(hits / agg["total"] * 100, 1) if agg["total"] else 0.0
+        resolved_win_rate = round(hits / resolved * 100, 1) if resolved else 0.0
+        avg_pnl = round(w_pnl / agg["total"], 3) if agg["total"] else 0.0
+        avg_score = round(w_score / agg["total"], 1) if agg["total"] else 0.0
+        expectancy_pct = round(
+            (hits / agg["total"] * (0.003 + 0.006) / 2 - agg["hit_sl"] / agg["total"] * 0.0025) * 100,
+            3,
+        ) if agg["total"] else 0.0
+
+        out_summary = {
+            **agg,
+            "win_rate": win_rate,
+            "resolved_win_rate": resolved_win_rate,
+            "avg_pnl": avg_pnl,
+            "expectancy_pct": expectancy_pct,
+            "avg_score": avg_score,
+            "symbols_ok": symbols_ok,
+            "symbols_failed": symbols_failed,
+        }
+
+        return JSONResponse(
+            {
+                "from_date": fd.strftime("%Y-%m-%d"),
+                "to_date": td.strftime("%Y-%m-%d"),
+                "days_calendar": days,
+                "chunks": chunk_rows,
+                "summary": out_summary,
+                "params": {
+                    "universe": uni,
+                    "vol_min": vol_min,
+                    "price_min": price_min,
+                    "trend_filter": trend_filter,
+                    "time_from": time_from,
+                    "time_to": time_to,
+                    "min_score": min_score,
+                    "early_fail_min": early_fail_min,
+                    "early_fail_adverse_pct": early_fail_adverse_pct,
+                    "no_ft_min": no_ft_min,
+                    "no_ft_min_fav_pct": no_ft_min_fav_pct,
+                },
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Spikes report error: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/spikes/universe-cards")
+async def spikes_universe_cards(
+    days: int = 30,
+    universe: str = "NIFTY200",
+    include_today: int = 1,
+    max_results: int = 800,
+    vol_min: float = 1.5,
+    price_min: float = 0.2,
+    trend_filter: bool = True,
+    time_from: str = "09:30",
+    time_to: str = "14:00",
+    min_score: int = 45,
+    early_fail_min: int = 8,
+    early_fail_adverse_pct: float = 0.18,
+    no_ft_min: int = 15,
+    no_ft_min_fav_pct: float = 0.12,
+):
+    """
+    NIFTY 200 (or FNO) spike backtest over a calendar window, merged into one trade list for UI cards.
+    Chunks to respect the 30-day Kite 1-min limit. `include_today=1` ends on today IST (partial session OK).
+    """
+    from datetime import datetime as _dt, timedelta as _td
+
+    try:
+        days = max(1, min(int(days), 366))
+        max_results = max(50, min(int(max_results), 2500))
+        uni = str(universe or "NIFTY200").upper()
+        if uni not in ("NIFTY200", "FNO", "AUTO"):
+            uni = "NIFTY200"
+
+        ist = pytz.timezone("Asia/Kolkata")
+        today = _dt.now(ist).date()
+        td = today if int(include_today) else (today - _td(days=1))
+        fd = td - _td(days=days - 1)
+
+        merged: list = []
+        seen: set = set()
+        chunk_meta = []
+
+        cur = fd
+        while cur <= td:
+            chunk_to = min(cur + _td(days=30), td)
+            s_from = cur.strftime("%Y-%m-%d")
+            s_to = chunk_to.strftime("%Y-%m-%d")
+
+            resp = await spikes_backtest(
+                from_date=s_from,
+                to_date=s_to,
+                vol_min=vol_min,
+                price_min=price_min,
+                trend_filter=trend_filter,
+                time_from=time_from,
+                time_to=time_to,
+                min_score=min_score,
+                early_fail_min=early_fail_min,
+                early_fail_adverse_pct=early_fail_adverse_pct,
+                no_ft_min=no_ft_min,
+                no_ft_min_fav_pct=no_ft_min_fav_pct,
+                universe=uni,
+            )
+            if resp.status_code >= 400:
+                return resp
+            payload = json.loads(resp.body.decode())
+            if payload.get("error"):
+                return JSONResponse(payload, status_code=500)
+
+            rows = payload.get("results") or []
+            for r in rows:
+                key = (
+                    str(r.get("symbol") or ""),
+                    str(r.get("time") or ""),
+                    str(r.get("type") or ""),
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                merged.append(r)
+
+            chunk_meta.append({"from_date": s_from, "to_date": s_to, "rows": len(rows)})
+            cur = chunk_to + _td(days=1)
+
+        merged.sort(key=lambda x: str(x.get("time") or ""), reverse=True)
+        merged = merged[:max_results]
+
+        summ = {
+            "total": 0,
+            "hit_t1": 0,
+            "hit_t2": 0,
+            "hit_sl": 0,
+            "expired": 0,
+            "early_fail": 0,
+            "no_follow_through": 0,
+        }
+        for r in merged:
+            summ["total"] += 1
+            res = str(r.get("result") or "").upper()
+            if res == "HIT_T1":
+                summ["hit_t1"] += 1
+            elif res == "HIT_T2":
+                summ["hit_t2"] += 1
+            elif res == "HIT_SL":
+                summ["hit_sl"] += 1
+            elif res == "EXPIRED":
+                summ["expired"] += 1
+            elif res == "EARLY_FAIL":
+                summ["early_fail"] += 1
+            elif res in ("NO_FOLLOW", "NO FOLLOW"):
+                summ["no_follow_through"] += 1
+
+        hits = summ["hit_t1"] + summ["hit_t2"]
+        summ["win_rate"] = round(hits / summ["total"] * 100, 1) if summ["total"] else 0.0
+
+        return JSONResponse(
+            {
+                "from_date": fd.strftime("%Y-%m-%d"),
+                "to_date": td.strftime("%Y-%m-%d"),
+                "days_calendar": days,
+                "universe": uni,
+                "chunks": chunk_meta,
+                "summary": summ,
+                "results": merged,
+                "params": {
+                    "vol_min": vol_min,
+                    "price_min": price_min,
+                    "trend_filter": trend_filter,
+                    "time_from": time_from,
+                    "time_to": time_to,
+                    "min_score": min_score,
+                },
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"universe-cards error: {e}", exc_info=True)
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
@@ -2711,36 +3221,70 @@ async def backtest_download_fii():
 # ─── TELEGRAM ─────────────────────────────────────────────────────────────────
 @app.post("/api/telegram/test")
 async def telegram_test():
-    """Send a test Telegram message to verify bot token and chat ID are correct."""
-    from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+    """Send a test Telegram message to every configured chat_id (primary + TELEGRAM_CHAT_IDS + harshvtrade)."""
+    from config import TELEGRAM_BOT_TOKEN, get_telegram_chat_ids
 
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+    chat_ids = get_telegram_chat_ids()
+    if not TELEGRAM_BOT_TOKEN or not chat_ids:
         return JSONResponse(
-            {"ok": False, "error": "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set in .env"},
+            {"ok": False, "error": "TELEGRAM_BOT_TOKEN or chat id(s) not set in .env (TELEGRAM_CHAT_ID / TELEGRAM_CHAT_IDS / TELEGRAM_CHAT_ID_HARSHVTRADE)"},
             status_code=400,
         )
 
     msg = (
         "✅ <b>NSE EDGE — Telegram test</b>\n"
-        "Bot is connected and alerts are active.\n"
+        "Bot is connected. ADV-SPIKES + ADV INDEX alerts go to this chat.\n"
         f"Server verdict: <b>{signals.state['verdict']}</b>  "
         f"Gates: {signals.state['pass_count']}/5"
     )
     try:
         import requests as _req
         loop = asyncio.get_event_loop()
-        def _post():
-            return _req.post(
-                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-                json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML"},
-                timeout=8,
-            ).json()
-        data = await loop.run_in_executor(None, _post)
-        if data.get("ok"):
-            return JSONResponse({"ok": True, "message": "Test message sent successfully"})
-        return JSONResponse({"ok": False, "error": data.get("description", "Unknown Telegram error")}, status_code=502)
+
+        def _post_all():
+            errs = []
+            oks = 0
+            for cid in chat_ids:
+                try:
+                    r = _req.post(
+                        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                        json={"chat_id": cid, "text": msg, "parse_mode": "HTML"},
+                        timeout=8,
+                    ).json()
+                    if r.get("ok"):
+                        oks += 1
+                    else:
+                        errs.append(f"{cid}: {r.get('description', 'error')}")
+                except Exception as ex:
+                    errs.append(f"{cid}: {ex}")
+            return oks, errs
+
+        oks, errs = await loop.run_in_executor(None, _post_all)
+        if oks:
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "message": f"Test sent to {oks}/{len(chat_ids)} chat(s)",
+                    "chats": len(chat_ids),
+                    "failures": errs,
+                }
+            )
+        return JSONResponse({"ok": False, "error": "; ".join(errs) or "All sends failed"}, status_code=502)
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=502)
+
+
+@app.post("/api/telegram/today-digest")
+async def telegram_today_digest(date: str = None):
+    """Send today's (or ?date=YYYY-MM-DD) persisted signals digest to all configured Telegram chats."""
+    try:
+        from signals import send_today_signals_digest
+
+        res = send_today_signals_digest(date)
+        status = 200 if res.get("ok") else 502
+        return JSONResponse(res, status_code=status)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 
 # ─── WHATSAPP ─────────────────────────────────────────────────────────────────
@@ -2829,6 +3373,206 @@ async def push_state(request: Request):
     if "fii"    in payload: broadcast({"type": "fii",    "data": payload["fii"],    "timestamp": time.time()})
 
     return JSONResponse({"ok": True, "ts": time.time()})
+
+
+# ─── EDGE ENGINE API ──────────────────────────────────────────────────────────
+import edge_engine as _ee
+
+@app.get("/api/edge/snapshot")
+async def edge_snapshot():
+    """Full edge engine snapshot — regime, L1/L2/L3, composite, risk, GEX."""
+    try:
+        from feed import get_all_prices
+        snap = _ee.compute_edge_snapshot(
+            state=signals.state,
+            prices=get_all_prices(),
+            chain=signals.state.get("last_chain"),
+        )
+        return JSONResponse(snap)
+    except Exception as e:
+        logger.error(f"edge_snapshot error: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/edge/regime")
+async def edge_regime():
+    """Regime classifier only — fast poll endpoint."""
+    try:
+        from feed import price_history
+        indices = signals.state.get("last_macro") or {}
+        vix     = float(indices.get("vix", 15) or 15)
+        pcr     = float(indices.get("pcr", 1.0) or 1.0)
+        nchg    = float(indices.get("nifty_chg", 0) or 0)
+        hist    = list(price_history.get("NIFTY", []))
+        closes  = [h[1] for h in hist[-50:]]
+        adx     = _ee.calc_adx(closes) if len(closes) >= 16 else 20.0
+        regime  = _ee.classify_regime(vix, adx, nchg, pcr)
+        session = _ee.session_gate()
+        return JSONResponse({"regime": regime, "session": session, "ts": time.time()})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/edge/gex")
+async def edge_gex():
+    """GEX computation from live option chain."""
+    try:
+        chain = signals.state.get("last_chain") or {}
+        gex   = _ee.compute_gex(chain)
+        return JSONResponse(gex)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/edge/backtest")
+async def edge_backtest(days: int = 90):
+    """Run edge model backtest on historical DB data."""
+    try:
+        days = max(30, min(days, 500))
+        result = _ee.run_edge_backtest(days)
+        return JSONResponse(result)
+    except Exception as e:
+        logger.error(f"edge_backtest error: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/edge/position-size")
+async def edge_position_size(request: Request):
+    """Position sizing calculator."""
+    try:
+        body    = await request.json()
+        account = float(body.get("account", 500000))
+        entry   = float(body.get("entry", 100))
+        sl      = float(body.get("sl", 70))
+        delta   = float(body.get("delta", 0.50))
+        lot_sz  = int(body.get("lot_size", 50))
+        result  = _ee.compute_position_size(account, entry, sl, delta, lot_sz)
+        return JSONResponse(result)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HISTORY API — daily heatmap + drilldown
+# ─────────────────────────────────────────────────────────────────────────────
+@app.get("/api/history/calendar")
+async def history_calendar(months: int = 6):
+    """Daily performance summary for heatmap calendar."""
+    import sqlite3 as _sq
+    from datetime import date as _d, timedelta
+    db_path = os.path.join(os.path.dirname(__file__), "data", "backtest.db")
+    cutoff = (_d.today() - timedelta(days=months * 31)).isoformat()
+    try:
+        conn = _sq.connect(db_path)
+        rows = conn.execute("""
+            SELECT trade_date,
+                COUNT(*) as signals,
+                SUM(CASE WHEN outcome LIKE '%TARGET%' OR outcome LIKE '%WIN%' OR outcome LIKE '%HIT_T%'
+                         THEN 1 ELSE 0 END) as wins,
+                SUM(CASE WHEN outcome LIKE '%SL%' OR outcome LIKE '%LOSS%'
+                         THEN 1 ELSE 0 END) as losses,
+                SUM(CASE WHEN status='OPEN' THEN 1 ELSE 0 END) as open_cnt,
+                SUM(COALESCE(pnl_pts,0)) as total_pts,
+                AVG(CASE WHEN pnl_pts IS NOT NULL THEN pnl_pts ELSE NULL END) as avg_pts
+            FROM live_signal_history
+            WHERE trade_date >= ?
+            GROUP BY trade_date
+            ORDER BY trade_date ASC
+        """, (cutoff,)).fetchall()
+        conn.close()
+        days = []
+        for r in rows:
+            total = r[1] or 0
+            wins = r[2] or 0
+            losses = r[3] or 0
+            executed = total - (r[4] or 0)
+            wr = round(wins / executed * 100, 1) if executed > 0 else 0
+            pts = round(r[5] or 0, 2)
+            # Estimate INR P&L (₹1L model: ~₹100 per point for options)
+            pnl_inr = round(pts * 100, 0)
+            days.append({
+                "date": r[0],
+                "signals": total,
+                "wins": wins,
+                "losses": losses,
+                "open": r[4] or 0,
+                "win_rate": wr,
+                "pts": pts,
+                "pnl_inr": pnl_inr,
+            })
+        return JSONResponse({"days": days})
+    except Exception as e:
+        logger.error(f"history_calendar error: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/history/stats")
+async def history_stats(months: int = 3):
+    """Aggregate stats for the history page header."""
+    import sqlite3 as _sq
+    from datetime import date as _d, timedelta
+    db_path = os.path.join(os.path.dirname(__file__), "data", "backtest.db")
+    cutoff = (_d.today() - timedelta(days=months * 31)).isoformat()
+    try:
+        conn = _sq.connect(db_path)
+        agg = conn.execute("""
+            SELECT
+                COUNT(DISTINCT trade_date) as trading_days,
+                COUNT(*) as total_signals,
+                SUM(CASE WHEN outcome LIKE '%TARGET%' OR outcome LIKE '%WIN%' OR outcome LIKE '%HIT_T%'
+                         THEN 1 ELSE 0 END) as total_wins,
+                SUM(CASE WHEN outcome LIKE '%SL%' OR outcome LIKE '%LOSS%'
+                         THEN 1 ELSE 0 END) as total_losses,
+                SUM(COALESCE(pnl_pts,0)) as total_pts,
+                MAX(CASE WHEN outcome LIKE '%TARGET%' OR outcome LIKE '%WIN%' OR outcome LIKE '%HIT_T%'
+                         THEN pnl_pts ELSE 0 END) as best_pts,
+                MIN(CASE WHEN outcome LIKE '%SL%' OR outcome LIKE '%LOSS%'
+                         THEN pnl_pts ELSE 0 END) as worst_pts
+            FROM live_signal_history WHERE trade_date >= ?
+        """, (cutoff,)).fetchone()
+
+        # Streak calculation
+        day_rows = conn.execute("""
+            SELECT trade_date,
+                SUM(CASE WHEN outcome LIKE '%TARGET%' OR outcome LIKE '%WIN%' OR outcome LIKE '%HIT_T%' THEN 1 ELSE 0 END) as w,
+                SUM(CASE WHEN outcome LIKE '%SL%' OR outcome LIKE '%LOSS%' THEN 1 ELSE 0 END) as l
+            FROM live_signal_history WHERE trade_date >= ?
+            GROUP BY trade_date ORDER BY trade_date DESC
+        """, (cutoff,)).fetchall()
+        conn.close()
+
+        streak = 0
+        streak_type = "—"
+        if day_rows:
+            first = day_rows[0]
+            if first[1] > first[2]:
+                streak_type = "WIN"
+                for dr in day_rows:
+                    if dr[1] > dr[2]: streak += 1
+                    else: break
+            else:
+                streak_type = "LOSS"
+                for dr in day_rows:
+                    if dr[2] >= dr[1]: streak += 1
+                    else: break
+
+        total_exec = (agg[2] or 0) + (agg[3] or 0)
+        wr = round((agg[2] or 0) / total_exec * 100, 1) if total_exec > 0 else 0
+        return JSONResponse({
+            "trading_days": agg[0] or 0,
+            "total_signals": agg[1] or 0,
+            "total_wins": agg[2] or 0,
+            "total_losses": agg[3] or 0,
+            "win_rate": wr,
+            "total_pts": round(agg[4] or 0, 2),
+            "pnl_inr": round((agg[4] or 0) * 100, 0),
+            "best_day_pts": round(agg[5] or 0, 2),
+            "worst_day_pts": round(agg[6] or 0, 2),
+            "streak": streak,
+            "streak_type": streak_type,
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 if __name__ == "__main__":

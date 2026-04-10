@@ -20,24 +20,182 @@ _IST = pytz.timezone("Asia/Kolkata")
 _last_telegram_verdict = None   # debounce — only alert on verdict change
 _stock_exec_alert_ts: dict[str, float] = {}
 STOCK_EXECUTE_TELEGRAM_COOLDOWN_SEC = 1800  # per symbol
+# ADV-SPIKES Telegram/WhatsApp: last send epoch per (symbol, type) — see spike_telegram_dedup_minutes
+_spike_alert_last_ts: dict[tuple[str, str], float] = {}
 
 
 def _send_telegram(msg: str):
-    from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+    from config import TELEGRAM_BOT_TOKEN, get_telegram_chat_ids
+
+    if not TELEGRAM_BOT_TOKEN:
         return
-    try:
-        _requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-            json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML"},
-            timeout=5,
-        )
-    except Exception as e:
-        logger.debug(f"Telegram send failed: {e}")
+    chat_ids = get_telegram_chat_ids()
+    if not chat_ids:
+        return
+    for cid in chat_ids:
+        try:
+            _requests.post(
+                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                json={"chat_id": cid, "text": msg, "parse_mode": "HTML"},
+                timeout=5,
+            )
+        except Exception as e:
+            logger.debug("Telegram send failed (%s): %s", cid, e)
 
 
 def send_telegram_message(msg: str) -> None:
     """Public hook for scheduler / other modules (same path as verdict alerts)."""
+    _send_telegram(msg)
+
+
+def send_today_signals_digest(trade_date: str | None = None) -> dict:
+    """
+    Push an HTML digest of today's persisted signals (live_signal_history, index_signal_history,
+    optional adv_index_history) to every chat in get_telegram_chat_ids() — primary + HARSHVTRADE + TELEGRAM_CHAT_IDS.
+    """
+    import html as _html
+    import sqlite3
+    from config import TELEGRAM_BOT_TOKEN, get_telegram_chat_ids
+    from backtest_data import get_conn, DB_PATH
+
+    chat_ids = get_telegram_chat_ids()
+    if not TELEGRAM_BOT_TOKEN:
+        return {"ok": False, "error": "TELEGRAM_BOT_TOKEN not set"}
+    if not chat_ids:
+        return {"ok": False, "error": "No chat ids — set TELEGRAM_CHAT_ID and/or TELEGRAM_CHAT_ID_HARSHVTRADE / TELEGRAM_CHAT_IDS"}
+
+    ist = pytz.timezone("Asia/Kolkata")
+    d = (trade_date or "").strip() or datetime.now(ist).strftime("%Y-%m-%d")
+
+    def esc(x) -> str:
+        return _html.escape(str(x), quote=True)
+
+    rows_sp: list = []
+    rows_ix: list = []
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "SELECT symbol, signal_type, signal_time, COALESCE(trigger,''), COALESCE(outcome,''), "
+                "COALESCE(strength,''), COALESCE(status,'') FROM live_signal_history WHERE trade_date=? ORDER BY id",
+                (d,),
+            )
+            rows_sp = cur.fetchall()
+        except Exception as e:
+            logger.debug("digest live_signal_history: %s", e)
+        try:
+            cur.execute(
+                "SELECT symbol, type, signal_time, strike, COALESCE(outcome,'') "
+                "FROM index_signal_history WHERE trade_date=? ORDER BY id",
+                (d,),
+            )
+            rows_ix = cur.fetchall()
+        except Exception as e:
+            logger.debug("digest index_signal_history: %s", e)
+        conn.close()
+    except Exception as e:
+        return {"ok": False, "error": f"db: {e}"}
+
+    adv_lines: list[str] = []
+    try:
+        conn2 = sqlite3.connect(str(DB_PATH), timeout=10)
+        cur2 = conn2.cursor()
+        cur2.execute(
+            "SELECT ist_time, bias, score, breadth_chg, oi_pressure FROM adv_index_history "
+            "WHERE trade_date=? ORDER BY ts DESC LIMIT 24",
+            (d,),
+        )
+        for r in cur2.fetchall():
+            adv_lines.append(f"  {esc(r[0])} · {esc(r[1])} · sc {esc(r[2])} · br {esc(r[3])} · OI {esc(r[4])}")
+        conn2.close()
+    except Exception:
+        pass
+
+    parts: list[str] = [f"<b>Signals digest</b> {esc(d)} IST\n"]
+    parts.append(f"<b>Spikes / live history</b> ({len(rows_sp)})\n")
+    if not rows_sp:
+        parts.append("<i>none in DB for this date</i>\n")
+    else:
+        for row in rows_sp[:45]:
+            sym, stype, stime, trig, out, stren, stat = row
+            tail = out or stat or "—"
+            parts.append(
+                f"• {esc(sym)} {esc(stype)} @ {esc(stime)} · {esc(tail)} · {esc(stren)}\n"
+                f"  <code>{esc(trig)[:180]}</code>\n"
+            )
+        if len(rows_sp) > 45:
+            parts.append(f"<i>… +{len(rows_sp) - 45} more</i>\n")
+
+    parts.append(f"\n<b>Index radar (DB)</b> ({len(rows_ix)})\n")
+    if not rows_ix:
+        parts.append("<i>none in DB for this date</i>\n")
+    else:
+        for sym, typ, stime, strike, out in rows_ix[:30]:
+            parts.append(f"• {esc(sym)} {esc(typ)} {esc(strike)} @ {esc(stime)} · {esc(out)}\n")
+
+    if adv_lines:
+        parts.append(f"\n<b>ADV INDEX snapshots</b> (up to 24)\n" + "\n".join(adv_lines) + "\n")
+
+    body = "".join(parts)
+    max_chunk = 3900
+    chunks: list[str] = []
+    while body:
+        chunks.append(body[:max_chunk])
+        body = body[max_chunk:]
+
+    failures: list[str] = []
+    ok_posts = 0
+    for cid in chat_ids:
+        for ch in chunks:
+            try:
+                r = _requests.post(
+                    f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                    json={"chat_id": cid, "text": ch, "parse_mode": "HTML"},
+                    timeout=15,
+                ).json()
+                if r.get("ok"):
+                    ok_posts += 1
+                else:
+                    failures.append(f"{cid}: {r.get('description', 'error')}")
+            except Exception as ex:
+                failures.append(f"{cid}: {ex}")
+
+    out = {
+        "ok": ok_posts > 0,
+        "date": d,
+        "chats": len(chat_ids),
+        "telegram_posts_ok": ok_posts,
+        "rows_spikes": len(rows_sp),
+        "rows_index_radar": len(rows_ix),
+        "failures": failures,
+    }
+    if failures and ok_posts == 0:
+        out["ok"] = False
+        out["error"] = "; ".join(failures[:3])
+    return out
+
+
+def send_adv_index_telegram(snap: dict) -> None:
+    """Telegram when ADV INDEX snapshot is persisted (bias change or throttle window)."""
+    from config import TELEGRAM_NOTIFY_ADV_INDEX, TELEGRAM_BOT_TOKEN
+
+    if not TELEGRAM_NOTIFY_ADV_INDEX or not TELEGRAM_BOT_TOKEN or not snap or snap.get("error"):
+        return
+    bias = str(snap.get("bias") or "—")
+    score = snap.get("score", "—")
+    br = snap.get("breadth_chg", "—")
+    oi = snap.get("oi_pressure", "—")
+    nf = snap.get("n_futures_quoted", "—")
+    top = snap.get("top_contributors") or []
+    t1 = "—"
+    if top and isinstance(top[0], dict):
+        t1 = str(top[0].get("symbol") or "—")
+    msg = (
+        f"◇ <b>ADV INDEX</b> · <b>{bias}</b>\n"
+        f"Score <code>{score}</code> · Breadth <code>{br}</code>% · OI press <code>{oi}</code> · N fut <code>{nf}</code>\n"
+        f"Top: <b>{t1}</b> · NIFTY50 cash + futures OI (live)"
+    )
     _send_telegram(msg)
 
 
@@ -97,23 +255,67 @@ def _score_spike(vol_mult: float, chg_pct: float, sym: str, candle_min: int) -> 
 
 # ─── SPIKE ALERT (Telegram + WhatsApp) ───────────────────────────────────────
 def _send_spike_alert(spike: dict):
-    """Send spike alert via Telegram and WhatsApp. Only fires for score >= 60."""
+    """ADV-SPIKES (NIFTY 200 universe): Telegram + WhatsApp when score >= 60."""
+    from config import TELEGRAM_NOTIFY_ADV_SPIKES, GATE as TH
+
+    if not TELEGRAM_NOTIFY_ADV_SPIKES:
+        return
     score = spike.get("score", 0)
     if score < 60:
         return
-    sym    = spike.get("symbol", "")
-    price  = spike.get("price", 0)
-    chg    = spike.get("chg_pct", 0)
-    vm     = spike.get("vol_mult", 0)
-    sig    = spike.get("signal", "")
-    t      = spike.get("time", "")
+    sym = str(spike.get("symbol", "") or "").strip().upper()
+    sp_type = str(spike.get("type", "") or "").strip().lower()
+    if not sym or sp_type not in ("buy", "sell"):
+        return
+    dedup_min = max(1, min(120, int(TH.get("spike_telegram_dedup_minutes", 20) or 20)))
+    now_ts = time.time()
+    _k = (sym, sp_type)
+    prev = _spike_alert_last_ts.get(_k, 0.0)
+    if now_ts - prev < dedup_min * 60:
+        return
+    uni = str(TH.get("spike_universe", "NIFTY200") or "").upper()
+    if uni == "NIFTY200" and sym:
+        try:
+            from fetcher import get_nifty200_symbols
+
+            n200 = {str(s).strip().upper() for s in (get_nifty200_symbols() or []) if s}
+            if n200 and sym not in n200:
+                return
+        except Exception:
+            pass
+    price = float(spike.get("price", 0) or 0)
+    chg = spike.get("chg_pct", 0)
+    vm = spike.get("vol_mult", 0)
+    sig = spike.get("signal", "")
+    t = spike.get("time", "")
+    # Same % template as ADV-SPIKES live UI: T1 ±0.5%, T2 ±1.0%, SL ∓0.5%
+    if sp_type == "buy":
+        sl = price * 0.995
+        t1 = price * 1.005
+        t2 = price * 1.01
+    else:
+        sl = price * 1.005
+        t1 = price * 0.995
+        t2 = price * 0.99
     msg = (
-        f"⚡ <b>SPIKE ALERT — {sym}</b>  [Score: {score}]\n"
+        f"⚡ <b>ADV-SPIKES (NIFTY 200) — {sym}</b>  [Score: {score}]\n"
         f"Signal: {sig}  |  {'+' if chg >= 0 else ''}{chg:.2f}%  |  Vol {vm:.1f}×\n"
-        f"Price: ₹{price:.2f}  |  {t}"
+        f"LTP: ₹{price:.2f}  |  {t}\n"
+        f"<b>Model</b> Entry ~ ₹{price:.2f} · SL ₹{sl:.2f} · T1 ₹{t1:.2f} · T2 ₹{t2:.2f}\n"
+        f"<i>T1 ±0.5% · T2 ±1.0% · SL ∓0.5% vs entry (cash template)</i>"
     )
+    _spike_alert_last_ts[_k] = now_ts
     _send_telegram(msg)
-    _send_whatsapp(msg)
+    _send_whatsapp(_strip_html_for_whatsapp(msg))
+
+
+def _strip_html_for_whatsapp(html: str) -> str:
+    """CallMeBot/plain WhatsApp: drop simple HTML tags."""
+    import re as _re
+
+    s = _re.sub(r"<br\s*/?>", "\n", html, flags=_re.I)
+    s = _re.sub(r"<[^>]+>", "", s)
+    return s.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
 
 
 # ─── GLOBAL STATE (read by WebSocket broadcaster) ─────────────────────────────
@@ -137,6 +339,7 @@ state = {
     "last_fii":    None,
     "last_updated": 0,
     "confluence":  None,  # experimental: multi-factor intraday snapshot (confluence_engine.py)
+    "adv_index":   None,  # NIFTY50-weighted OI + breadth (adv_index_engine.py)
 }
 
 # ─── PRICE HISTORY HELPERS ────────────────────────────────────────────────────
@@ -504,8 +707,19 @@ def detect_spikes(stocks: list, prev: dict, gates: dict | None = None, verdict: 
     now      = now_dt.strftime("%H:%M")
     candle_min = now_dt.hour * 60 + now_dt.minute
     spikes   = []
+    # Optional day-level kill switch for weak/chop regimes.
+    if bool(int(TH.get("spike_regime_kill_switch", 0) or 0)) and gates:
+        try:
+            g1_state = str((gates.get(1) or {}).get("state", "")).lower()
+            g2_state = str((gates.get(2) or {}).get("state", "")).lower()
+            weak_regime = (g1_state in ("st", "wt")) or (g2_state in ("st", "wt"))
+            if weak_regime:
+                return []
+        except Exception:
+            pass
 
-    # Spike radar is FULLY independent of gates — fires on price/vol/OI merit only.
+    # Spike radar primarily runs on price/vol/OI merit; apply optional
+    # gate confluence floors from config to reduce bad-regime churn.
     gate_score_floor = 45
 
     try:
@@ -527,8 +741,14 @@ def detect_spikes(stocks: list, prev: dict, gates: dict | None = None, verdict: 
     if weak_buckets and time_bucket in weak_buckets:
         gate_score_floor = 48
 
+    active_only = bool(int(TH.get("spike_active_only", 0) or 0))
+    active_raw = str(TH.get("spike_active_symbols", "") or "")
+    active_set = {x.strip().upper() for x in active_raw.split(",") if x.strip()}
+
     for s in stocks:
         sym       = s.get("symbol", "")
+        if active_only and active_set and str(sym or "").upper() not in active_set:
+            continue
         price     = s.get("price", 0)
         chg_pct   = float(s.get("chg_pct", 0) or 0)
         oi_pct    = float(s.get("oi_chg_pct", 0) or 0)
@@ -548,14 +768,35 @@ def detect_spikes(stocks: list, prev: dict, gates: dict | None = None, verdict: 
 
         sp_type = sig = trigger = ""
 
-        # Time window: use GATE config (spike_time_start–spike_time_end = 9:30–14:00)
+        # Time window: GATE spike_time_start–end (default 9:30–14:00 IST)
         t_start = TH.get("spike_time_start", 570)
         t_end   = TH.get("spike_time_end",   840)
         if not (t_start <= candle_min <= t_end):
             continue
+        min_gate_pass = int(TH.get("spike_min_gate_pass", 0) or 0)
+        if bool(int(TH.get("spike_adaptive_gate", 0) or 0)):
+            relaxed_floor = int(TH.get("spike_min_gate_pass_relaxed", min_gate_pass) or min_gate_pass)
+            vix_gate3_above = float(TH.get("spike_vix_gate3_above", 18.0))
+            vix_now = float(s.get("vix", 0) or 0)
+            # In calmer regimes, allow gate>=2 to keep quality opportunities.
+            if vix_now > 0 and vix_now <= vix_gate3_above:
+                min_gate_pass = min(min_gate_pass, relaxed_floor)
+        if min_gate_pass > 0 and stock_pc < min_gate_pass:
+            continue
 
         price_th = float(TH.get("spike_price_pct", 0.2))
         vol_th   = float(TH.get("spike_vol_mult", 1.5))
+        allow_open_relax = bool(int(TH.get("spike_allow_open_relax", 0) or 0))
+        # Morning: cum vol vs 20d full-session avg is still tiny → vol_ratio << vol_th.
+        # If price has already moved ~0.4%+, treat volume gate as met so opens aren't blank.
+        if (
+            allow_open_relax
+            and
+            candle_min <= min(t_end, 660)
+            and vol_ratio < 1.2
+            and abs(chg_pct) >= 0.42
+        ):
+            vm = max(vm, vol_th)
         oi_th    = float(TH.get("spike_oi_pct", 12.0))
 
         # Session chg_pct is slower than 1m bar open→close — stricter when vol surge is only mild.
@@ -592,6 +833,10 @@ def detect_spikes(stocks: list, prev: dict, gates: dict | None = None, verdict: 
 
         # Confirmation — align with UI (vol vs avg day + direction); avoid blocking everything on tick vol ~1×.
         oi_available = abs(oi_pct) >= 1.0
+        early_ist = candle_min <= 660
+        min_confirm_move = float(TH.get("spike_min_confirm_move", 0.85))
+        strict_non_oi = bool(int(TH.get("spike_confirm_non_oi_requires_vol", 0) or 0))
+        min_confirm_vm = float(TH.get("spike_confirm_min_vm", 2.0))
         if oi_available:
             same_dir_oi = (chg_pct > 0 and oi_pct > 0) or (chg_pct < 0 and oi_pct < 0)
             has_confirmation = (
@@ -599,9 +844,21 @@ def detect_spikes(stocks: list, prev: dict, gates: dict | None = None, verdict: 
                 or vm >= 2.5
                 or vol_ratio >= vol_th
                 or abs(chg_pct) >= 0.70
+                or (allow_open_relax and early_ist and vm >= vol_th and abs(chg_pct) >= 0.42)
             )
         else:
-            has_confirmation = vm >= 2.5 or vol_ratio >= vol_th or abs(chg_pct) >= 0.85
+            if strict_non_oi:
+                has_confirmation = (
+                    ((vm >= min_confirm_vm or vol_ratio >= vol_th) and abs(chg_pct) >= min_confirm_move)
+                    or (allow_open_relax and early_ist and vm >= vol_th and abs(chg_pct) >= 0.42)
+                )
+            else:
+                has_confirmation = (
+                    vm >= 2.5
+                    or vol_ratio >= vol_th
+                    or abs(chg_pct) >= min_confirm_move
+                    or (allow_open_relax and early_ist and vm >= vol_th and abs(chg_pct) >= 0.42)
+                )
         if not has_confirmation:
             continue
 
@@ -630,7 +887,112 @@ def detect_spikes(stocks: list, prev: dict, gates: dict | None = None, verdict: 
 
     # Sort by score descending, then by abs chg_pct
     spikes.sort(key=lambda x: (-x.get("score", 0), -abs(x.get("chg_pct", 0))))
-    return spikes[:15]
+    max_per_cycle = int(TH.get("spike_max_per_cycle", 15) or 15)
+    max_per_cycle = max(1, min(30, max_per_cycle))
+    return spikes[:max_per_cycle]
+
+
+def build_today_spikes_from_kite_history(kite) -> list:
+    """
+    Rebuild today's spike list from 1-min OHLCV (same rules as server startup backfill).
+    Populates the SPIKE tray when the server restarts after hours or after a DB reset.
+    """
+    if not kite:
+        return []
+    import statistics as _stat
+    from feed import KITE_TOKENS
+    from config import FNO_SYMBOLS
+
+    today_str = datetime.now(_IST).date().isoformat()
+    backfill = []
+    _t_start = TH.get("spike_time_start", 570)
+    _t_end = TH.get("spike_time_end", 840)
+    _score_floor = 45
+    _vol_th = 2.5
+    _dedup_window = 20
+    _last_sig_min = {}
+
+    for sym in FNO_SYMBOLS[2:]:
+        tok = KITE_TOKENS.get(sym)
+        if not tok:
+            continue
+        try:
+            candles = kite.historical_data(tok, today_str, today_str, "minute")
+            if len(candles) < 10:
+                continue
+            vols = [c["volume"] for c in candles if c["volume"] > 0]
+            if not vols:
+                continue
+            avg_vol = _stat.mean(vols)
+            open_px = candles[0]["open"]
+            for i, c in enumerate(candles):
+                t = c["date"]
+                cm = t.hour * 60 + t.minute
+                if not (_t_start <= cm <= _t_end):
+                    continue
+                price = c["close"]
+                vol = c["volume"] or 0
+                vm = vol / avg_vol if avg_vol else 0
+                chg_pct = (price - open_px) / open_px * 100 if open_px else 0
+                price_min = 0.5 if vm < 4.0 else 0.2
+                if abs(chg_pct) < price_min or vm < _vol_th:
+                    continue
+                if vm < 4.0 and abs(chg_pct) < 1.0:
+                    continue
+                score = _score_spike(vm, chg_pct, sym, cm)
+                if score < _score_floor:
+                    continue
+                sp_type = "buy" if chg_pct > 0 else "sell"
+                key = (sym, sp_type)
+                if key in _last_sig_min and cm - _last_sig_min[key] < _dedup_window:
+                    continue
+                _last_sig_min[key] = cm
+                sig = "LONG" if chg_pct > 0 else "SHORT"
+                trigger = f"Price {'+' if chg_pct > 0 else ''}{chg_pct:.2f}% | Vol {vm:.1f}x"
+                entry = price
+                t1_px = entry * 1.005 if sp_type == "buy" else entry * 0.995
+                sl_px = entry * 0.995 if sp_type == "buy" else entry * 1.005
+                outcome = None
+                for j in range(i + 1, min(i + 31, len(candles))):
+                    fc = candles[j]
+                    if sp_type == "buy":
+                        if fc["low"] <= sl_px:
+                            outcome = "HIT SL"
+                            break
+                        if fc["high"] >= t1_px:
+                            outcome = "HIT T1"
+                            break
+                    else:
+                        if fc["high"] >= sl_px:
+                            outcome = "HIT SL"
+                            break
+                        if fc["low"] <= t1_px:
+                            outcome = "HIT T1"
+                            break
+                if outcome is None:
+                    outcome = "EXPIRED"
+                backfill.append({
+                    "symbol": sym,
+                    "time": t.strftime("%H:%M"),
+                    "price": round(price, 2),
+                    "chg_pct": round(chg_pct, 2),
+                    "vol_mult": round(vm, 1),
+                    "oi_pct": 0.0,
+                    "type": sp_type,
+                    "trigger": trigger,
+                    "signal": sig,
+                    "strength": "hi" if score >= 70 else "md",
+                    "score": score,
+                    "pc": 3,
+                    "outcome": outcome,
+                })
+        except Exception:
+            continue
+
+    if backfill:
+        backfill.sort(key=lambda x: -x["score"])
+        backfill = backfill[:30]
+    return backfill
 
 
 def _annotate_live_stocks(stocks: list, gates_dict: dict, verdict: str) -> list:
@@ -755,6 +1117,10 @@ def run_signal_engine(indices: dict, chain: dict, fii: dict,
         px = float(s.get("price", 0) or s.get("ltp", 0) or 0)
         chg = float(s.get("chg_pct", 0) or 0)
         pc_s = int(s.get("pc", 0) or 0)
+        from config import TELEGRAM_NOTIFY_SIGNAL_ENGINE
+
+        if not TELEGRAM_NOTIFY_SIGNAL_ENGINE:
+            continue
         msg = (
             f"🎯 <b>STOCK EXECUTE — {sym}</b>\n"
             f"₹{px:.2f} ({chg:+.2f}%) · {pc_s}/5 on name · Global: {verdict}\n"
@@ -816,12 +1182,14 @@ def run_signal_engine(indices: dict, chain: dict, fii: dict,
         "position_size_rupees": position_size_rupees,
     })
 
-    # ── Telegram alert on verdict change ──
+    # ── Telegram alert on verdict change (optional — off when only ADV-SPIKES / ADV INDEX TG) ──
     global _last_telegram_verdict
+    from config import TELEGRAM_NOTIFY_SIGNAL_ENGINE
+
     if verdict != _last_telegram_verdict:
         prev_verdict = _last_telegram_verdict
         _last_telegram_verdict = verdict
-        if verdict == "EXECUTE":
+        if TELEGRAM_NOTIFY_SIGNAL_ENGINE and verdict == "EXECUTE":
             nifty = indices.get("nifty", 0)
             # Pull entry zone from gate5 rows if available
             g5_rows = gates_dict.get(5, {}).get("rows", [])
@@ -845,7 +1213,7 @@ def run_signal_engine(indices: dict, chain: dict, fii: dict,
                 msg += f"Size: {pos_lots} lot{'s' if pos_lots != 1 else ''} (₹{pos_rs:,})\n"
             msg += "<b>All gates clear — trade now</b>"
             _send_telegram(msg)
-        elif verdict == "NO TRADE" and prev_verdict == "EXECUTE":
+        elif TELEGRAM_NOTIFY_SIGNAL_ENGINE and verdict == "NO TRADE" and prev_verdict == "EXECUTE":
             _send_telegram("🔴 <b>NSE EDGE — EXECUTE cancelled</b>\nGate failed — stand down.")
 
     # ── Log to DB for backtest analysis (non-blocking) ──

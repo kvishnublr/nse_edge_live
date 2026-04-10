@@ -57,12 +57,12 @@ HOST = os.getenv("HOST", "0.0.0.0").strip()
 
 def _resolve_listen_port() -> int:
     """
-    Listen port for uvicorn. NSE_EDGE_PORT wins when set (e.g. in backend/.env) so a
-    global Windows PORT=8000 from another tool does not override the app default 8765
-    that matches frontend/index.html. On Railway, leave NSE_EDGE_PORT unset and use PORT.
+    Listen port: PORT first (Railway / uvicorn convention, usually 8000), then
+    NSE_EDGE_PORT for a deliberate local override. Default 8000 so
+    http://localhost:8000/ matches typical bookmarks.
     """
-    for key, raw in (("NSE_EDGE_PORT", os.getenv("NSE_EDGE_PORT", "").strip()),
-                     ("PORT", os.getenv("PORT", "").strip())):
+    for key, raw in (("PORT", os.getenv("PORT", "").strip()),
+                     ("NSE_EDGE_PORT", os.getenv("NSE_EDGE_PORT", "").strip())):
         if not raw:
             continue
         try:
@@ -73,7 +73,7 @@ def _resolve_listen_port() -> int:
                 return p
         except ValueError:
             logger.error("Invalid %s value: %r", key, raw)
-    return 8765
+    return 8000
 
 
 PORT = _resolve_listen_port()
@@ -197,12 +197,30 @@ GATE = {
     "rr_min_positional":  3.5,
     "atr_multiplier":     1.5,
     # Spike detection - OPTIMIZED v2 (73% WR)
-    "spike_price_pct":    0.2,    # Min price change %
-    "spike_vol_mult":     1.5,    # Min volume multiplier
+    "spike_price_pct":    0.55,   # Quick-move focus: minimum session move %
+    "spike_vol_mult":     1.6,    # Quick-move focus: minimum volume multiplier
     "spike_oi_pct":       12.0,   # OI change %
     "spike_confirm_pct":  0.02,   # Confirmation: next candle must move in same direction
-    "spike_time_start":   570,    # 9:30 AM (minutes from midnight)
+    "spike_time_start":   570,    # 9:30 AM defensive start (avoid open noise whipsaws)
     "spike_time_end":     840,    # 2:00 PM
+    "spike_min_gate_pass": 0,     # Gate-independent mode (quick-move scanner)
+    "spike_adaptive_gate": 0,     # 0=False: ignore gate floor adaptation
+    "spike_min_gate_pass_relaxed": 0, # not used when adaptive gate is disabled
+    "spike_vix_gate3_above": 20.0, # if VIX above this, enforce strict gate floor
+    "spike_regime_kill_switch": 0, # gate-independent: keep scanner active across regimes
+    "spike_max_per_cycle": 6,      # cap spike count each scan; keep only top quality
+    "spike_telegram_dedup_minutes": 20,  # same symbol+direction: one TG/WA alert per window
+    "spike_active_only": 0,        # 0=False: include full scanner universe
+    "spike_active_symbols": "HDFCBANK,ICICIBANK,AXISBANK,SBIN,RELIANCE,INFY,TCS,LT,BAJFINANCE,TATAMOTORS,MARUTI,INDUSINDBK,KOTAKBANK",
+    "spike_universe": "NIFTY200",  # NIFTY200 | FNO
+    "spike_allow_open_relax": 0,  # 0/False = disable permissive early-session shortcut
+    "spike_min_confirm_move": 0.70, # If no OI confirmation, require stronger directional move
+    "spike_confirm_non_oi_requires_vol": 1, # 1=True: require both move and volume for non-OI spikes
+    "spike_confirm_min_vm": 1.8,   # minimum vol multiplier when non-OI strict confirm is enabled
+    "spike_live_early_fail_min": 8,          # live outcome: close fast if move goes adverse early
+    "spike_live_early_fail_adverse_pct": 0.18,
+    "spike_live_no_ft_min": 15,              # live outcome: no-follow-through timeout
+    "spike_live_no_ft_min_fav_pct": 0.12,
 }
 
 # ─── INDEX RADAR (NIFTY/BANKNIFTY momentum — scheduler._detect_index_signals) ─
@@ -234,7 +252,12 @@ INDEX_RADAR = {
     "cross_index_against_pct": 0.25, # opposite-index tolerance (relaxed)
     "quality_floor":      52,       # drop only lower-quality noise
     "vix_soft_skips_md_ce": 22.0,   # soft CE skip threshold under elevated VIX
-    "outcome_index_pct":  0.25,     # underlying % for live HIT_T1 / HIT_SL (backtest matches)
+    "outcome_index_pct":  0.25,     # underlying % when T1/SL use same threshold (backtest + index fallback)
+    "outcome_t1_index_pct": None,   # None → use outcome_index_pct; smaller = easier T1 (higher WR, less R)
+    "outcome_sl_index_pct": None,   # None → use outcome_index_pct; can be > T1 so SL is slightly less twitchy
+    "opt_sl_mult":        0.70,    # option premium SL = entry × this (live plan)
+    "opt_t1_mult":        1.50,    # T1 = entry × this (smaller → easier hit, lower ₹ target)
+    "opt_t2_mult":        2.00,
     # ── High precision (fewer signals). ML needs ≥~50 resolved T1/SL rows in DB first. ──
     "precision_boost":    False,    # True: tighter chg band, hi-only, stronger trend + quality
     "precision_hi_only": True,
@@ -244,6 +267,38 @@ INDEX_RADAR = {
     "precision_chg_max":  0.28,
     "ml_filter_enabled":  False,   # True: keep signal only if GB model P(win) ≥ threshold
     "ml_min_win_prob":    0.72,    # fallback if no ix_radar_ml_meta.json from training
+}
+
+# Applied on top of _INDEX_RADAR_BASE for preset=high_accuracy and profile index_precision.
+# Accuracy-first: tighter gates, smaller premium T1, easier index T1 vs SL (higher hit rate, lower R).
+# Not merged onto balanced_v2 in backtest (see main.index_signals_backtest).
+INDEX_RADAR_HIGH_ACCURACY: dict = {
+    "precision_boost": True,
+    "precision_hi_only": False,
+    "precision_chg_min": 0.22,
+    "precision_chg_max": 0.30,
+    "precision_min_quality": 74,
+    "precision_min_trend_sup": 0.11,
+    "quality_floor": 62,
+    "trend_support_min_pct": 0.08,
+    "trend_against_pct": 0.20,
+    "pcr_ce_min": 1.00,
+    "pcr_pe_min": 1.28,
+    "pe_max_nifty_chg": 0.09,
+    "cross_index_against_pct": 0.14,
+    "anti_chase_ce_pct": 0.08,
+    "anti_chase_pe_pct": 0.08,
+    "dedup_minutes": 22,
+    "chg_min_pct": 0.19,
+    "chg_max_pct": 0.38,
+    "chg_hi_strength_pct": 0.25,
+    "micro_step_min_pct": 0.012,
+    "vix_soft_skips_md_ce": 19.0,
+    "opt_sl_mult": 0.74,
+    "opt_t1_mult": 1.22,
+    "opt_t2_mult": 1.58,
+    "outcome_t1_index_pct": 0.14,
+    "outcome_sl_index_pct": 0.20,
 }
 
 # ─── SWING RADAR (positional picks — scheduler → log_swing_radar_triggers + UI carousel) ─
@@ -280,12 +335,13 @@ STRATEGY_PROFILES = {
     "balanced_v2": {
         "index_radar": {
             "dedup_minutes": 18,
-            "quality_floor": 58,
-            "trend_support_min_pct": 0.06,
+            "quality_floor": 60,
+            "trend_support_min_pct": 0.065,
             "anti_chase_ce_pct": 0.10,
             "anti_chase_pe_pct": 0.10,
             "chg_min_pct": 0.18,
             "chg_hi_strength_pct": 0.26,
+            "pcr_ce_min": 0.96,
         },
         "swing_radar": {
             "min_score_log": 62,
@@ -294,6 +350,11 @@ STRATEGY_PROFILES = {
             "pcr_soft_min_pc": 5,
             "vol_breakout_min": 1.05,
         },
+    },
+    # Live INDEX_RADAR matches INDEX_RADAR_HIGH_ACCURACY backtest preset (high selectivity).
+    "index_precision": {
+        "index_radar": dict(INDEX_RADAR_HIGH_ACCURACY),
+        "swing_radar": {},
     },
 }
 _ACTIVE_STRATEGY_PROFILE = ""
@@ -325,9 +386,49 @@ def get_strategy_profiles() -> list[str]:
 
 # ─── TELEGRAM ALERTS ──────────────────────────────────────────────────────────
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID",   "").strip()
-_morning_brief = os.getenv("MORNING_TELEGRAM_BRIEF", "1").strip().lower()
-MORNING_TELEGRAM_BRIEF = _morning_brief not in ("0", "false", "no", "off")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+# Extra recipients: comma-separated chat IDs (e.g. second account / @harshvtrade numeric id after /start bot)
+TELEGRAM_CHAT_IDS = os.getenv("TELEGRAM_CHAT_IDS", "").strip()
+TELEGRAM_CHAT_ID_HARSHVTRADE = os.getenv("TELEGRAM_CHAT_ID_HARSHVTRADE", "").strip()
+
+_neg = ("0", "false", "no", "off")
+
+
+def _env_bool(key: str, default: bool) -> bool:
+    v = os.getenv(key, "").strip().lower()
+    if not v:
+        return default
+    return v not in _neg
+
+
+# Default on: ADV-SPIKES (NIFTY 200 spike TG) + ADV INDEX (on DB persist / bias throttle)
+TELEGRAM_NOTIFY_ADV_SPIKES = _env_bool("TELEGRAM_NOTIFY_ADV_SPIKES", True)
+TELEGRAM_NOTIFY_ADV_INDEX = _env_bool("TELEGRAM_NOTIFY_ADV_INDEX", True)
+# Default off: signal-engine verdict, per-stock EXECUTE, index-radar option signals, morning digest
+TELEGRAM_NOTIFY_SIGNAL_ENGINE = _env_bool("TELEGRAM_NOTIFY_SIGNAL_ENGINE", False)
+TELEGRAM_NOTIFY_INDEX_RADAR = _env_bool("TELEGRAM_NOTIFY_INDEX_RADAR", False)
+_morning_brief = os.getenv("MORNING_TELEGRAM_BRIEF", "0").strip().lower()
+MORNING_TELEGRAM_BRIEF = _morning_brief not in _neg
+
+
+def get_telegram_chat_ids() -> list[str]:
+    """Distinct non-empty chat_id strings for sendMessage (numeric or @public_channel)."""
+    raw: list[str] = []
+    if TELEGRAM_CHAT_ID:
+        raw.append(TELEGRAM_CHAT_ID)
+    if TELEGRAM_CHAT_ID_HARSHVTRADE:
+        raw.append(TELEGRAM_CHAT_ID_HARSHVTRADE)
+    for part in TELEGRAM_CHAT_IDS.split(","):
+        p = part.strip()
+        if p:
+            raw.append(p)
+    seen: set[str] = set()
+    out: list[str] = []
+    for x in raw:
+        if x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
 
 # ─── WHATSAPP ALERTS (CallMeBot — free) ───────────────────────────────────────
 WHATSAPP_PHONE  = os.getenv("WHATSAPP_PHONE",  "").strip()
