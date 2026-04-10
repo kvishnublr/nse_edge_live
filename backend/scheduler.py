@@ -118,6 +118,10 @@ def _ix_db_init():
 def _notify_index_radar_new(sig: dict) -> None:
     """Telegram alert for a newly appended live index radar signal (server-side, no duplicate on outcome updates)."""
     try:
+        from config import TELEGRAM_NOTIFY_INDEX_RADAR, TELEGRAM_BOT_TOKEN
+
+        if not TELEGRAM_NOTIFY_INDEX_RADAR or not TELEGRAM_BOT_TOKEN:
+            return
         from signals import send_telegram_message
     except Exception:
         return
@@ -391,6 +395,36 @@ def job_chain():
                 _ws({"type": "macro",  "data": indices,            "timestamp": time.time()})
             ix_sigs = _signals.state.get("index_signals", [])
             _ws({"type": "index_spikes", "data": ix_sigs, "ts": time.time()})
+
+            # ADV INDEX (NIFTY 50 weighted OI + cash — throttle ~75s)
+            try:
+                if _kite and time.time() - float(_cache.get("adv_ix_ts", 0) or 0) > 75:
+                    import adv_index_engine as _aix
+
+                    snap = _aix.compute_live_snapshot(_kite)
+                    _signals.state["adv_index"] = snap
+                    _cache["adv_ix_ts"] = time.time()
+                    persisted = False
+                    try:
+                        import adv_index_history as _aix_hist
+
+                        persisted = bool(_aix_hist.persist_snapshot(snap))
+                    except Exception:
+                        pass
+                    if persisted:
+                        try:
+                            from config import TELEGRAM_NOTIFY_ADV_INDEX
+
+                            if TELEGRAM_NOTIFY_ADV_INDEX:
+                                from signals import send_adv_index_telegram
+
+                                send_adv_index_telegram(snap)
+                        except Exception:
+                            pass
+                    if _ws:
+                        _ws({"type": "adv_index", "data": _signals.state.get("adv_index"), "ts": time.time()})
+            except Exception as _aix_e:
+                logger.debug("adv_index: %s", _aix_e)
 
             # Confluence (same helper as off-hours job)
             refresh_confluence_broadcast(persist=True)
@@ -684,9 +718,12 @@ def _detect_index_signals(chain, indices, bn_chain=None):
         if not entry_px:
             continue
 
-        sl         = round(entry_px * 0.70, 2)
-        t1         = round(entry_px * 1.50, 2)
-        t2         = round(entry_px * 2.00, 2)
+        sl_m = float(ir.get("opt_sl_mult", 0.70))
+        t1_m = float(ir.get("opt_t1_mult", 1.50))
+        t2_m = float(ir.get("opt_t2_mult", 2.00))
+        sl         = round(entry_px * sl_m, 2)
+        t1         = round(entry_px * t1_m, 2)
+        t2         = round(entry_px * t2_m, 2)
         rr         = round((t1 - entry_px) / max(entry_px - sl, 0.01), 1)
         lot_pnl_t1 = round((t1 - entry_px) * lot_sz)
 
@@ -808,7 +845,9 @@ def _update_index_outcomes(signals, indices):
     now_ts  = _t.time()
     nifty   = float((indices or {}).get("nifty", 0) or 0)
     bn      = float((indices or {}).get("banknifty", 0) or 0)
-    ix_th   = float(_IXR.get("outcome_index_pct", 0.25))
+    _ix_base = float(_IXR.get("outcome_index_pct", 0.25))
+    ix_t1 = float(_IXR["outcome_t1_index_pct"]) if _IXR.get("outcome_t1_index_pct") is not None else _ix_base
+    ix_sl = float(_IXR["outcome_sl_index_pct"]) if _IXR.get("outcome_sl_index_pct") is not None else _ix_base
     for sig in signals:
         if sig.get("outcome") is not None:
             continue
@@ -836,11 +875,11 @@ def _update_index_outcomes(signals, indices):
         if entry_idx and cur:
             mv    = (cur - entry_idx) / entry_idx * 100
             is_ce = sig.get("type") == "CE"
-            if   (is_ce and mv >= ix_th) or (not is_ce and mv <= -ix_th):
+            if   (is_ce and mv >= ix_t1) or (not is_ce and mv <= -ix_t1):
                 sig["outcome"] = "HIT_T1"
                 sig["outcome_time"] = _otm
                 continue
-            if (is_ce and mv <= -ix_th) or (not is_ce and mv >= ix_th):
+            if (is_ce and mv <= -ix_sl) or (not is_ce and mv >= ix_sl):
                 sig["outcome"] = "HIT_SL"
                 sig["outcome_time"] = _otm
                 continue
@@ -916,11 +955,11 @@ def _apply_new_token():
             return
         import config
         config.KITE_ACCESS_TOKEN = new_token
-        from feed import get_kite, _kite as _fkite
         import feed as _feed
-        _feed._kite = None          # force re-init with new token
-        kite = get_kite()           # creates fresh KiteConnect with new token
-        # Update scheduler reference
+        _feed._kite = None
+        _feed.restart_ticker_with_new_token()
+        from feed import get_kite
+        kite = get_kite()
         global _kite
         _kite = kite
         logger.info(f"=== Token applied live — last 6: ...{new_token[-6:]} ===")
@@ -931,8 +970,9 @@ def _apply_new_token():
 def job_morning_briefing():
     """9:00 IST Mon–Fri: global/India context, movement checklist, watchlist → Telegram."""
     try:
-        from config import MORNING_TELEGRAM_BRIEF, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-        if not MORNING_TELEGRAM_BRIEF or not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        from config import MORNING_TELEGRAM_BRIEF, TELEGRAM_BOT_TOKEN, get_telegram_chat_ids
+
+        if not MORNING_TELEGRAM_BRIEF or not TELEGRAM_BOT_TOKEN or not get_telegram_chat_ids():
             return
         import html as html_mod
 

@@ -42,7 +42,7 @@ def refresh_token(env_file: str = _ENV_FILE) -> bool:
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(_do_refresh, env_file)
-            return future.result(timeout=120)
+            return future.result(timeout=300)
     except RuntimeError:
         # No event loop running — call directly (CLI / APScheduler thread)
         return _do_refresh(env_file)
@@ -169,15 +169,24 @@ def _do_refresh(env_file: str = _ENV_FILE) -> bool:
             page.click('button[type="submit"]')
             logger.info("auto_token: password submitted")
 
-            # ── Step 3: Wait for TOTP field and fill it ───────────────────────
-            totp_selector = (
-                'input[type="number"], input[type="tel"], input[type="text"], '
-                'input[placeholder*="TOTP"], input[placeholder*="totp"], '
-                'input[autocomplete="one-time-code"], input#totp'
-            )
-            page.wait_for_selector(totp_selector, timeout=25000)
+            # ── Step 3: Wait for TOTP / 2FA field (avoid filling wrong text input) ─
             totp_value = pyotp.TOTP(totp_secret).now()
-            page.fill(totp_selector, totp_value)
+            totp_loc = page.locator(
+                "input#totp, input[name='twofa'], input[name='twoFA'], "
+                "input[autocomplete='one-time-code'], "
+                "input[placeholder*='TOTP'], input[placeholder*='totp'], "
+                "input[placeholder*='Authenticator']"
+            ).first
+            try:
+                totp_loc.wait_for(state="visible", timeout=28000)
+            except Exception:
+                totp_loc = page.locator(
+                    "form input[type='tel'], form input[type='number']"
+                ).first
+                totp_loc.wait_for(state="visible", timeout=8000)
+            totp_loc.click(timeout=3000)
+            totp_loc.fill("")
+            totp_loc.fill(totp_value)
             logger.info("auto_token: TOTP submitted (6-digit code generated from secret)")
 
             # Submit if button exists; else Enter (some flows auto-submit)

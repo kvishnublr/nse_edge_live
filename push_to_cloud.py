@@ -1,7 +1,7 @@
 """
 NSE EDGE v5 — Cloud Pusher
 Run this on your local PC alongside main.py.
-It reads live state from localhost:8765 and pushes it to stokr.in every 30s.
+It reads live state from localhost:8000 and pushes it to stokr.in every 30s.
 
 Usage:
     python push_to_cloud.py
@@ -11,7 +11,7 @@ import time
 import requests
 import os
 
-LOCAL  = "http://localhost:8765"
+LOCAL  = "http://127.0.0.1:8000"
 CLOUD  = "https://stokr.in"
 SECRET = os.getenv("PUSH_SECRET", "nse-edge-push-2026")
 INTERVAL = 30  # seconds

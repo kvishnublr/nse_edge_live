@@ -13,12 +13,10 @@ import threading
 from collections import deque
 from typing import Dict, Optional
 
+import config
 from kiteconnect import KiteConnect, KiteTicker
 
-from config import (
-    KITE_API_KEY, KITE_ACCESS_TOKEN,
-    KITE_TOKENS, KITE_TOKEN_TO_SYMBOL, KITE_QUOTE_KEYS,
-)
+from config import KITE_TOKENS, KITE_TOKEN_TO_SYMBOL, KITE_QUOTE_KEYS
 
 logger = logging.getLogger("feed")
 
@@ -62,6 +60,7 @@ def get_all_prices() -> dict:
 
 # ─── KITE CONNECT CLIENT ──────────────────────────────────────────────────────
 _kite: Optional[KiteConnect] = None
+_kite_bound_token: Optional[str] = None
 _ticker: Optional[KiteTicker] = None
 _ticker_connected = False
 _ticker_lock = threading.Lock()  # Protect _ticker_connected from race conditions
@@ -70,12 +69,15 @@ _reconnect_lock = threading.Lock()  # Protect _reconnect_count
 
 
 def get_kite() -> KiteConnect:
-    """Return authenticated KiteConnect instance."""
-    global _kite
-    if _kite is None:
-        _kite = KiteConnect(api_key=KITE_API_KEY)
-        _kite.set_access_token(KITE_ACCESS_TOKEN)
-        logger.info("KiteConnect client initialised")
+    """Return authenticated KiteConnect bound to the current config.KITE_ACCESS_TOKEN."""
+    global _kite, _kite_bound_token
+    tok = (config.KITE_ACCESS_TOKEN or "").strip()
+    if _kite is not None and _kite_bound_token == tok:
+        return _kite
+    _kite = KiteConnect(api_key=config.KITE_API_KEY)
+    _kite.set_access_token(tok)
+    _kite_bound_token = tok
+    logger.info("KiteConnect client initialised")
     return _kite
 
 
@@ -215,7 +217,7 @@ class FeedManager:
         """Start KiteTicker real-time feed."""
         self._running = True
 
-        if not KITE_API_KEY or not KITE_ACCESS_TOKEN:
+        if not config.KITE_API_KEY or not config.KITE_ACCESS_TOKEN:
             raise RuntimeError(
                 "\n\n  KITE_API_KEY and KITE_ACCESS_TOKEN must be set in backend/.env\n"
                 "  Run: python3 generate_token.py to get today's access token.\n"
@@ -244,7 +246,7 @@ class FeedManager:
         # Start KiteTicker WebSocket
         logger.info("Starting KiteTicker real-time feed...")
         global _ticker
-        _ticker = KiteTicker(KITE_API_KEY, KITE_ACCESS_TOKEN)
+        _ticker = KiteTicker(config.KITE_API_KEY, config.KITE_ACCESS_TOKEN)
         _ticker.on_ticks       = _on_ticks
         _ticker.on_connect     = _on_connect
         _ticker.on_close       = _on_close
@@ -372,6 +374,49 @@ class FeedManager:
                 _ticker.close()
             except Exception:
                 pass
+
+
+def restart_ticker_with_new_token() -> None:
+    """
+    After config.KITE_ACCESS_TOKEN (and os.environ) are updated, rebuild REST client
+    and KiteTicker so the live feed uses the new session. Safe to call from demo mode.
+    """
+    global _kite, _kite_bound_token, _ticker
+    api_key = (config.KITE_API_KEY or "").strip()
+    token = (config.KITE_ACCESS_TOKEN or "").strip()
+    if not api_key or not token:
+        logger.error("restart_ticker_with_new_token: missing KITE_API_KEY or KITE_ACCESS_TOKEN")
+        return
+    _kite = None
+    _kite_bound_token = None
+    if _ticker is not None:
+        try:
+            _ticker.close()
+        except Exception as e:
+            logger.debug("KiteTicker close during restart: %s", e)
+        _ticker = None
+    try:
+        k = get_kite()
+        k.profile()
+    except Exception as e:
+        logger.error("restart_ticker_with_new_token: token still rejected by Kite: %s", e)
+        return
+    if getattr(feed_manager, "_demo_mode", False):
+        feed_manager._demo_mode = False
+        logger.info("Exiting demo mode — live Kite session active")
+    _ticker = KiteTicker(api_key, token)
+    _ticker.on_ticks = _on_ticks
+    _ticker.on_connect = _on_connect
+    _ticker.on_close = _on_close
+    _ticker.on_error = _on_error
+    _ticker.on_reconnect = _on_reconnect
+    _ticker.on_noreconnect = _on_noreconnect
+    try:
+        fetch_quotes_rest()
+    except Exception as e:
+        logger.warning("restart_ticker_with_new_token: initial REST fetch: %s", e)
+    _ticker.connect(threaded=True)
+    logger.info("KiteTicker restarted with refreshed access token")
 
 
 feed_manager = FeedManager()

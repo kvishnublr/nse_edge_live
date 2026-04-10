@@ -13,7 +13,7 @@ import time
 import logging
 import statistics
 import requests
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 from datetime import datetime, timedelta
 
 import pytz
@@ -22,6 +22,25 @@ from config import KITE_QUOTE_KEYS, NSE_BASE, NSE_HEADERS, NSE_TIMEOUT
 
 logger = logging.getLogger("fetcher")
 IST = pytz.timezone("Asia/Kolkata")
+
+# Log once per process when API jobs run without Kite (DEMO / bad token on deploy).
+_kite_missing_logged = False
+
+
+def _kite_or_none(kite, context: str):
+    """Return False and log once if kite is missing (avoids NoneType.instruments spam)."""
+    global _kite_missing_logged
+    if kite is not None:
+        return True
+    if not _kite_missing_logged:
+        _kite_missing_logged = True
+        logger.warning(
+            "Kite client unavailable (%s). Option chain, F&O stocks, and ADV INDEX need "
+            "KITE_API_KEY plus a valid KITE_ACCESS_TOKEN on the server (not DEMO mode). "
+            "Fix credentials or wait for token auto-refresh, then restart if needed.",
+            context,
+        )
+    return False
 
 # ─── NSE SESSION (for FII/DII only) ──────────────────────────────────────────
 _nse_session = requests.Session()
@@ -206,6 +225,8 @@ def fetch_option_chain(kite, symbol: str = "NIFTY") -> Optional[dict]:
       4. Call kite.quote() on those ~13 CE+PE instruments (26 keys max)
       5. Parse OI, IV, LTP for each strike
     """
+    if not _kite_or_none(kite, "fetch_option_chain"):
+        return None
     try:
         from feed import get_price
         ul     = get_price(symbol)
@@ -345,6 +366,8 @@ _nfo_cache_ts: float = 0
 def _get_nfo_instruments(kite, symbol: str) -> List[dict]:
     """Return NFO option instruments for NIFTY or BANKNIFTY, cached for 6 hours."""
     global _nfo_cache, _nfo_cache_ts
+    if kite is None:
+        return []
     cache_key = symbol
     if cache_key in _nfo_cache and time.time() - _nfo_cache_ts < 21600:
         return _nfo_cache[cache_key]
@@ -441,6 +464,8 @@ def fetch_fno_stocks(kite) -> List[dict]:
     Uses kite.quote on near-month futures to get OI.
     Equity price comes from price_cache (KiteTicker).
     """
+    if not _kite_or_none(kite, "fetch_fno_stocks"):
+        return []
     from config import FNO_SYMBOLS, LOT_SIZES
     from feed import get_price
 
@@ -540,10 +565,16 @@ def fetch_fno_stocks(kite) -> List[dict]:
 
 _nfo_fut_cache: list = []
 _nfo_fut_cache_ts: float = 0
+_nifty200_symbols_cache: list = []
+_nifty200_symbols_ts: float = 0.0
+_nifty200_token_cache: dict = {}
+_nifty200_token_ts: float = 0.0
 
 def _get_nfo_futures(kite) -> List[dict]:
     """Get near-month stock futures, cached 6 hours."""
     global _nfo_fut_cache, _nfo_fut_cache_ts
+    if kite is None:
+        return []
     if _nfo_fut_cache and time.time() - _nfo_fut_cache_ts < 21600:
         return _nfo_fut_cache
     try:
@@ -571,6 +602,217 @@ def _get_nfo_futures(kite) -> List[dict]:
     except Exception as e:
         logger.error(f"NFO futures instruments error: {e}")
         return []
+
+
+def get_nifty200_symbols() -> List[str]:
+    """Get exact NIFTY 200 constituent symbols from NSE (cached 6h)."""
+    global _nifty200_symbols_cache, _nifty200_symbols_ts
+    if _nifty200_symbols_cache and time.time() - _nifty200_symbols_ts < 21600:
+        return _nifty200_symbols_cache
+    raw = _nse_get(f"{NSE_BASE}/api/equity-stockIndices?index=NIFTY%20200")
+    syms: List[str] = []
+    try:
+        data = (raw or {}).get("data", []) if isinstance(raw, dict) else []
+        for r in data:
+            s = str((r or {}).get("symbol", "") or "").strip().upper()
+            if s and s not in ("NIFTY 200", "NIFTY200"):
+                syms.append(s)
+        syms = sorted(set(syms))
+        if syms:
+            _nifty200_symbols_cache = syms
+            _nifty200_symbols_ts = time.time()
+            logger.info(f"NIFTY 200 symbols loaded: {len(syms)}")
+        return _nifty200_symbols_cache
+    except Exception as e:
+        logger.warning(f"NIFTY200 symbol fetch parse failed: {e}")
+        return _nifty200_symbols_cache
+
+
+def get_nifty200_kite_tokens(kite) -> Dict[str, int]:
+    """Map NIFTY 200 symbols to Kite NSE instrument tokens (cached 6h)."""
+    global _nifty200_token_cache, _nifty200_token_ts
+    if _nifty200_token_cache and time.time() - _nifty200_token_ts < 21600:
+        return _nifty200_token_cache
+    symbols = get_nifty200_symbols()
+    if not symbols:
+        return {}
+    try:
+        nse_inst = kite.instruments("NSE")
+    except Exception as e:
+        logger.warning(f"Kite NSE instruments failed for NIFTY200 mapping: {e}")
+        return _nifty200_token_cache
+    by_sym = {}
+    for i in nse_inst:
+        ts = str(i.get("tradingsymbol", "") or "").upper()
+        tok = i.get("instrument_token")
+        if ts and tok:
+            by_sym[ts] = int(tok)
+    mapped = {}
+    for s in symbols:
+        tok = by_sym.get(s)
+        if tok:
+            mapped[s] = tok
+    if mapped:
+        _nifty200_token_cache = mapped
+        _nifty200_token_ts = time.time()
+        logger.info(f"NIFTY 200 mapped to Kite tokens: {len(mapped)}")
+    return _nifty200_token_cache
+
+
+# ─── NIFTY 50 (constituents + weights for ADV INDEX) ───────────────────────────
+_nifty50_weights_cache: Dict[str, float] = {}
+_nifty50_weights_ts: float = 0.0
+_nifty50_fut_by_name: Dict[str, dict] = {}
+_nifty50_fut_ts: float = 0.0
+
+_FALLBACK_NIFTY50_WEIGHTS: Dict[str, float] = {
+    "RELIANCE": 10.0,
+    "HDFCBANK": 8.5,
+    "ICICIBANK": 7.0,
+    "TCS": 5.5,
+    "INFY": 4.5,
+    "BHARTIARTL": 4.0,
+    "LT": 3.5,
+    "SBIN": 3.5,
+    "HINDUNILVR": 3.0,
+    "ITC": 3.0,
+    "KOTAKBANK": 2.8,
+    "AXISBANK": 2.8,
+    "MARUTI": 2.5,
+    "TITAN": 2.2,
+    "SUNPHARMA": 2.2,
+}
+
+
+def get_nifty50_weights() -> Dict[str, float]:
+    """
+    NIFTY 50 symbol -> weight (%), sum ~100.
+    Uses NSE equity-stockIndices when possible; equal-weight if no weight field;
+    falls back to a liquid core basket if the API fails.
+    """
+    global _nifty50_weights_cache, _nifty50_weights_ts
+    if _nifty50_weights_cache and time.time() - _nifty50_weights_ts < 21600:
+        return _nifty50_weights_cache
+
+    out: Dict[str, float] = {}
+    raw = _nse_get(f"{NSE_BASE}/api/equity-stockIndices?index=NIFTY%2050")
+    try:
+        rows = (raw or {}).get("data", []) if isinstance(raw, dict) else []
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            sym = str(r.get("symbol", "") or "").strip().upper()
+            if not sym or "NIFTY" in sym:
+                continue
+            w = None
+            for k in ("weightage", "indexWeight", "weight", "percWt"):
+                v = r.get(k)
+                if v is not None:
+                    try:
+                        w = float(v)
+                        break
+                    except (TypeError, ValueError):
+                        pass
+            if w is not None and w > 0:
+                out[sym] = w
+        if out:
+            s = sum(out.values())
+            if s > 0 and abs(s - 100) > 0.5:
+                out = {k: round(v / s * 100, 4) for k, v in out.items()}
+        elif rows:
+            n = sum(
+                1 for r in rows
+                if isinstance(r, dict)
+                and str((r.get("symbol") or "")).strip().upper()
+                and "NIFTY" not in str((r.get("symbol") or "")).upper()
+            )
+            eq = 100.0 / max(1, n)
+            for r in rows:
+                if not isinstance(r, dict):
+                    continue
+                sym = str(r.get("symbol", "") or "").strip().upper()
+                if sym and "NIFTY" not in sym:
+                    out[sym] = round(eq, 4)
+    except Exception as e:
+        logger.warning(f"NIFTY 50 weight parse failed: {e}")
+
+    if not out:
+        logger.warning("NIFTY 50 API empty — using fallback core basket")
+        out = dict(_FALLBACK_NIFTY50_WEIGHTS)
+        s = sum(out.values())
+        out = {k: round(v / s * 100, 4) for k, v in out.items()}
+
+    _nifty50_weights_cache = out
+    _nifty50_weights_ts = time.time()
+    logger.info(f"NIFTY 50 weights loaded: {len(out)} names")
+    return _nifty50_weights_cache
+
+
+def get_nifty50_near_futures_map(kite) -> Dict[str, dict]:
+    """Nearest valid stock futures contract per NIFTY 50 name (cached 1h)."""
+    global _nifty50_fut_by_name, _nifty50_fut_ts
+    if _nifty50_fut_by_name and time.time() - _nifty50_fut_ts < 3600:
+        return _nifty50_fut_by_name
+    target = set(get_nifty50_weights().keys())
+    fut_map: Dict[str, dict] = {}
+    try:
+        all_inst = kite.instruments("NFO")
+        today = datetime.now(IST).date()
+        for i in all_inst:
+            name = str(i.get("name", "") or "")
+            if name not in target:
+                continue
+            if i.get("instrument_type") != "FUT":
+                continue
+            exp = i.get("expiry")
+            if not exp or exp < today:
+                continue
+            cur = fut_map.get(name)
+            if cur is None or exp < cur["expiry"]:
+                fut_map[name] = i
+        _nifty50_fut_by_name = fut_map
+        _nifty50_fut_ts = time.time()
+        logger.info(f"NIFTY 50 near futures mapped: {len(fut_map)}")
+    except Exception as e:
+        logger.warning(f"NIFTY 50 futures map failed: {e}")
+    return _nifty50_fut_by_name
+
+
+def fetch_nifty50_futures_quotes(kite) -> Tuple[Dict[str, dict], Dict[str, float]]:
+    """
+    Quote near-month futures for NIFTY 50 names. Returns (quote_by_symbol, weights).
+    Each quote dict: oi, oi_chg_pct estimate, fut_ltp, last_price fields from Kite.
+    """
+    weights = get_nifty50_weights()
+    fut_map = get_nifty50_near_futures_map(kite)
+    if not fut_map:
+        return {}, weights
+    keys = [f"NFO:{f['tradingsymbol']}" for f in fut_map.values()]
+    out: Dict[str, dict] = {}
+    try:
+        merged: Dict[str, dict] = {}
+        for i in range(0, len(keys), 80):
+            chunk = keys[i : i + 80]
+            part = kite.quote(chunk) or {}
+            merged.update(part)
+        for sym, finst in fut_map.items():
+            qk = f"NFO:{finst['tradingsymbol']}"
+            fq = merged.get(qk, {})
+            oi = float(fq.get("oi", 0) or 0)
+            oi_prev = float(fq.get("oi_day_low", oi) or oi)
+            if oi_prev <= 0:
+                oi_prev = oi or 1.0
+            oi_chg = oi - oi_prev
+            oi_chg_p = round(oi_chg / oi_prev * 100, 3) if oi_prev else 0.0
+            out[sym] = {
+                "oi": oi,
+                "oi_chg_pct": oi_chg_p,
+                "fut_ltp": float(fq.get("last_price", 0) or 0),
+                "volume": float(fq.get("volume_traded", 0) or 0),
+            }
+    except Exception as e:
+        logger.warning(f"fetch_nifty50_futures_quotes: {e}")
+    return out, weights
 
 
 # ─── FII / DII (from NSE — Kite does not provide this) ────────────────────────

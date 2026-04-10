@@ -875,6 +875,30 @@ def update_live_signal_outcomes(
         except Exception:
             hold_minutes = 0
 
+        # Production-grade quick exits for intraday spikes only.
+        if not status and not is_swing:
+            try:
+                from config import GATE as TH
+            except Exception:
+                TH = {}
+            ef_min = int(TH.get("spike_live_early_fail_min", 8) or 8)
+            ef_adv = float(TH.get("spike_live_early_fail_adverse_pct", 0.18) or 0.18)
+            nf_min = int(TH.get("spike_live_no_ft_min", 15) or 15)
+            nf_fav = float(TH.get("spike_live_no_ft_min_fav_pct", 0.12) or 0.12)
+            if entry_price and entry_price > 0:
+                if direction == "SHORT":
+                    fav_pct = ((entry_price - last_price) / entry_price) * 100
+                    adv_pct = ((last_price - entry_price) / entry_price) * 100
+                else:
+                    fav_pct = ((last_price - entry_price) / entry_price) * 100
+                    adv_pct = ((entry_price - last_price) / entry_price) * 100
+                if hold_minutes >= max(1, ef_min) and adv_pct >= max(0.05, ef_adv):
+                    status = "CLOSED"
+                    outcome = "EARLY_FAIL"
+                elif hold_minutes >= max(3, nf_min) and fav_pct < max(0.05, nf_fav):
+                    status = "CLOSED"
+                    outcome = "NO_FOLLOW"
+
         if not status and hold_minutes >= max_hold:
             status = "CLOSED"
             outcome = "EXPIRED"
@@ -903,6 +927,88 @@ def _clean_signal_text(val):
     while "  " in s:
         s = s.replace("  ", " ")
     return s.strip(" |")
+
+
+def wipe_live_signal_history():
+    """Delete all rows from live_signal_history (spikes + swing + backfills)."""
+    conn = get_conn()
+    try:
+        conn.execute("DELETE FROM live_signal_history")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def wipe_index_signal_history():
+    """Delete all rows from index_signal_history (NIFTY/BANKNIFTY radar)."""
+    conn = get_conn()
+    try:
+        conn.execute("DELETE FROM index_signal_history")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def replace_index_signal_rows(sigs: list, trade_date: str | None = None) -> int:
+    """
+    Insert index radar rows (same field shape as scheduler._ix_db_upsert).
+    Intended after a full wipe; uses explicit trade_date (default: today IST).
+    """
+    if not sigs:
+        return 0
+    td = (trade_date or datetime.now(IST).strftime("%Y-%m-%d")).strip()[:10]
+    conn = get_conn()
+    n = 0
+    now_wall = time.time()
+    try:
+        for sig in sigs:
+            sid = str(sig.get("id") or sig.get("sig_id") or "").strip()
+            if not sid:
+                continue
+            tm = str(sig.get("time") or sig.get("signal_time") or "").strip()
+            ts = float(sig.get("ts") or now_wall)
+            conn.execute(
+                """
+                INSERT INTO index_signal_history
+                  (sig_id, trade_date, symbol, type, signal_time, ts,
+                   index_px, strike, entry, sl, t1, t2, rr, lot_sz, lot_pnl_t1,
+                   chg_pct, strength, vix, quality, pcr, option_expiry, option_week,
+                   outcome, created_ts, updated_ts)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    sid,
+                    td,
+                    sig.get("symbol"),
+                    sig.get("type"),
+                    tm,
+                    ts,
+                    float(sig.get("index_px") or 0),
+                    int(sig.get("strike") or 0),
+                    float(sig.get("entry") or 0),
+                    float(sig.get("sl") or 0),
+                    float(sig.get("t1") or 0),
+                    float(sig.get("t2") or 0),
+                    float(sig.get("rr") or 0),
+                    int(sig.get("lot_sz") or 0),
+                    float(sig.get("lot_pnl_t1") or 0),
+                    float(sig.get("chg_pct") or 0),
+                    sig.get("strength", "md"),
+                    float(sig.get("vix") or 0),
+                    sig.get("quality"),
+                    sig.get("pcr"),
+                    sig.get("option_expiry"),
+                    sig.get("option_week"),
+                    sig.get("outcome"),
+                    ts,
+                    now_wall,
+                ),
+            )
+            n += 1
+        conn.commit()
+    finally:
+        conn.close()
+    return n
 
 
 def get_live_signal_history(

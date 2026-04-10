@@ -1,0 +1,10 @@
+{
+  "threshold": 0.6999999999999997,
+  "val_precision": 0.7,
+  "val_recall": 0.4117647058823529,
+  "auc": 0.588235294117647,
+  "n_train": 105,
+  "n_val": 35,
+  "target_precision": 0.8,
+  "path": "C:\\Users\\visra\\OneDrive\\Desktop\\trading_adv\\nse_edge_live\\backend\\data\\ix_radar_gb.joblib"
+}
