@@ -9069,7 +9069,7 @@ function ixFmtSignalTime(s) {
       if (opEl) opEl.textContent = '—';
     };
     try {
-      const r = await fetch('/api/performance/day?date=' + encodeURIComponent(day));
+      const r = await fetch((window._backendBase || '') + '/api/performance/day?date=' + encodeURIComponent(day));
       const data = await r.json();
       const allRows = Array.isArray(data.rows) ? data.rows : [];
       const rows = allRows.filter(x => String(x.section || '') === 'INDEX_RADAR');
@@ -9610,7 +9610,7 @@ function ixFmtSignalTime(s) {
 
     const hl = document.getElementById('ir-hist-list');
     if(hl) hl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2);font-size:9px">Loading...</div>';
-    fetch(`/api/index-signals/history?from_date=${from}&to_date=${to}`)
+    fetch(`${window._backendBase || ''}/api/index-signals/history?from_date=${from}&to_date=${to}`)
       .then(r => r.json())
       .then(data => {
         if(data.error) { if(hl) hl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--st);font-size:9px">Error: '+data.error+'</div>'; return; }
@@ -9691,7 +9691,7 @@ function ixFmtSignalTime(s) {
     const preset = (presetEl && presetEl.value) ? presetEl.value : 'default';
     if(hl) hl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t2);font-size:9px;line-height:2">⚡ Running backtest on Kite historical data...<br><span style="font-size:8px;color:var(--t3)">NIFTY & BANKNIFTY 1-min · preset: <b>' + preset + '</b></span></div>';
 
-    fetch('/api/index-signals/backtest', {
+    fetch((window._backendBase || '') + '/api/index-signals/backtest', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({from_date: from, to_date: to, preset: preset})
@@ -9729,7 +9729,7 @@ function ixFmtSignalTime(s) {
     const btn = document.getElementById('ir-ml-btn');
     const statsEl = document.getElementById('ir-hist-stats');
     if(btn) { btn.textContent = '⏳ Training...'; btn.disabled = true; }
-    fetch('/api/index-radar/ml-train', {
+    fetch((window._backendBase || '') + '/api/index-radar/ml-train', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ target_precision: 0.80 })
@@ -10903,6 +10903,9 @@ function nseWsUrl(){
   }
   return 'ws://127.0.0.1:8000/ws';
 }
+
+// Set early so all fetch('/api/...') paths can use the same base (local, EC2, domain).
+window._backendBase = nseBackendOrigin();
 
 // ═══════════════════════════════════════════════
 // LIVE DATA — WEBSOCKET CLIENT
@@ -13419,7 +13422,7 @@ async function asrRefreshDayPerfStrip() {
     if (opEl) opEl.textContent = '—';
   };
   try {
-    const r = await fetch('/api/performance/day?date=' + encodeURIComponent(day));
+    const r = await fetch((window._backendBase || '') + '/api/performance/day?date=' + encodeURIComponent(day));
     const data = await r.json();
     const allRows = Array.isArray(data.rows) ? data.rows : [];
     const rows = allRows.filter(x => String(x.section || '') === 'SPIKE');
@@ -14838,7 +14841,7 @@ function tvSetInterval(iv, btn) {
 async function testTelegram(){
   try{
     notify('Sending Telegram test...');
-    const r = await fetch('/api/telegram/test', {method:'POST'});
+    const r = await fetch((window._backendBase || '') + '/api/telegram/test', {method:'POST'});
     const d = await r.json();
     if(d.ok){
       var extra = (d.failures && d.failures.length) ? (' · ' + d.failures.join(' | ')) : '';
@@ -14853,7 +14856,7 @@ async function testTelegram(){
 async function testWhatsapp(){
   try{
     notify('Sending WhatsApp test...');
-    const r = await fetch('/api/whatsapp/test', {method:'POST'});
+    const r = await fetch((window._backendBase || '') + '/api/whatsapp/test', {method:'POST'});
     const d = await r.json();
     if(d.ok) notify('✓ WhatsApp message sent!');
     else notify('✗ WhatsApp error: ' + (d.error||'Set WHATSAPP_PHONE + WHATSAPP_APIKEY in .env'));
@@ -15403,7 +15406,7 @@ async function loadDayPerf(overrideDate){
   }
   if(sub) sub.textContent = day + ' · All sections';
   try{
-    const r = await fetch('/api/performance/day?date=' + encodeURIComponent(day));
+    const r = await fetch((window._backendBase || '') + '/api/performance/day?date=' + encodeURIComponent(day));
     const data = await r.json();
     _perfLastData = data;
     _perfFilterSection = 'ALL';
@@ -16666,7 +16669,7 @@ function egFmtPct(n){ return egFmt(n,1)+'%'; }
 
 // ── main snapshot ─────────────────────────────────────────────────────────
 function egLoad(){
-  fetch('/api/edge/snapshot')
+  fetch((window._backendBase || '') + '/api/edge/snapshot')
     .then(function(r){ return r.json(); })
     .then(function(d){
       if(d.error){ console.warn('edge snapshot err',d.error); return; }
@@ -16774,7 +16777,7 @@ function egRenderBar(barId, pctId, score, cls){
 
 // ── GEX load ──────────────────────────────────────────────────────────────
 function egLoadGex(){
-  fetch('/api/edge/gex')
+  fetch((window._backendBase || '') + '/api/edge/gex')
     .then(function(r){ return r.json(); })
     .then(function(d){
       egRenderGexFromSnap(d);
@@ -16825,7 +16828,7 @@ function egRunBacktest(){
   egTxt('eg-wr','...'); egTxt('eg-rr','...'); egTxt('eg-pnl','...'); egTxt('eg-dd','...');
   egHtml('eg-bt-tbody','<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--t2)">Running backtest…</td></tr>');
 
-  fetch('/api/edge/backtest?days='+days)
+  fetch((window._backendBase || '') + '/api/edge/backtest?days='+days)
     .then(function(r){ return r.json(); })
     .then(function(d){
       if(d.error){ egHtml('eg-bt-tbody','<tr><td colspan="8" style="text-align:center;padding:12px;color:var(--st)">'+d.error+'</td></tr>'); return; }
@@ -17017,7 +17020,7 @@ function egRenderBar(barId, pctId, score){
 
 // ── main load ─────────────────────────────────────────────
 function egLoad(){
-  fetch('/api/edge/snapshot')
+  fetch((window._backendBase || '') + '/api/edge/snapshot')
     .then(function(r){return r.json();})
     .then(function(d){
       if(d.error){console.warn('edge err',d.error);return;}
@@ -17113,7 +17116,7 @@ function egPaintAll(d){
 
 // ── GEX ──────────────────────────────────────────────────
 function egLoadGex(){
-  fetch('/api/edge/gex').then(function(r){return r.json();}).then(egRenderGex).catch(function(e){console.error('gex',e);});
+  fetch((window._backendBase || '') + '/api/edge/gex').then(function(r){return r.json();}).then(egRenderGex).catch(function(e){console.error('gex',e);});
 }
 
 function egRenderGex(gex){
@@ -17303,7 +17306,7 @@ function egRunBacktest(){
   var days=(egEl('eg-bt-days')||{}).value||90;
   ['eg-wr','eg-rr','eg-pnl','eg-dd'].forEach(function(id){egTxt(id,'…');});
   egHtml('eg-bt-tbody','<tr><td colspan="7" style="text-align:center;padding:16px;color:var(--t2)">Running…</td></tr>');
-  fetch('/api/edge/backtest?days='+days)
+  fetch((window._backendBase || '') + '/api/edge/backtest?days='+days)
     .then(function(r){return r.json();})
     .then(function(d){
       if(d.error){egHtml('eg-bt-tbody','<tr><td colspan="7" style="text-align:center;padding:12px;color:var(--st)">'+d.error+'</td></tr>');return;}
@@ -17407,8 +17410,8 @@ function hpFmtPct(n){ return n===null||n===undefined?'—':n.toFixed(1)+'%'; }
 // ── Entry point ──────────────────────────────────────────────
 function hpLoad(){
   Promise.all([
-    fetch('/api/history/calendar?months='+_hpRange).then(function(r){return r.json();}),
-    fetch('/api/history/stats?months='+_hpRange).then(function(r){return r.json();})
+    fetch((window._backendBase || '') + '/api/history/calendar?months='+_hpRange).then(function(r){return r.json();}),
+    fetch((window._backendBase || '') + '/api/history/stats?months='+_hpRange).then(function(r){return r.json();})
   ]).then(function(results){
     var cal = results[0], stats = results[1];
     _hpDays = cal.days || [];
