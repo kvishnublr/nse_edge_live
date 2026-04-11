@@ -3199,6 +3199,342 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
 </head>
 <body>
 
+<!-- ═══ VISHNU INTRO SPLASH ════════════════════════════════════════════════ -->
+<div id="vk-splash">
+
+  <!-- Rings -->
+  <div class="vk-ring" id="vk-r1"></div>
+  <div class="vk-ring" id="vk-r2"></div>
+  <div class="vk-ring" id="vk-r3"></div>
+
+  <!-- Corner brackets -->
+  <div class="vk-cor" id="vk-tl"><svg viewBox="0 0 30 30" fill="none"><path d="M2 28L2 2L28 2" stroke="#c9a84c" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+  <div class="vk-cor" id="vk-tr"><svg viewBox="0 0 30 30" fill="none"><path d="M2 28L2 2L28 2" stroke="#c9a84c" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+  <div class="vk-cor" id="vk-bl"><svg viewBox="0 0 30 30" fill="none"><path d="M2 28L2 2L28 2" stroke="#c9a84c" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+  <div class="vk-cor" id="vk-br"><svg viewBox="0 0 30 30" fill="none"><path d="M2 28L2 2L28 2" stroke="#c9a84c" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+
+  <!-- Scan line -->
+  <div id="vk-scan"></div>
+
+  <!-- Center -->
+  <div id="vk-center">
+
+    <!-- Monogram -->
+    <div id="vk-logo">
+      <div id="vk-halo"></div>
+      <div id="vk-orbit"></div>
+      <svg id="vk-mono" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="50" cy="50" r="44" stroke="url(#mg1)" stroke-width="1"/>
+        <line x1="50" y1="6"  x2="50" y2="13" stroke="rgba(201,168,76,.55)" stroke-width="1.2"/>
+        <line x1="50" y1="87" x2="50" y2="94" stroke="rgba(201,168,76,.55)" stroke-width="1.2"/>
+        <line x1="6"  y1="50" x2="13" y2="50" stroke="rgba(201,168,76,.55)" stroke-width="1.2"/>
+        <line x1="87" y1="50" x2="94" y2="50" stroke="rgba(201,168,76,.55)" stroke-width="1.2"/>
+        <path d="M27 32L50 66L73 32" stroke="url(#mg2)" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="50" cy="50" r="3" fill="rgba(201,168,76,.15)" stroke="rgba(255,240,160,.4)" stroke-width=".8"/>
+        <defs>
+          <linearGradient id="mg1" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#5a4010"/><stop offset=".45" stop-color="#f5e09a"/><stop offset=".55" stop-color="#fff8d6"/><stop offset="1" stop-color="#c9a84c"/>
+          </linearGradient>
+          <linearGradient id="mg2" x1="27" y1="32" x2="73" y2="66" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#c9a84c"/><stop offset=".5" stop-color="#fff8d6"/><stop offset="1" stop-color="#e8c96e"/>
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+
+    <!-- Text -->
+    <div id="vk-texts">
+      <div id="vk-from"><span id="vk-from-txt">A Thought From.....</span></div>
+      <div id="vk-div"></div>
+      <div id="vk-name"></div>
+      <div id="vk-sub">NSE EDGE &nbsp;·&nbsp; Intraday Intelligence</div>
+      <div id="vk-text-sparkles" aria-hidden="true"></div>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div id="vk-bar-wrap"><div id="vk-bar"></div></div>
+</div>
+
+<style>
+/* ══════════════════════════════════════════════════════════════════════════
+   VISHNU SPLASH — RESTORED & SMOOTHED
+   ══════════════════════════════════════════════════════════════════════════ */
+#vk-splash{
+  position:fixed;inset:0;z-index:99999;
+  background:#05090f;
+  display:flex;align-items:center;justify-content:center;
+  overflow:hidden;pointer-events:all;
+  transform-origin:100% 100%;
+}
+
+/* ── Rotating rings ──────────────────────────────────────────────────────── */
+.vk-ring{
+  position:absolute;border-radius:50%;
+  top:50%;left:50%;
+  transform:translate(-50%,-50%) scale(0);
+  opacity:0;
+  transition:transform 1.6s cubic-bezier(.22,1,.36,1), opacity 1.2s ease;
+}
+#vk-r1{width:580px;height:580px;border:1px solid rgba(201,168,76,.08);}
+#vk-r2{width:420px;height:420px;border:1px dashed rgba(201,168,76,.11);}
+#vk-r3{width:270px;height:270px;border:1px solid rgba(56,190,255,.08);}
+.vk-ring.on{transform:translate(-50%,-50%) scale(1);opacity:1;}
+#vk-r1.on{animation:vkR1 26s linear infinite;}
+#vk-r2.on{animation:vkR2 17s linear infinite;}
+#vk-r3.on{animation:vkR3 32s linear infinite reverse;}
+@keyframes vkR1{to{transform:translate(-50%,-50%) rotate(360deg)}}
+@keyframes vkR2{to{transform:translate(-50%,-50%) rotate(-360deg)}}
+@keyframes vkR3{to{transform:translate(-50%,-50%) rotate(360deg)}}
+
+/* ── Corner brackets ─────────────────────────────────────────────────────── */
+.vk-cor{position:absolute;width:28px;height:28px;opacity:0;transition:opacity 1s ease;}
+.vk-cor svg{width:100%;height:100%;}
+#vk-tl{top:22px;left:22px;}
+#vk-tr{top:22px;right:22px;transform:scaleX(-1);}
+#vk-bl{bottom:22px;left:22px;transform:scaleY(-1);}
+#vk-br{bottom:22px;right:22px;transform:scale(-1,-1);}
+.vk-cor.on{opacity:.55;}
+
+/* ── Scan line ───────────────────────────────────────────────────────────── */
+#vk-scan{
+  position:absolute;left:0;right:0;height:1px;top:-2px;
+  background:linear-gradient(90deg,transparent 5%,rgba(201,168,76,.45) 50%,transparent 95%);
+  filter:blur(.4px);opacity:0;
+  animation:vkScan 4.5s cubic-bezier(.4,0,.6,1) infinite 2s;
+}
+@keyframes vkScan{
+  0%  {top:-2px;opacity:0}
+  8%  {opacity:.8}
+  92% {opacity:.35}
+  100%{top:100%;opacity:0}
+}
+
+/* ── Center ──────────────────────────────────────────────────────────────── */
+#vk-center{
+  position:relative;z-index:2;
+  display:flex;flex-direction:column;align-items:center;gap:30px;
+}
+
+/* ── Monogram ────────────────────────────────────────────────────────────── */
+#vk-logo{
+  position:relative;
+  opacity:0;transform:scale(.6) translateY(-12px);
+  transition:opacity 1.2s ease, transform 1.4s cubic-bezier(.22,1,.36,1);
+}
+#vk-logo.on{opacity:1;transform:scale(1) translateY(0);}
+#vk-halo{
+  position:absolute;inset:-38px;border-radius:50%;
+  background:radial-gradient(circle,rgba(201,168,76,.18) 0%,rgba(201,168,76,.05) 45%,transparent 72%);
+  opacity:0;transition:opacity 1.2s ease .4s;
+  animation:vkHalo 3.2s ease-in-out infinite;
+}
+#vk-logo.on #vk-halo{opacity:1;}
+@keyframes vkHalo{
+  0%,100%{transform:scale(1);opacity:.7}
+  50%    {transform:scale(1.15);opacity:1}
+}
+#vk-orbit{
+  position:absolute;inset:-28px;border-radius:50%;
+  opacity:0;transition:opacity .8s ease .7s;
+  animation:vkOrb 5.5s linear infinite;
+}
+#vk-logo.on #vk-orbit{opacity:1;}
+#vk-orbit::before{
+  content:'';position:absolute;
+  width:5px;height:5px;border-radius:50%;
+  background:#f5e09a;top:0;left:50%;transform:translateX(-50%);
+  box-shadow:0 0 8px 2px rgba(201,168,76,.85);
+}
+@keyframes vkOrb{to{transform:rotate(360deg)}}
+#vk-mono{
+  width:96px;height:96px;display:block;
+  filter:drop-shadow(0 0 18px rgba(201,168,76,.5)) drop-shadow(0 0 45px rgba(201,168,76,.15));
+}
+#vk-mono circle{
+  stroke-dasharray:277;stroke-dashoffset:277;
+  transition:stroke-dashoffset 2s cubic-bezier(.4,0,.2,1) .15s;
+}
+#vk-logo.on #vk-mono circle{stroke-dashoffset:0;}
+
+/* ── Text block ──────────────────────────────────────────────────────────── */
+#vk-texts{
+  position:relative;
+  display:flex;flex-direction:column;align-items:center;gap:14px;
+  text-align:center;
+}
+/* Local sparkles over headline (absolute — no flex layout shift) */
+#vk-text-sparkles{
+  position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);
+  width:min(560px,94vw);height:min(280px,46vh);
+  pointer-events:none;z-index:6;overflow:visible;
+}
+.vts{
+  position:absolute;width:3px;height:3px;margin:-1.5px 0 0 -1.5px;border-radius:50%;
+  background:radial-gradient(circle,#fff 0%,rgba(255,236,200,.88) 50%,transparent 72%);
+  box-shadow:0 0 6px 1px rgba(255,215,150,.65),0 0 14px 3px rgba(56,190,255,.12);
+  opacity:0;
+  animation:vtsPop 3.2s cubic-bezier(.45,.05,.25,1) infinite;
+}
+@keyframes vtsPop{
+  0%,100%{opacity:0;transform:scale(.4);filter:blur(0);}
+  22%{opacity:.9;transform:scale(1);filter:blur(.2px);}
+  50%{opacity:.35;transform:scale(.72);}
+  78%{opacity:.75;transform:scale(1.05);}
+  94%{opacity:0;transform:scale(.55);}
+}
+
+/* Eyebrow: typewriter → then drifts down-right and fades */
+#vk-from{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:11px;letter-spacing:8px;text-transform:uppercase;
+  color:rgba(201,168,76,.72);
+  opacity:0;overflow:hidden;white-space:nowrap;
+  width:0;border-right:2px solid rgba(201,168,76,.75);
+  text-shadow:0 0 18px rgba(201,168,76,.35);
+  transition:opacity .3s;
+  will-change:width,transform,opacity;
+}
+#vk-from.on:not(.vk-sink){
+  opacity:1;
+  animation:vkType 1.5s steps(22,end) forwards, vkCursor .65s step-end 7 1.2s;
+}
+@keyframes vkType{to{width:min(92vw,368px)}}
+@keyframes vkCursor{
+  0%,100%{border-right-color:rgba(201,168,76,.75)}
+  50%    {border-right-color:transparent}
+}
+#vk-from.on.vk-sink{
+  overflow:visible;
+  border-right-color:transparent;
+  border-right-width:0;
+  width:min(92vw,368px);
+  opacity:1;
+  animation:vkFromDriftOut 1.18s cubic-bezier(.4,.02,.15,1) forwards;
+}
+@keyframes vkFromDriftOut{
+  0%  {opacity:1;transform:translate(0,0) rotate(0deg);filter:blur(0);letter-spacing:8px;}
+  55% {opacity:.55;transform:translate(56px,48px) rotate(1.5deg);filter:blur(1.5px);}
+  100%{opacity:0;transform:translate(110px,108px) rotate(3.5deg);filter:blur(7px);letter-spacing:16px;}
+}
+/* blink only while typing / visible, not during exit */
+#vk-from-txt{
+  display:inline;
+  animation:vkFromBlink 2.4s ease-in-out infinite;
+  animation-play-state:paused;
+}
+#vk-from.on:not(.vk-sink) #vk-from-txt{animation-play-state:running;animation-delay:1.5s;}
+#vk-from.vk-sink #vk-from-txt{animation:none;opacity:1;}
+@keyframes vkFromBlink{
+  0%,38%,62%,100%{opacity:1}
+  50%            {opacity:.08}
+}
+
+/* Gold divider with center diamond */
+#vk-div{
+  width:0;height:1px;opacity:0;position:relative;
+  background:linear-gradient(90deg,transparent,rgba(201,168,76,.55) 30%,rgba(255,240,160,.9) 50%,rgba(201,168,76,.55) 70%,transparent);
+  box-shadow:0 0 8px rgba(201,168,76,.25);
+  transition:width 1.5s cubic-bezier(.22,1,.36,1), opacity .5s ease;
+}
+#vk-div.on{width:280px;opacity:1;}
+#vk-div::after{
+  content:'';position:absolute;width:5px;height:5px;
+  background:#f5e09a;left:50%;top:-2px;
+  transform:rotate(45deg) translateX(-50%);
+  box-shadow:0 0 8px 2px rgba(201,168,76,.7);
+  opacity:0;transition:opacity .5s ease 1s;
+}
+#vk-div.on::after{opacity:1;}
+
+/* VISHNU.K — each letter rises individually */
+#vk-name{
+  display:flex;align-items:baseline;justify-content:center;
+  flex-wrap:wrap;
+  font-family:'Syne',sans-serif;
+  font-size:clamp(48px,6.5vw,82px);
+  font-weight:800;letter-spacing:8px;line-height:1;
+  perspective:640px;
+  transform-style:preserve-3d;
+}
+.vl{
+  display:inline-block;
+  background:linear-gradient(125deg,#4a3208 0%,#b8860b 18%,#f5e09a 35%,#fffcef 42%,#fff8d6 48%,#f5e09a 58%,#c9a84c 72%,#fffef0 85%,#7a5c18 100%);
+  background-size:320% 120%;
+  -webkit-background-clip:text;background-clip:text;
+  -webkit-text-fill-color:transparent;
+  opacity:0;
+  transform:translateY(28px) scale(.88) rotateX(-12deg);
+  filter:drop-shadow(0 0 10px rgba(201,168,76,.28));
+}
+@keyframes vkLetterShimmer{
+  0%  {background-position:100% 50%}
+  50% {background-position:0%   50%}
+  100%{background-position:100% 50%}
+}
+@keyframes vkLetterGlint{
+  0%,100%{filter:drop-shadow(0 0 10px rgba(201,168,76,.45)) drop-shadow(0 0 22px rgba(255,220,160,.12));}
+  50%{filter:drop-shadow(0 0 16px rgba(255,248,220,.75)) drop-shadow(0 0 32px rgba(56,190,255,.22));}
+}
+.vl.on{
+  opacity:1;
+  transform:translateY(0) scale(1) rotateX(0deg);
+  transition:opacity .85s cubic-bezier(.25,.8,.25,1), transform 1.05s cubic-bezier(.28,1.2,.42,1);
+  animation:vkLetterShimmer 4.5s ease-in-out infinite, vkLetterGlint 3.2s ease-in-out infinite;
+}
+.vl-dot{
+  -webkit-text-fill-color:rgba(255,240,160,.9);
+  animation:vkDotGlow 2s ease-in-out infinite 2.5s;
+}
+@keyframes vkDotGlow{
+  0%,100%{filter:drop-shadow(0 0 4px rgba(255,240,120,.35))}
+  50%    {filter:drop-shadow(0 0 16px rgba(255,240,120,1))}
+}
+
+/* Subtitle */
+#vk-sub{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10px;letter-spacing:4px;text-transform:uppercase;
+  color:rgba(56,190,255,.4);
+  opacity:0;transform:translateY(10px);
+  transition:opacity 1.2s ease, transform 1.2s cubic-bezier(.22,1,.36,1), letter-spacing 1.5s cubic-bezier(.22,1,.36,1);
+  text-shadow:0 0 16px rgba(56,190,255,.2);
+}
+#vk-sub.on{
+  opacity:1;transform:translateY(0);letter-spacing:6px;
+  color:rgba(130,210,255,.92);
+  animation:vkSubGlow 2.4s ease-in-out infinite;
+}
+@keyframes vkSubGlow{
+  0%,100%{text-shadow:0 0 12px rgba(56,190,255,.28),0 0 24px rgba(201,168,76,.08);letter-spacing:6px;}
+  50%{text-shadow:0 0 18px rgba(56,190,255,.48),0 0 36px rgba(255,230,160,.14);letter-spacing:6.5px;}
+}
+
+/* ── Progress bar ────────────────────────────────────────────────────────── */
+#vk-bar-wrap{
+  position:absolute;bottom:0;left:0;right:0;height:2px;z-index:3;
+  background:rgba(201,168,76,.05);
+}
+#vk-bar{
+  height:100%;width:0%;
+  background:linear-gradient(90deg,transparent,#8a6810 5%,#c9a84c 25%,#fff8d0 50%,#c9a84c 75%,#8a6810 95%,transparent);
+  box-shadow:0 0 18px 3px rgba(201,168,76,.5);
+  transition:width 4.2s cubic-bezier(.25,.85,.35,1);
+}
+#vk-bar.on{width:100%;}
+
+/* ── EXIT ────────────────────────────────────────────────────────────────── */
+#vk-splash.vk-exit{
+  pointer-events:none;
+  animation:vkExit 1.35s cubic-bezier(.4,0,.2,1) forwards;
+  transform-origin:50% 45%;
+}
+@keyframes vkExit{
+  0%  {opacity:1;transform:translateY(0) scale(1);filter:blur(0)}
+  100%{opacity:0;transform:translateY(-12px) scale(.985);filter:blur(5px)}
+}
+</style>
+
 <!-- TOPBAR -->
 <div id="tb">
   <div class="tbl">
@@ -17680,6 +18016,101 @@ function hpRenderWrCanvas(days){
       setTimeout(function(){ if(!_hpLoaded){ _hpLoaded=true; hpLoad(); } }, 80);
     }
   };
+})();
+</script>
+
+<script>
+/* ═══ VISHNU SPLASH — full sequence (DOM ids match HTML) ═══════════════════ */
+(function(){
+  var splash=document.getElementById('vk-splash');
+  if(!splash) return;
+
+  var raf=null;
+
+  function on(id,ms){
+    setTimeout(function(){
+      var el=document.getElementById(id);
+      if(el) el.classList.add('on');
+    },ms);
+  }
+  function onAll(sel,ms){
+    setTimeout(function(){
+      var list=document.querySelectorAll(sel);
+      for(var i=0;i<list.length;i++) list[i].classList.add('on');
+    },ms);
+  }
+
+  /* Build VISHNU.K letter spans */
+  var nameEl=document.getElementById('vk-name');
+  if(nameEl && nameEl.children.length===0){
+    'VISHNU'.split('').forEach(function(ch){
+      var sp=document.createElement('span');
+      sp.className='vl';
+      sp.textContent=ch;
+      nameEl.appendChild(sp);
+    });
+    var dot=document.createElement('span');
+    dot.className='vl vl-dot';
+    dot.textContent='.';
+    nameEl.appendChild(dot);
+    var k=document.createElement('span');
+    k.className='vl';
+    k.textContent='K';
+    nameEl.appendChild(k);
+  }
+
+  /* Soft sparkles only around headline (no full-screen bg stars) */
+  var tHost=document.getElementById('vk-text-sparkles');
+  if(tHost){
+    for(var t=0;t<16;t++){
+      var ts=document.createElement('span');
+      ts.className='vts';
+      ts.style.left=(14+Math.random()*72)+'%';
+      ts.style.top=(18+Math.random()*64)+'%';
+      ts.style.animationDelay=(Math.random()*2.6)+'s';
+      ts.style.animationDuration=(2.6+Math.random()*1.4)+'s';
+      tHost.appendChild(ts);
+    }
+  }
+
+  /* ── Timeline ───────────────────────────────────────────────── */
+  on('vk-r1', 120);
+  on('vk-r2', 260);
+  on('vk-r3', 400);
+  onAll('.vk-cor', 520);
+  on('vk-logo', 700);
+
+  setTimeout(function(){
+    var bar=document.getElementById('vk-bar');
+    if(bar) bar.classList.add('on');
+  }, 450);
+
+  on('vk-from', 1000);
+  on('vk-div', 2350);
+
+  var letters=document.querySelectorAll('#vk-name .vl');
+  var letterStart=2950;
+  var gap=115;
+  for(var li=0;li<letters.length;li++){
+    (function(idx){
+      setTimeout(function(){ letters[idx].classList.add('on'); }, letterStart+idx*gap);
+    })(li);
+  }
+
+  on('vk-sub', letterStart + letters.length*gap + 420);
+
+  /* ── Dismiss ─────────────────────────────────────────────────── */
+  var done=false;
+  function dismiss(){
+    if(done) return;
+    done=true;
+    if(raf!==null && typeof raf==='number') cancelAnimationFrame(raf);
+    splash.classList.add('vk-exit');
+    setTimeout(function(){ splash.style.display='none'; }, 1500);
+  }
+
+  setTimeout(dismiss, 8400);
+  splash.addEventListener('click', dismiss, {once:true});
 })();
 </script>
 
