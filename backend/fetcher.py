@@ -490,6 +490,10 @@ def fetch_fno_stocks(kite) -> List[dict]:
         nifty_eq = get_price("NIFTY") or {}
         nifty_chg = float(nifty_eq.get("chg_pct", 0) or 0)
 
+        missing_syms = [s for s in FNO_SYMBOLS if s not in fut_map]
+        if missing_syms:
+            logger.warning(f"fetch_fno_stocks: no futures found for {missing_syms}, skipping")
+
         for sym in FNO_SYMBOLS:
             fut = fut_map.get(sym)
             if not fut:
@@ -581,11 +585,27 @@ def _get_nfo_futures(kite) -> List[dict]:
         from config import FNO_SYMBOLS
         all_inst = kite.instruments("NFO")
         today    = datetime.now(IST).date()
+        # Some symbols have different 'name' field in Zerodha NFO instruments.
+        # Build an alias map: canonical symbol → list of possible name fields.
+        _name_aliases: dict = {
+            "BANKNIFTY": ["BANKNIFTY", "NIFTY BANK"],
+            "INDUSINDBK": ["INDUSINDBK", "INDUSINDBANK", "INDUSINDB"],
+        }
+        # Reverse alias lookup: any NFO name → canonical FNO_SYMBOLS name
+        _alias_reverse: dict = {}
+        for canon, aliases in _name_aliases.items():
+            for alias in aliases:
+                _alias_reverse[alias] = canon
+        # Build set for fast lookup (canonical names)
+        fno_set = set(FNO_SYMBOLS)
+
         # Near-month futures for our symbols
-        futures  = {}
+        futures: dict = {}
         for i in all_inst:
-            name = i.get("name", "")
-            if name not in FNO_SYMBOLS:
+            raw_name = i.get("name", "")
+            # Resolve alias to canonical name
+            name = _alias_reverse.get(raw_name, raw_name)
+            if name not in fno_set:
                 continue
             if i.get("instrument_type") != "FUT":
                 continue
@@ -594,10 +614,17 @@ def _get_nfo_futures(kite) -> List[dict]:
                 continue
             # Keep nearest expiry per symbol
             if name not in futures or exp < futures[name]["expiry"]:
-                futures[name] = i
+                # Store with canonical name so fut_map lookups work
+                inst = dict(i)
+                inst["name"] = name  # normalise to canonical
+                futures[name] = inst
         _nfo_fut_cache    = list(futures.values())
         _nfo_fut_cache_ts = time.time()
-        logger.info(f"Near-month futures loaded: {len(_nfo_fut_cache)} symbols")
+        found   = set(futures.keys())
+        missing = [s for s in FNO_SYMBOLS if s not in found]
+        logger.info(f"Near-month futures loaded: {len(_nfo_fut_cache)} / {len(FNO_SYMBOLS)} symbols")
+        if missing:
+            logger.warning(f"Missing NFO futures for: {missing} — these will be skipped in F&O stocks")
         return _nfo_fut_cache
     except Exception as e:
         logger.error(f"NFO futures instruments error: {e}")

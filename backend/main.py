@@ -103,7 +103,9 @@ async def lifespan(app: FastAPI):
                     _apply_new_token()
                     logger.info("Background startup token refresh SUCCESS")
                 else:
-                    logger.warning("Background startup token refresh FAILED — running in DEMO mode")
+                    logger.warning(
+                        "Background startup token refresh FAILED — live quotes need a valid Kite token (refresh manually or fix auto_token)"
+                    )
             except Exception as _e:
                 logger.warning(f"Background startup token refresh error: {_e}")
         threading.Thread(target=_bg_refresh, daemon=True).start()
@@ -124,7 +126,7 @@ async def lifespan(app: FastAPI):
     
     demo_mode = getattr(feed_manager, '_demo_mode', False)
     if demo_mode:
-        logger.info("Running in DEMO MODE (no live trading)")
+        logger.info("Kite session pending — chain/stocks/quotes use Kite only; empty until token is valid")
         kite = None
     else:
         # Get authenticated Kite instance
@@ -146,7 +148,7 @@ async def lifespan(app: FastAPI):
         else:
             chain = None
             stocks = []
-            logger.info("  Skipping chain/stocks (Kite not available in demo mode)")
+            logger.info("  Skipping chain/stocks (Kite session not ready yet)")
 
         if indices:
             logger.info(f"  Nifty={indices.get('nifty',0):.0f} "

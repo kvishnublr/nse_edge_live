@@ -10884,20 +10884,20 @@ async function cfLoadHistory(){
 setMode('intraday');
 setTimeout(()=>notify('NSE EDGE  ready — Connecting to live data...'),400);
 
-// API base: same origin when UI is opened from http://localhost:PORT/ (FastAPI serves /)
+// API base: same origin whenever the UI is served by FastAPI (local, EC2, domain).
+// Only GitHub Pages uses a separate backend; file:// falls back to local dev port.
 function nseBackendOrigin(){
   if(window.location.hostname === 'kvishnublr.github.io')
     return 'https://nse-edge-backend.fly.dev';
-  const h = window.location.hostname, p = window.location.protocol;
-  if((h === 'localhost' || h === '127.0.0.1') && (p === 'http:' || p === 'https:'))
+  if(window.location.protocol === 'http:' || window.location.protocol === 'https:')
     return window.location.origin;
   return 'http://127.0.0.1:8000';
 }
 function nseWsUrl(){
   if(window.location.hostname === 'kvishnublr.github.io')
     return 'wss://nse-edge-backend.fly.dev/ws';
-  const h = window.location.hostname, pr = window.location.protocol;
-  if((h === 'localhost' || h === '127.0.0.1') && (pr === 'http:' || pr === 'https:')){
+  const pr = window.location.protocol;
+  if(pr === 'http:' || pr === 'https:'){
     const w = pr === 'https:' ? 'wss:' : 'ws:';
     return w + '//' + window.location.host + '/ws';
   }
@@ -13034,11 +13034,25 @@ function _srEntry(sp) {
   const p = sp.price || 0;
   if(!p) return null;
   const isBuy = sp.type !== 'sell';
+
+  // Prefer backend ATR-based levels when the server sends them
+  if(sp.entry && sp.sl && sp.t1 && sp.t2) {
+    return {
+      entry: sp.entry, sl: sp.sl, t1: sp.t1, t2: sp.t2, isBuy,
+      atr: sp.atr || 0, rr: sp.rr || 0, atrBased: true
+    };
+  }
+
+  // Fallback: fixed-% template (used when backend levels not yet populated)
   const entry = isBuy ? +(p * 1.0005).toFixed(2) : +(p * 0.9995).toFixed(2);
-  const sl    = isBuy ? +(entry * 0.995).toFixed(2)  : +(entry * 1.005).toFixed(2);  // 0.5% SL (data: 50% acc vs 39%)
-  const t1    = isBuy ? +(entry * 1.005).toFixed(2)  : +(entry * 0.995).toFixed(2);  // 0.5% T1 → R:R 1:1
-  const t2    = isBuy ? +(entry * 1.010).toFixed(2)  : +(entry * 0.990).toFixed(2);  // 1.0% T2 → R:R 1:2
-  return {entry, sl, t1, t2, isBuy};
+  const atrEst = p * 0.004; // ~0.4% as rough ATR estimate
+  const sl_pts = Math.max(p * 0.002, atrEst * 0.5);
+  const t1_pts = Math.max(p * 0.004, atrEst * 1.0);
+  const t2_pts = Math.max(p * 0.008, atrEst * 2.2);
+  const sl = isBuy ? +(entry - sl_pts).toFixed(2) : +(entry + sl_pts).toFixed(2);
+  const t1 = isBuy ? +(entry + t1_pts).toFixed(2) : +(entry - t1_pts).toFixed(2);
+  const t2 = isBuy ? +(entry + t2_pts).toFixed(2) : +(entry - t2_pts).toFixed(2);
+  return {entry, sl, t1, t2, isBuy, atr: 0, rr: 0, atrBased: false};
 }
 
 /** Map API spike `outcome` (e.g. "HIT SL") to internal status. */
@@ -13688,11 +13702,11 @@ function _asrPaintSpikeCards(log, filter, cfg) {
       </div>
       <div class="sr-lvl">
         <div class="sr-lvl-box" style="background:rgba(255,255,255,.04)">
-          <div class="sr-lvl-k">ENTRY</div>
+          <div class="sr-lvl-k">ENTRY ${sp.atr ? '<span style="font-size:7px;opacity:.7;font-weight:600">ATR</span>' : ''}</div>
           <div class="sr-lvl-v" style="color:var(--t0)">${fmtP(sp.entry)}</div>
         </div>
         <div class="sr-lvl-box" style="background:rgba(255,51,85,.08)">
-          <div class="sr-lvl-k">SL</div>
+          <div class="sr-lvl-k">SL ${sp.entry && sp.sl ? ((Math.abs(sp.sl - sp.entry) / sp.entry) * 100).toFixed(2) + '%' : ''}</div>
           <div class="sr-lvl-v" style="color:var(--st)">${fmtP(sp.sl)}</div>
         </div>
         <div class="sr-lvl-box" style="background:rgba(0,140,255,.08)">
@@ -13710,7 +13724,9 @@ function _asrPaintSpikeCards(log, filter, cfg) {
         <span>OI <b style="color:${(sp.oi_pct || 0) >= 0 ? 'var(--go)' : 'var(--st)'}">${(sp.oi_pct || 0) >= 0 ? '+' : ''}${(sp.oi_pct || 0).toFixed(1)}%</b></span>
         <span>·</span>
         <span>Chg <b style="color:${(sp.chg_pct || 0) >= 0 ? 'var(--go)' : 'var(--st)'}">${(sp.chg_pct || 0) >= 0 ? '+' : ''}${(sp.chg_pct || 0).toFixed(2)}%</b></span>
-        <span style="margin-left:auto;font-size:7.5px;opacity:.6">Score ${sp.backend_score || sp.score * 10}/100 · Sigs ${sp.score}/10 · R:R 1:${sp.entry && sp.sl && sp.t2 ? Math.abs((sp.t2 - sp.entry) / (sp.entry - sp.sl)).toFixed(1) : '2.4'} (T1 1:${sp.entry && sp.sl && sp.t1 ? Math.abs((sp.t1 - sp.entry) / (sp.entry - sp.sl)).toFixed(1) : '1.2'})</span>
+        ${sp.atr ? `<span>· ATR <b style="color:var(--am)">₹${sp.atr}</b></span>` : ''}
+        ${sp.sym_wr != null ? `<span style="padding:1px 6px;border-radius:4px;background:${sp.sym_wr>=0.70?'rgba(16,185,129,.15)':sp.sym_wr>=0.55?'rgba(245,158,11,.12)':'rgba(239,68,68,.12)'};color:${sp.sym_wr>=0.70?'var(--go)':sp.sym_wr>=0.55?'var(--am)':'var(--st)'};font-weight:800">WR ${Math.round(sp.sym_wr*100)}%</span>` : ''}
+        <span style="margin-left:auto;font-size:7.5px;opacity:.7">R:R 1:${sp.rr || (sp.entry && sp.sl && sp.t2 ? Math.abs((sp.t2-sp.entry)/(sp.entry-sp.sl)).toFixed(1) : '2.0')} · Score ${sp.backend_score || sp.score}</span>
       </div>
     </div>`;
   }).join('');

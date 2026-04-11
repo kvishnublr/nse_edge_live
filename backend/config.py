@@ -180,6 +180,11 @@ INTERVAL_STOCKS  = 30   # FnO stock OI refresh
 INTERVAL_FII     = 300  # FII/DII from NSE (updates ~hourly anyway)
 INTERVAL_SPIKES  = 10   # spike detection
 
+# ─── TRADING ACCOUNT PARAMETERS ──────────────────────────────────────────────
+# Set ACCOUNT_VALUE in .env (e.g. ACCOUNT_VALUE=500000) — used for Gate 5 position sizing.
+ACCOUNT_VALUE     = int(os.getenv("ACCOUNT_VALUE", "500000"))
+RISK_PER_TRADE    = float(os.getenv("RISK_PER_TRADE", "0.01"))   # fraction, e.g. 0.01 = 1%
+
 # ─── GATE THRESHOLDS (80% WIN RATE TARGET) ───────────────────────
 GATE = {
     # G1 — Regime (relaxed to match 2025 profitable regime)

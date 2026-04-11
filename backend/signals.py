@@ -22,6 +22,143 @@ _stock_exec_alert_ts: dict[str, float] = {}
 STOCK_EXECUTE_TELEGRAM_COOLDOWN_SEC = 1800  # per symbol
 # ADV-SPIKES Telegram/WhatsApp: last send epoch per (symbol, type) — see spike_telegram_dedup_minutes
 _spike_alert_last_ts: dict[tuple[str, str], float] = {}
+# Smart dedup: also track score of last sent signal so high-score spikes can override
+_spike_alert_last_score: dict[tuple[str, str], int] = {}
+
+# ─── WIN-RATE CACHE (from live_signal_history DB) ─────────────────────────────
+_wr_cache: dict = {"ts": 0, "sym": {}, "bucket": {}}
+_WR_CACHE_TTL = 1800  # refresh every 30 min
+
+
+def _load_wr_data() -> None:
+    """Load win-rate stats from DB into cache. Non-blocking — catches all errors."""
+    try:
+        import sqlite3
+        from backtest_data import DB_PATH
+        conn = sqlite3.connect(DB_PATH, timeout=3)
+        cur  = conn.cursor()
+
+        # Per-symbol WR (min 10 resolved trades)
+        cur.execute("""
+            SELECT symbol,
+                SUM(CASE WHEN outcome='TARGET HIT' THEN 1 ELSE 0 END) as wins,
+                SUM(CASE WHEN outcome='SL HIT' THEN 1 ELSE 0 END)     as losses
+            FROM live_signal_history
+            WHERE outcome IN ('TARGET HIT','SL HIT')
+            GROUP BY symbol
+            HAVING (wins + losses) >= 10
+        """)
+        sym_adj: dict[str, int] = {}
+        sym_wr:  dict[str, float] = {}
+        for sym, w, l in cur.fetchall():
+            total = w + l
+            wr    = w / total
+            sym_wr[sym] = round(wr, 3)
+            if   wr < 0.50: sym_adj[sym] = +15   # weak — much harder to fire
+            elif wr < 0.58: sym_adj[sym] = +8    # below-avg
+            elif wr < 0.65: sym_adj[sym] = +3    # borderline
+            elif wr >= 0.78: sym_adj[sym] = -5   # proven — slightly easier
+            else:           sym_adj[sym] = 0
+
+        # Per time-bucket WR (from actual signal_time HH:MM)
+        cur.execute("""
+            SELECT
+                CASE
+                    WHEN CAST(substr(signal_time,1,2) AS INTEGER)*60
+                       + CAST(substr(signal_time,4,2) AS INTEGER) < 630 THEN 'open_915_930'
+                    WHEN CAST(substr(signal_time,1,2) AS INTEGER)*60
+                       + CAST(substr(signal_time,4,2) AS INTEGER) < 690 THEN 'morning_930_1030'
+                    WHEN CAST(substr(signal_time,1,2) AS INTEGER)*60
+                       + CAST(substr(signal_time,4,2) AS INTEGER) < 780 THEN 'midday_1030_1300'
+                    ELSE 'late_1300_plus'
+                END as bucket,
+                SUM(CASE WHEN outcome='TARGET HIT' THEN 1 ELSE 0 END) as wins,
+                SUM(CASE WHEN outcome='SL HIT'     THEN 1 ELSE 0 END) as losses
+            FROM live_signal_history
+            WHERE outcome IN ('TARGET HIT','SL HIT')
+              AND length(signal_time) >= 5
+            GROUP BY bucket
+            HAVING (wins + losses) >= 15
+        """)
+        bkt_adj: dict[str, int] = {}
+        for bkt, w, l in cur.fetchall():
+            total = w + l
+            wr    = w / total
+            if   wr < 0.45: bkt_adj[bkt] = +12  # terrible — big penalty
+            elif wr < 0.55: bkt_adj[bkt] = +6   # below avg
+            elif wr < 0.62: bkt_adj[bkt] = +3
+            else:           bkt_adj[bkt] = 0
+
+        conn.close()
+        _wr_cache.update({"ts": time.time(), "sym": sym_adj, "bucket": bkt_adj,
+                          "sym_wr": sym_wr})
+        logger.info("WR cache loaded: %d symbols, %d buckets", len(sym_adj), len(bkt_adj))
+    except Exception as e:
+        logger.debug("WR cache load failed: %s", e)
+
+
+def _get_wr_adj(sym: str, time_bucket: str) -> tuple[int, float]:
+    """Return (score_floor_delta, win_rate) for symbol+bucket. Refreshes cache if stale."""
+    now = time.time()
+    if now - _wr_cache["ts"] > _WR_CACHE_TTL:
+        _load_wr_data()
+    sym_delta = _wr_cache.get("sym", {}).get(sym, 0)
+    bkt_delta = _wr_cache.get("bucket", {}).get(time_bucket, 0)
+    wr        = _wr_cache.get("sym_wr", {}).get(sym, -1.0)
+    return sym_delta + bkt_delta, wr
+
+
+# ─── STOCK ATR LEVELS (per-stock ATR-based T1/T2/SL) ─────────────────────────
+# Fallback ATR% by symbol tier when price_history is sparse
+_ATR_FALLBACK_PCT: dict[str, float] = {
+    "MARUTI": 0.55, "BAJFINANCE": 0.55, "TATAMOTORS": 0.60,
+    "INDUSINDBK": 0.50, "KOTAKBANK": 0.40, "AXISBANK": 0.45,
+    "SBIN": 0.40, "ICICIBANK": 0.40, "HDFCBANK": 0.35,
+    "RELIANCE": 0.35, "TCS": 0.30, "INFY": 0.30,
+    "TATASTEEL": 0.55, "LT": 0.40, "SUNPHARMA": 0.40,
+}
+_ATR_SL_MULT  = 0.5   # SL  = 0.5 × ATR from entry  → keeps tight stop
+_ATR_T1_MULT  = 1.0   # T1  = 1.0 × ATR             → 1:2 R:R
+_ATR_T2_MULT  = 2.2   # T2  = 2.2 × ATR             → 1:4.4 R:R
+
+
+def _compute_spike_levels(sym: str, price: float, sp_type: str) -> dict:
+    """
+    ATR-based entry/SL/T1/T2 for a stock spike.
+    Uses live price_history ATR; falls back to symbol-tier % when data is sparse.
+    """
+    isBuy = sp_type == "buy"
+
+    # Try live ATR first
+    atr     = calc_atr(sym)
+    atr_pct = (atr / price * 100) if price > 0 else 0
+
+    # Sanity check: if ATR is unrealistically small or huge, use fallback
+    expected_pct = _ATR_FALLBACK_PCT.get(sym, 0.45)
+    if atr_pct < 0.08 or atr_pct > 4.0:
+        atr = price * expected_pct / 100
+        atr_pct = expected_pct
+
+    # Clamp: never let SL be less than 0.2% or T1 be less than 0.4%
+    sl_pts = max(price * 0.002, atr * _ATR_SL_MULT)
+    t1_pts = max(price * 0.004, atr * _ATR_T1_MULT)
+    t2_pts = max(price * 0.008, atr * _ATR_T2_MULT)
+
+    entry = round(price, 2)
+    if isBuy:
+        sl = round(entry - sl_pts, 2)
+        t1 = round(entry + t1_pts, 2)
+        t2 = round(entry + t2_pts, 2)
+    else:
+        sl = round(entry + sl_pts, 2)
+        t1 = round(entry - t1_pts, 2)
+        t2 = round(entry - t2_pts, 2)
+
+    rr = round(t1_pts / sl_pts, 2) if sl_pts else 0
+    return {
+        "entry": entry, "sl": sl, "t1": t1, "t2": t2,
+        "atr": round(atr, 2), "atr_pct": round(atr_pct, 3), "rr": rr,
+    }
 
 
 def _send_telegram(msg: str):
@@ -217,8 +354,9 @@ def _send_whatsapp(msg: str):
 
 
 # ─── SPIKE SCORING HELPER ─────────────────────────────────────────────────────
-def _score_spike(vol_mult: float, chg_pct: float, sym: str, candle_min: int) -> int:
-    """Score a spike 0-100. Higher price/vol now score higher (not penalized)."""
+def _score_spike(vol_mult: float, chg_pct: float, sym: str, candle_min: int,
+                 sym_wr: float = -1.0) -> int:
+    """Score a spike 0-100. Includes WR bonus/penalty when historical data exists."""
     score = 0
     # Volume quality (0-35): 5-8× is sweet spot; very high can still be valid
     if 5.0 <= vol_mult < 8.0:    score += 35
@@ -235,16 +373,23 @@ def _score_spike(vol_mult: float, chg_pct: float, sym: str, candle_min: int) -> 
     elif 0.3 <= ap < 0.4:  score += 10
     else:                   score += 4
     # Symbol quality (0-20) — expanded lists for NSE F&O universe
-    hi_sym = {'TCS', 'TATASTEEL', 'MARUTI', 'INFY', 'RELIANCE', 'HDFCBANK', 'ICICIBANK', 'AXISBANK'}
+    hi_sym = {'TCS', 'TATASTEEL', 'INFY', 'RELIANCE', 'HDFCBANK', 'AXISBANK',
+              'BAJFINANCE', 'TATAMOTORS', 'INDUSINDBK', 'SUNPHARMA', 'LT'}
     md_sym = {
-        'BAJFINANCE', 'TATAMOTORS', 'WIPRO', 'TECHM', 'SBIN', 'KOTAKBANK',
-        'LT', 'NTPC', 'POWERGRID', 'ONGC', 'COALINDIA', 'INDUSINDBK',
+        'WIPRO', 'TECHM', 'SBIN', 'KOTAKBANK', 'MARUTI', 'ICICIBANK',
+        'NTPC', 'POWERGRID', 'ONGC', 'COALINDIA',
         'BAJAJFINSV', 'ADANIENT', 'ADANIPORTS', 'HINDUNILVR', 'BHARTIARTL',
-        'SUNPHARMA', 'DRREDDY', 'DIVISLAB', 'EICHERMOT', 'HEROMOTOCO',
+        'DRREDDY', 'DIVISLAB', 'EICHERMOT', 'HEROMOTOCO',
     }
     if sym in hi_sym:    score += 20
     elif sym in md_sym:  score += 12
     else:                score += 5
+    # Historical win-rate bonus/penalty (0-8): data-driven adjustment
+    if sym_wr >= 0.78:   score += 8   # proven high-WR symbol
+    elif sym_wr >= 0.70: score += 4
+    elif sym_wr >= 0.60: score += 0   # neutral
+    elif sym_wr >= 0.50: score -= 3   # slightly weak
+    elif sym_wr >= 0:    score -= 7   # poor WR — penalise the raw score too
     # Time quality (0-15)
     if candle_min <= 600:    score += 15   # 09:15-10:00 — best
     elif candle_min <= 810:  score += 10   # 10:00-13:30
@@ -263,48 +408,63 @@ def _send_spike_alert(spike: dict):
     score = spike.get("score", 0)
     if score < 60:
         return
-    sym = str(spike.get("symbol", "") or "").strip().upper()
-    sp_type = str(spike.get("type", "") or "").strip().lower()
+    sym     = str(spike.get("symbol", "") or "").strip().upper()
+    sp_type = str(spike.get("type",   "") or "").strip().lower()
     if not sym or sp_type not in ("buy", "sell"):
         return
+
     dedup_min = max(1, min(120, int(TH.get("spike_telegram_dedup_minutes", 20) or 20)))
-    now_ts = time.time()
-    _k = (sym, sp_type)
-    prev = _spike_alert_last_ts.get(_k, 0.0)
-    if now_ts - prev < dedup_min * 60:
+    now_ts    = time.time()
+    _k        = (sym, sp_type)
+    prev_ts   = _spike_alert_last_ts.get(_k, 0.0)
+    prev_score = _spike_alert_last_score.get(_k, 0)
+
+    # Smart dedup: allow override if score is significantly higher (≥12 pts) than last alert
+    score_override = score >= prev_score + 12 and now_ts - prev_ts >= 5 * 60
+    if not score_override and now_ts - prev_ts < dedup_min * 60:
         return
+
     uni = str(TH.get("spike_universe", "NIFTY200") or "").upper()
     if uni == "NIFTY200" and sym:
         try:
             from fetcher import get_nifty200_symbols
-
             n200 = {str(s).strip().upper() for s in (get_nifty200_symbols() or []) if s}
             if n200 and sym not in n200:
                 return
         except Exception:
             pass
+
     price = float(spike.get("price", 0) or 0)
-    chg = spike.get("chg_pct", 0)
-    vm = spike.get("vol_mult", 0)
-    sig = spike.get("signal", "")
-    t = spike.get("time", "")
-    # Same % template as ADV-SPIKES live UI: T1 ±0.5%, T2 ±1.0%, SL ∓0.5%
-    if sp_type == "buy":
-        sl = price * 0.995
-        t1 = price * 1.005
-        t2 = price * 1.01
-    else:
-        sl = price * 1.005
-        t1 = price * 0.995
-        t2 = price * 0.99
+    chg   = spike.get("chg_pct", 0)
+    vm    = spike.get("vol_mult", 0)
+    sig   = spike.get("signal", "")
+    t     = spike.get("time", "")
+
+    # Use ATR-based levels from spike dict (set by detect_spikes), else compute now
+    entry = float(spike.get("entry", price) or price)
+    sl    = float(spike.get("sl",    0)    or 0)
+    t1    = float(spike.get("t1",    0)    or 0)
+    t2    = float(spike.get("t2",    0)    or 0)
+    atr   = float(spike.get("atr",   0)    or 0)
+    rr    = float(spike.get("rr",    0)    or 0)
+    if not sl:
+        lvl   = _compute_spike_levels(sym, price, sp_type)
+        entry, sl, t1, t2 = lvl["entry"], lvl["sl"], lvl["t1"], lvl["t2"]
+        atr, rr = lvl["atr"], lvl["rr"]
+
+    # WR context
+    _, sym_wr = _get_wr_adj(sym, "")
+    wr_str = f" · Historical WR {sym_wr*100:.0f}%" if sym_wr >= 0 else ""
+
     msg = (
         f"⚡ <b>ADV-SPIKES (NIFTY 200) — {sym}</b>  [Score: {score}]\n"
-        f"Signal: {sig}  |  {'+' if chg >= 0 else ''}{chg:.2f}%  |  Vol {vm:.1f}×\n"
+        f"Signal: {sig}  |  {'+' if chg >= 0 else ''}{chg:.2f}%  |  Vol {vm:.1f}×{wr_str}\n"
         f"LTP: ₹{price:.2f}  |  {t}\n"
-        f"<b>Model</b> Entry ~ ₹{price:.2f} · SL ₹{sl:.2f} · T1 ₹{t1:.2f} · T2 ₹{t2:.2f}\n"
-        f"<i>T1 ±0.5% · T2 ±1.0% · SL ∓0.5% vs entry (cash template)</i>"
+        f"<b>ATR-Model</b>  Entry ₹{entry:.2f} · SL ₹{sl:.2f} · T1 ₹{t1:.2f} · T2 ₹{t2:.2f}\n"
+        f"<i>ATR ₹{atr:.2f} · R:R 1:{rr:.1f} (ATR-scaled levels)</i>"
     )
-    _spike_alert_last_ts[_k] = now_ts
+    _spike_alert_last_ts[_k]    = now_ts
+    _spike_alert_last_score[_k] = score
     _send_telegram(msg)
     _send_whatsapp(_strip_html_for_whatsapp(msg))
 
@@ -463,11 +623,42 @@ def gate2_smart_money(chain: dict) -> dict:
     mp_dist = round(ul - mp) if mp else 0
     mp_lbl  = f"{mp:,} ({'+' if mp_dist >= 0 else ''}{mp_dist} pts away)"
 
+    # ATM strike OI delta — most predictive single data point in the chain
+    atm_row = None
+    try:
+        strikes = chain.get("strikes", [])
+        if strikes and ul > 0:
+            # Find the strike closest to current price
+            atm = min(strikes, key=lambda s: abs(s.get("strike", 0) - ul))
+            atm_strike   = atm.get("strike", 0)
+            atm_c_oi     = atm.get("call_oi", 0)
+            atm_p_oi     = atm.get("put_oi", 0)
+            atm_c_chg    = atm.get("call_oi_chg", 0)
+            atm_p_chg    = atm.get("put_oi_chg", 0)
+            # Net OI change at ATM: +put / -call = bullish pressure
+            atm_net_chg  = atm_p_chg - atm_c_chg
+            atm_col      = "cg" if atm_net_chg > 5000 else "cr" if atm_net_chg < -5000 else "ca"
+            atm_lbl      = (f"{atm_strike} | CE OI {atm_c_oi:,} ({'+' if atm_c_chg>=0 else ''}{atm_c_chg:,}) "
+                            f"| PE OI {atm_p_oi:,} ({'+' if atm_p_chg>=0 else ''}{atm_p_chg:,})")
+            atm_row      = {"k": f"ATM {atm_strike} OI chg", "v": atm_lbl, "c": atm_col}
+            # Scoring: ATM CE build (bears adding shorts) is bearish; ATM PE build is bullish
+            if atm_net_chg > 10000:   net += 50000   # strong bullish ATM signal
+            elif atm_net_chg < -10000: net -= 50000  # strong bearish ATM signal
+    except Exception:
+        pass
+
+    # Max Pain pin zone: if price within ±0.3% of max pain near EOD, expect reversal
+    import datetime as _dt
+    ist_now = _dt.datetime.now(pytz.timezone("Asia/Kolkata"))
+    near_eod = ist_now.hour * 60 + ist_now.minute >= 840  # after 14:00
+    max_pain_pin = mp and ul and abs(ul - mp) / mp < 0.003 and near_eod
+
     score = 60
     if pcr >= TH["pcr_bullish"]:   score += 25
     elif pcr <= TH["pcr_bearish"]: score -= 25
     if net > 100000:               score += 15
     elif net < -100000:            score -= 15
+    if max_pain_pin:               score -= 10  # pinning near max pain → reduce conviction
     score = max(0, min(100, score))
 
     if score <= 35 or pcr <= TH["pcr_bearish"]:
@@ -485,8 +676,10 @@ def gate2_smart_money(chain: dict) -> dict:
         {"k": "Total Put OI",  "v": f"{tp_oi:,}", "c": "cg"},
         {"k": "OI net bias",   "v": f"{'+' if net >= 0 else ''}{net:,}",
          "c": "cg" if net > 0 else "cr"},
-        {"k": "Max Pain",      "v": mp_lbl, "c": "ca"},
+        {"k": "Max Pain",      "v": mp_lbl + (" ⚠ PIN ZONE" if max_pain_pin else ""), "c": "ca"},
     ]
+    if atm_row:
+        rows.insert(2, atm_row)
     return {"name": "SMART MONEY", "state": st, "score": score, "rows": rows}
 
 
@@ -651,29 +844,28 @@ def gate5_risk(indices: dict, chain: dict, mode: str) -> dict:
     position_size_lots = 0
     position_size_rupees = 0
     if st == "go" and rr > 0 and mult > 0:
-        # Account risk parameters (can be made configurable later)
-        account_value = 500000  # ₹5 lakh trading capital
-        risk_per_trade = 0.01   # 1% risk per trade
-        monetary_risk = account_value * risk_per_trade  # ₹5,000 risk per trade
-        
-        # Risk per lot = stop points * lot size
-        lot_size = LOT_SIZES.get("NIFTY", 25)  # Default to NIFTY lot size
-        risk_per_lot = stop_pts * lot_size
-        
+        from config import ACCOUNT_VALUE, RISK_PER_TRADE
+        monetary_risk = ACCOUNT_VALUE * RISK_PER_TRADE  # configurable, default 1% of capital
+        lot_size      = LOT_SIZES.get("NIFTY", 25)
+        risk_per_lot  = stop_pts * lot_size
         if risk_per_lot > 0:
-            raw_lots = monetary_risk / (risk_per_lot * mult)  # Adjust for VIX sizing
-            position_size_lots = max(1, int(round(raw_lots)))  # At least 1 lot
+            raw_lots           = monetary_risk / (risk_per_lot * mult)
+            position_size_lots = max(1, int(round(raw_lots)))
             position_size_rupees = position_size_lots * lot_size * nifty
 
+    from config import ACCOUNT_VALUE, RISK_PER_TRADE
     rows = [
-        {"k": "R:R ratio",     "v": rr_lbl,  "c": rr_col},
+        {"k": "R:R ratio",      "v": rr_lbl,  "c": rr_col},
         {"k": "Target (CE wall)","v": f"{target:,} (+{target-nifty:.0f} pts)","c": "cg"},
-        {"k": "Stop distance", "v": f"{stop_pts} pts → SL {stop_price:,}", "c": "ca"},
-        {"k": "VIX sizing",    "v": size_lbl, "c": size_col},
-        {"k": "Position Size", "v": f"{position_size_lots} lot{'s' if position_size_lots > 1 else ''} (₹{position_size_rupees:,})", "c": "cg" if position_size_lots > 0 else "st"},
-        {"k": "Risk verdict",  "v": "VALID ✓" if st == "go" else
+        {"k": "Stop distance",  "v": f"{stop_pts} pts → SL {stop_price:,}", "c": "ca"},
+        {"k": "VIX sizing",     "v": size_lbl, "c": size_col},
+        {"k": "Account / Risk", "v": f"₹{ACCOUNT_VALUE:,} @ {RISK_PER_TRADE*100:.1f}% = ₹{ACCOUNT_VALUE*RISK_PER_TRADE:,.0f} risk/trade",
+         "c": "cb"},
+        {"k": "Position Size",  "v": f"{position_size_lots} lot{'s' if position_size_lots > 1 else ''} (₹{position_size_rupees:,})",
+         "c": "cg" if position_size_lots > 0 else "st"},
+        {"k": "Risk verdict",   "v": "VALID ✓" if st == "go" else
                "FAIL — R:R too low" if st == "st" else "MARGINAL",
-          "c": "cg" if st == "go" else "cr" if st == "st" else "ca"},
+         "c": "cg" if st == "go" else "cr" if st == "st" else "ca"},
     ]
     return {"name": "RISK VALID", "state": st, "score": score, "rows": rows, 
             "position_size_lots": position_size_lots, "position_size_rupees": position_size_rupees}
@@ -727,9 +919,9 @@ def detect_spikes(stocks: list, prev: dict, gates: dict | None = None, verdict: 
     except Exception:
         acc_filters = {"weak_symbols": set(), "weak_buckets": set()}
 
-    if candle_min < 570:
+    if candle_min < 630:
         time_bucket = "open_915_930"
-    elif candle_min < 630:
+    elif candle_min < 690:
         time_bucket = "morning_930_1030"
     elif candle_min < 780:
         time_bucket = "midday_1030_1300"
@@ -764,7 +956,11 @@ def detect_spikes(stocks: list, prev: dict, gates: dict | None = None, verdict: 
         vm_tick   = vol / max(prev_vol, 1.0)
         vm        = max(vol_ratio, vm_tick)
         stock_pc  = int(s.get("pc", 0) or 0)
-        sym_floor = gate_score_floor + (6 if sym in acc_filters.get("weak_symbols", set()) else 0)
+
+        # WR-based floor adjustment + raw WR for score bonus
+        wr_adj, sym_wr = _get_wr_adj(sym, time_bucket)
+        sym_floor = gate_score_floor + wr_adj + (4 if sym in acc_filters.get("weak_symbols", set()) else 0)
+        sym_floor = max(35, min(75, sym_floor))  # clamp
 
         sp_type = sig = trigger = ""
 
@@ -827,7 +1023,7 @@ def detect_spikes(stocks: list, prev: dict, gates: dict | None = None, verdict: 
             continue
 
         # Score and floor — spikes fire on merit regardless of gate state
-        score = _score_spike(vm, chg_pct, sym, candle_min)
+        score = _score_spike(vm, chg_pct, sym, candle_min, sym_wr=sym_wr)
         if score < sym_floor:
             continue
 
@@ -865,6 +1061,9 @@ def detect_spikes(stocks: list, prev: dict, gates: dict | None = None, verdict: 
         # Unified strength from score
         strength = "hi" if score >= 70 else "md"
 
+        # ATR-based levels for this stock
+        lvl = _compute_spike_levels(sym, price, sp_type)
+
         spike_dict = {
             "symbol":       sym,
             "time":         now,
@@ -878,6 +1077,15 @@ def detect_spikes(stocks: list, prev: dict, gates: dict | None = None, verdict: 
             "strength":     strength,
             "score":        score,
             "pc":           stock_pc,
+            "sym_wr":       round(sym_wr, 3) if sym_wr >= 0 else None,
+            # ATR-based levels — overrides the fixed ±0.5% frontend fallback
+            "entry":        lvl["entry"],
+            "sl":           lvl["sl"],
+            "t1":           lvl["t1"],
+            "t2":           lvl["t2"],
+            "atr":          lvl["atr"],
+            "atr_pct":      lvl["atr_pct"],
+            "rr":           lvl["rr"],
         }
         spikes.append(spike_dict)
 

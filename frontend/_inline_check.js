@@ -1001,10 +1001,14 @@ setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
 (function startLiveData(){
   const _backendBase = window.location.hostname === 'kvishnublr.github.io'
     ? 'https://nse-edge-backend.fly.dev'
-    : 'http://127.0.0.1:8000';
+    : (window.location.protocol === 'http:' || window.location.protocol === 'https:'
+        ? window.location.origin
+        : 'http://127.0.0.1:8000');
   const WS_URL = window.location.hostname === 'kvishnublr.github.io'
     ? 'wss://nse-edge-backend.fly.dev/ws'
-    : 'ws://127.0.0.1:8000/ws';
+    : (window.location.protocol === 'http:' || window.location.protocol === 'https:'
+        ? (window.location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + window.location.host + '/ws'
+        : 'ws://127.0.0.1:8000/ws');
 
   let ws = null;
   let reconnectDelay = 2000;
@@ -1883,7 +1887,9 @@ function generateMockChartData(){}
 // ═══════════════════════════════════════════════
 const API = window.location.hostname === 'kvishnublr.github.io'
   ? 'https://nse-edge-backend.fly.dev'
-  : 'http://127.0.0.1:8000';
+  : (window.location.protocol === 'http:' || window.location.protocol === 'https:'
+      ? window.location.origin
+      : 'http://127.0.0.1:8000');
 
 (function bt2Init(){
   const to   = new Date();

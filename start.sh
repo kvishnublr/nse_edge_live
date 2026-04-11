@@ -48,7 +48,7 @@ echo -e "${GREEN}Dependencies OK${RESET}"
 if [ ! -f "$BACKEND_DIR/.env" ]; then
     cp "$BACKEND_DIR/.env.example" "$BACKEND_DIR/.env"
     echo -e "${YELLOW}Created .env from template — edit backend/.env to add API keys${RESET}"
-    echo -e "${YELLOW}System will use yfinance (15min delay) until API keys are set${RESET}"
+    echo -e "${YELLOW}Add Kite keys + token in backend/.env — live data is Zerodha Kite only${RESET}"
 fi
 
 # ─── Stop existing instance ───────────────────────────────────────────────
