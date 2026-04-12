@@ -87,7 +87,7 @@ def _do_refresh(env_file: str = _ENV_FILE) -> bool:
             "auto_token: Playwright Python package missing. "
             "Local: pip install -r backend/requirements.txt && playwright install chromium "
             "(or: python -m playwright install chromium). "
-            "Railway/Docker: rebuild the image from the repo Dockerfile (includes browser install)."
+            "Docker: rebuild the image from the repo Dockerfile (includes browser install)."
         )
         return False
 
@@ -288,7 +288,9 @@ if __name__ == "__main__":
     ok = _do_refresh()
     if ok:
         print("\n  Token refreshed and saved to .env")
-        print("  Restart the backend to apply the new token.")
+        print("  If the API server is already running, apply without restart:")
+        print('    curl -X POST http://127.0.0.1:8000/api/token-reload-env')
+        print("  Or use the UI: token banner → LOAD .ENV (or restart the backend).")
         print("=" * 55 + "\n")
         sys.exit(0)
     else:

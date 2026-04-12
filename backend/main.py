@@ -10,11 +10,11 @@ import logging
 import os
 import time
 from contextlib import asynccontextmanager
-from typing import Set
+from typing import Optional, Set
 
 import pytz
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -139,16 +139,46 @@ async def lifespan(app: FastAPI):
     # Initial data fetch
     logger.info("Running initial data fetch...")
     try:
-        indices = fetcher.fetch_indices()
-        fii     = fetcher.fetch_fii_dii()
-        
+        try:
+            indices = fetcher.fetch_indices()
+        except Exception as _ie:
+            logger.warning(f"  fetch_indices failed ({_ie.__class__.__name__}) — will use ticker fallback")
+            indices = None
+
+        try:
+            fii = fetcher.fetch_fii_dii()
+        except Exception:
+            fii = None
+
         if kite:
-            chain   = fetcher.fetch_option_chain(kite, "NIFTY")
-            stocks  = fetcher.fetch_fno_stocks(kite)
+            try:
+                chain = fetcher.fetch_option_chain(kite, "NIFTY")
+            except Exception as _ce:
+                logger.warning(f"  fetch_option_chain failed ({_ce.__class__.__name__})")
+                chain = None
+            try:
+                stocks = fetcher.fetch_fno_stocks(kite)
+            except Exception:
+                stocks = []
         else:
             chain = None
             stocks = []
             logger.info("  Skipping chain/stocks (Kite session not ready yet)")
+
+        # Fallback: build minimal indices from KiteTicker price_cache
+        if not indices:
+            from feed import price_cache as _pc
+            _n = _pc.get("NIFTY", {})
+            _b = _pc.get("BANKNIFTY", {})
+            _v = _pc.get("INDIAVIX", {})
+            if _n.get("price"):
+                indices = {
+                    "nifty": _n["price"], "nifty_chg": _n.get("chg_pct", 0),
+                    "banknifty": _b.get("price", 0), "banknifty_chg": _b.get("chg_pct", 0),
+                    "vix": _v.get("price", 0), "pcr": (chain or {}).get("pcr", 1.0),
+                    "_source": "ticker_fallback",
+                }
+                logger.info(f"  Indices from ticker: Nifty={indices['nifty']:.0f} VIX={indices['vix']:.1f}")
 
         if indices:
             logger.info(f"  Nifty={indices.get('nifty',0):.0f} "
@@ -165,7 +195,22 @@ async def lifespan(app: FastAPI):
             logger.info(f"  {len(stocks)} F&O stocks loaded")
             sched.set_initial_stocks(stocks)  # seed scheduler cache
 
+        # Seed scheduler cache so off-hours job_chain has data to push
+        if chain:
+            sched.set_cache("chain", chain)
+        if fii:
+            sched.set_cache("fii", fii)
+        if indices:
+            sched.set_cache("indices", indices)
+
         signals.run_signal_engine(indices, chain, fii, stocks or [], "intraday")
+
+        # Ensure last_chain/last_macro are never overwritten by off-hours job with None
+        # Re-affirm after run_signal_engine in case scheduler already fired
+        if chain and not signals.state.get("last_chain"):
+            signals.state["last_chain"] = chain
+        if indices and not signals.state.get("last_macro"):
+            signals.state["last_macro"] = indices
     except Exception as e:
         logger.error(f"Initial fetch error: {e}", exc_info=True)
 
@@ -263,6 +308,9 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 55)
     logger.info(f"  WebSocket : ws://{HOST}:{PORT}/ws")
     logger.info(f"  API       : http://{HOST}:{PORT}/api/health")
+    logger.info(
+        "  INTRA BT  : POST|GET /api/intra-index/backtest (alias /api/intra_index/backtest) — health /api/intra-index/health"
+    )
     logger.info(f"  Verdict   : {signals.state['verdict']}")
     logger.info("=" * 55)
 
@@ -284,13 +332,34 @@ ALLOWED_ORIGINS = [
     "http://127.0.0.1:8000",
     "http://localhost:8765",
     "http://127.0.0.1:8765",
+    # Live Server / Vite / common static UI ports (UI calls API on :8000)
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "http://localhost:5501",
+    "http://127.0.0.1:5501",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
     "https://kvishnublr.github.io",   # GitHub Pages
     "null",   # file:// protocol sends Origin: null
 ] + _extra_origins
 
+# LAN / hotspot dev: UI opened as http://192.168.x.x:PORT (Live Server, phone, etc.) calling API on 127.0.0.1:8000
+# gets Origin http://192.168.x.x:PORT — not in the static list above — fetch /api/state fails while WebSocket may still work → LIVE + all WAIT.
+_ALLOW_LAN_ORIGIN_REGEX = (
+    r"https?://("
+    r"192\.168\.\d{1,3}\.\d{1,3}|"
+    r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+    r"172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}|"
+    r"\[::1\]"
+    r")(:\d+)?$"
+)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=_ALLOW_LAN_ORIGIN_REGEX,
     allow_credentials=False,  # Disabled for better security
     allow_methods=["GET", "POST"],  # Only GET and POST
     allow_headers=["Content-Type", "Authorization"],
@@ -385,6 +454,83 @@ async def _send_initial(ws: WebSocket):
 
 
 # ─── REST API ─────────────────────────────────────────────────────────────────
+@app.post("/api/refresh-state")
+@app.get("/api/refresh-state")
+async def refresh_state():
+    """
+    Force re-fetch of indices + chain (if Kite available) and broadcast to all WS clients.
+    Called by the frontend when it detects stale/missing data. Also triggers token refresh
+    if the Kite REST API starts failing.
+    """
+    import asyncio as _aio
+    async def _do():
+        try:
+            from feed import get_kite, price_cache as _pc, maybe_refresh_kite_token
+            _kite = get_kite()
+
+            # Try to fetch fresh indices
+            try:
+                indices = fetcher.fetch_indices()
+            except Exception as _e:
+                logger.warning("refresh_state: fetch_indices failed (%s) — using ticker", _e.__class__.__name__)
+                indices = None
+                maybe_refresh_kite_token("refresh_state_timeout")
+
+            # Ticker fallback
+            if not indices:
+                _n, _b, _v = _pc.get("NIFTY", {}), _pc.get("BANKNIFTY", {}), _pc.get("INDIAVIX", {})
+                if _n.get("price"):
+                    indices = {
+                        "nifty": _n["price"], "nifty_chg": _n.get("chg_pct", 0),
+                        "banknifty": _b.get("price", 0), "banknifty_chg": _b.get("chg_pct", 0),
+                        "vix": _v.get("price", 0),
+                        "pcr": (signals.state.get("last_chain") or {}).get("pcr", 1.0),
+                        "_source": "ticker_fallback",
+                    }
+
+            if indices:
+                signals.state["last_macro"] = indices
+
+            # Try chain refresh if Kite available
+            if _kite:
+                try:
+                    chain = fetcher.fetch_option_chain(_kite, "NIFTY")
+                    if chain:
+                        signals.state["last_chain"] = chain
+                        sched.set_cache("chain", chain)
+                        broadcast({"type": "chain", "data": chain, "timestamp": time.time()})
+                except Exception as _ce:
+                    logger.debug("refresh_state: fetch_option_chain: %s", _ce.__class__.__name__)
+                    # Trigger token refresh in background if repeated failures
+                    maybe_refresh_kite_token("chain_fetch_error")
+
+            if indices:
+                broadcast({"type": "macro", "data": indices, "timestamp": time.time()})
+            broadcast({"type": "prices", "data": get_all_prices(), "ts": time.time()})
+
+            # Re-run signal engine with best available data
+            signals.run_signal_engine(
+                indices, signals.state.get("last_chain"),
+                signals.state.get("last_fii"), signals.state.get("last_stocks") or [],
+                "intraday"
+            )
+            broadcast({"type": "gates", "timestamp": time.time(), "data": {
+                "gates": {str(k): v for k, v in signals.state["gates"].items()},
+                "verdict": signals.state["verdict"],
+                "verdict_sub": signals.state.get("verdict_sub", ""),
+                "pass_count": signals.state["pass_count"],
+                "confidence": signals.state.get("confidence", 0.0),
+                "position_size_lots": signals.state.get("position_size_lots", 0),
+                "position_size_rupees": signals.state.get("position_size_rupees", 0),
+            }})
+            logger.info("refresh_state: pushed fresh state to %d clients", len(connected_clients))
+        except Exception as e:
+            logger.error("refresh_state error: %s", e)
+
+    _aio.create_task(_do())
+    return JSONResponse({"ok": True, "ts": time.time(), "ws_clients": len(connected_clients)})
+
+
 @app.get("/api/health")
 async def health():
     from feed import price_cache, _ticker_connected
@@ -450,6 +596,9 @@ async def index_signals_history(
 ):
     import sqlite3 as _sq
     from datetime import date, timedelta
+
+    from trading_policy import index_hunt_walk_forward_stats
+
     db_path = os.path.join(os.path.dirname(__file__), "data", "backtest.db")
     try:
         today = date.today().isoformat()
@@ -468,8 +617,15 @@ async def index_signals_history(
             WHERE trade_date BETWEEN ? AND ?
             ORDER BY ts DESC LIMIT 500
         """, (f, t)).fetchall()
+        wf_rows = conn.execute("""
+            SELECT trade_date, outcome FROM index_signal_history
+            WHERE trade_date BETWEEN ? AND ?
+              AND outcome IN ('HIT_T1','HIT_SL')
+            ORDER BY trade_date ASC, ts ASC
+        """, (f, t)).fetchall()
         conn.close()
         data = [dict(r) for r in rows]
+        walk_forward = index_hunt_walk_forward_stats([dict(r) for r in wf_rows])
         resolved = [r for r in data if r["outcome"] in ("HIT_T1", "HIT_SL")]
         wins = sum(1 for r in resolved if r["outcome"] == "HIT_T1")
         net_pnl = sum(
@@ -478,11 +634,78 @@ async def index_signals_history(
             for r in resolved
         )
         wr = round(wins / len(resolved) * 100) if resolved else 0
-        return JSONResponse({"signals": data, "total": len(data),
-                             "wins": wins, "losses": len(resolved)-wins,
-                             "win_rate": wr, "net_pnl": round(net_pnl)})
+        return JSONResponse({
+            "signals": data,
+            "total": len(data),
+            "wins": wins,
+            "losses": len(resolved) - wins,
+            "win_rate": wr,
+            "net_pnl": round(net_pnl),
+            "walk_forward": walk_forward,
+        })
     except Exception as e:
         return JSONResponse({"signals": [], "error": str(e)})
+
+
+@app.post("/api/index-signals/wipe")
+async def index_signals_wipe(request: Request):
+    """
+    Delete all rows from `index_signal_history` (INDEX HUNT stored backtest/history).
+
+    Body JSON (optional):
+      - refresh_kite_aux: if true, refresh NIFTY daily + `vix_daily` from Kite (needs valid token).
+      - kite_days: lookback for that refresh (default 500, max 4000).
+    Index *minute* data for POST /api/index-signals/backtest is always fetched from Kite per run.
+    PCR in `chain_daily` is filled via NSE bhavcopy (use ⬇ DOWNLOAD DATA or chain download) if gaps exist.
+    """
+    import asyncio
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    import backtest_data as bd
+
+    try:
+        sched._ix_db_init()
+    except Exception as e:
+        logger.warning("index_signals_wipe _ix_db_init: %s", e)
+
+    db_path = os.path.join(os.path.dirname(__file__), "data", "backtest.db")
+    deleted = 0
+    try:
+        import sqlite3 as _sq
+
+        conn = _sq.connect(db_path)
+        row = conn.execute("SELECT COUNT(*) FROM index_signal_history").fetchone()
+        deleted = int(row[0]) if row else 0
+        conn.close()
+    except Exception:
+        pass
+    try:
+        bd.wipe_index_signal_history()
+    except Exception as e:
+        logger.error("index_signals_wipe: %s", e, exc_info=True)
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+    out: dict = {"ok": True, "deleted_rows": deleted}
+    if body.get("refresh_kite_aux"):
+        kite_days = int(body.get("kite_days") or 500)
+        kite_days = max(30, min(kite_days, 4000))
+        try:
+            from feed import get_kite
+
+            kite = get_kite()
+            if not kite:
+                out["kite_refresh"] = "skipped_no_token"
+            else:
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(None, lambda: bd.download_kite_history(kite, days=kite_days))
+                out["kite_refresh"] = f"ok_nifty_vix_{kite_days}d"
+        except Exception as e:
+            logger.warning("index_signals_wipe kite refresh: %s", e)
+            out["kite_refresh"] = f"error:{e}"
+    return JSONResponse(out)
 
 
 @app.post("/api/index-radar/ml-train")
@@ -537,10 +760,13 @@ async def index_signals_backtest(request: Request):
     import sqlite3 as _sq, datetime as _dt, time as _t
     from collections import defaultdict
 
-    from config import INDEX_RADAR, INDEX_RADAR_HIGH_ACCURACY, _INDEX_RADAR_BASE
+    from config import INDEX_RADAR, INDEX_RADAR_HIGH_ACCURACY, INDEX_RADAR_ELITE, INDEX_RADAR_PRECISION_V2, _INDEX_RADAR_BASE
+    from trading_policy import index_hunt_walk_forward_stats
     from index_radar_logic import (
         build_minute_close_map,
         cm_from_candle,
+        daily_pick_select,
+        index_hunt_candidate_score,
         index_radar_quality,
         passes_index_radar_1m,
     )
@@ -553,7 +779,16 @@ async def index_signals_backtest(request: Request):
     # High accuracy: file baseline + INDEX_RADAR_HIGH_ACCURACY only — same as profile "index_precision",
     # not stacked on balanced_v2 (stacking produced impossible thresholds and zero signals).
     IR_BT = dict(INDEX_RADAR)
-    if preset in ("high_accuracy", "precision", "ha"):
+    if preset in ("precision_v2", "independent", "v2", "70pct"):
+        IR_BT = dict(_INDEX_RADAR_BASE)
+        IR_BT.update(INDEX_RADAR_PRECISION_V2)
+        preset = "precision_v2"
+    elif preset in ("elite", "e70", "max_precision"):
+        IR_BT = dict(_INDEX_RADAR_BASE)
+        IR_BT.update(INDEX_RADAR_HIGH_ACCURACY)
+        IR_BT.update(INDEX_RADAR_ELITE)
+        preset = "elite"
+    elif preset in ("high_accuracy", "precision", "ha"):
         IR_BT = dict(_INDEX_RADAR_BASE)
         IR_BT.update(INDEX_RADAR_HIGH_ACCURACY)
         preset = "high_accuracy"
@@ -642,61 +877,14 @@ async def index_signals_backtest(request: Request):
             pcr_row = conn.execute("SELECT pcr FROM chain_daily WHERE date=?", (day,)).fetchone()
             pcr_d = float(pcr_row[0]) if pcr_row and pcr_row[0] else 1.0
 
-            last_sig_min = {}
             npc_day = nifty_prev_close.get(day) or 0.0
             nmin_day = nifty_minute.get(day, {})
+            use_daily = bool(IR_BT.get("daily_pick_enabled"))
+            last_sig_min: dict = {}
 
-            for i, c in enumerate(mkt):
-                cm = cm_from_candle(c)
-                px = float(c.get("close") or 0)
-                if not px:
-                    continue
-
-                filter_stats["bars_scanned"] += 1
-
-                npx = nmin_day.get(cm)
-                if npc_day and npx:
-                    nifty_day_pe = (npx - npc_day) / npc_day * 100
-                else:
-                    nifty_day_pe = None
-
-                cross_o = None
-                if sym == "NIFTY":
-                    bm = bn_minute.get(day, {})
-                    x0, x1 = bm.get(cm - 5), bm.get(cm)
-                    if x0 and x1:
-                        cross_o = (x1 - x0) / x0 * 100
-                else:
-                    xm = nifty_minute.get(day, {})
-                    x0, x1 = xm.get(cm - 5), xm.get(cm)
-                    if x0 and x1:
-                        cross_o = (x1 - x0) / x0 * 100
-
-                ok, chg, is_ce, _why = passes_index_radar_1m(
-                    mkt, i, IR_BT,
-                    vix_eod=vix_d,
-                    pcr_day=pcr_d,
-                    nifty_day_pct_for_pe=nifty_day_pe,
-                    cross_other_5m=cross_o,
-                )
-                if not ok:
-                    filter_stats[f"reject_{_why or 'unknown'}"] += 1
-                    continue
-
+            def _finalize_one(i, c, chg, is_ce, px, quality, strength):
+                nonlocal total_inserted
                 sig_type = "CE" if is_ce else "PE"
-                if sig_type in last_sig_min and cm - last_sig_min[sig_type] < _ix_dedup_bt:
-                    filter_stats["reject_dedup"] += 1
-                    continue
-                last_sig_min[sig_type] = cm
-
-                strength, quality = index_radar_quality(float(chg), is_ce, IR_BT, vix_d, pcr_d)
-                _qf = int(IR_BT.get("quality_floor", 0))
-                if IR_BT.get("precision_boost"):
-                    _qf = max(_qf, int(IR_BT.get("precision_min_quality", 72)))
-                if _qf > 0 and quality < _qf:
-                    filter_stats["reject_quality_floor"] += 1
-                    continue
-
                 atm = round(px / step) * step
                 strike = atm + step if is_ce else atm - step
                 entry = round(px * 0.007, 1)
@@ -710,7 +898,7 @@ async def index_signals_backtest(request: Request):
                 t2 = round(entry * t2_m, 2)
                 rr = round((t1 - entry) / max(entry - sl, 0.01), 1)
 
-                if IR_BT.get("ml_filter_enabled"):
+                if IR_BT.get("ml_filter_enabled") and not use_daily:
                     try:
                         from index_radar_ml import effective_ml_threshold, win_probability
 
@@ -729,25 +917,50 @@ async def index_signals_backtest(request: Request):
                         _thr = effective_ml_threshold(float(IR_BT.get("ml_min_win_prob", 0.72)))
                         if _pr is not None and _pr < _thr:
                             filter_stats["reject_ml"] += 1
-                            continue
+                            return
                     except Exception:
                         pass
 
                 outcome = None
                 entry_idx_px = px
+                use_hl = bool(IR_BT.get("outcome_use_hl", False))
                 for j in range(i + 1, min(i + 46, len(mkt))):
                     fc = mkt[j]
-                    fmv = (fc["close"] - entry_idx_px) / entry_idx_px * 100
-                    if (is_ce and fmv >= _ix_t1_th) or (not is_ce and fmv <= -_ix_t1_th):
-                        outcome = "HIT_T1"
-                        break
-                    if (is_ce and fmv <= -_ix_sl_th) or (not is_ce and fmv >= _ix_sl_th):
-                        outcome = "HIT_SL"
-                        break
+                    if use_hl:
+                        hi = float(fc.get("high") or fc.get("close") or 0)
+                        lo = float(fc.get("low") or fc.get("close") or 0)
+                        if not hi or not lo:
+                            continue
+                        if is_ce:
+                            high_mv = (hi - entry_idx_px) / entry_idx_px * 100
+                            low_mv = (lo - entry_idx_px) / entry_idx_px * 100
+                            if high_mv >= _ix_t1_th:
+                                outcome = "HIT_T1"
+                                break
+                            if low_mv <= -_ix_sl_th:
+                                outcome = "HIT_SL"
+                                break
+                        else:
+                            high_mv = (hi - entry_idx_px) / entry_idx_px * 100
+                            low_mv = (lo - entry_idx_px) / entry_idx_px * 100
+                            if low_mv <= -_ix_t1_th:
+                                outcome = "HIT_T1"
+                                break
+                            if high_mv >= _ix_sl_th:
+                                outcome = "HIT_SL"
+                                break
+                    else:
+                        fmv = (float(fc["close"]) - entry_idx_px) / entry_idx_px * 100
+                        if (is_ce and fmv >= _ix_t1_th) or (not is_ce and fmv <= -_ix_t1_th):
+                            outcome = "HIT_T1"
+                            break
+                        if (is_ce and fmv <= -_ix_sl_th) or (not is_ce and fmv >= _ix_sl_th):
+                            outcome = "HIT_SL"
+                            break
                 if outcome is None:
                     outcome = "EXPIRED"
 
-                _id_sfx = "_HA" if preset == "high_accuracy" else ""
+                _id_sfx = "_V2" if preset == "precision_v2" else ("_EL" if preset == "elite" else ("_HA" if preset == "high_accuracy" else ""))
                 sig_id = f"{sym}_{day.replace('-', '')}_{c['date'].strftime('%H%M')}_{sig_type}{_id_sfx}"
                 sig_time = c["date"].strftime("%H:%M")
                 lot_pnl = round((t1 - entry) * lot_sz)
@@ -777,6 +990,173 @@ async def index_signals_backtest(request: Request):
                 except Exception:
                     pass
 
+            if use_daily:
+                pool: list = []
+                for i, c in enumerate(mkt):
+                    cm = cm_from_candle(c)
+                    px = float(c.get("close") or 0)
+                    if not px:
+                        continue
+
+                    filter_stats["bars_scanned"] += 1
+
+                    npx = nmin_day.get(cm)
+                    if npc_day and npx:
+                        nifty_day_pe = (npx - npc_day) / npc_day * 100
+                    else:
+                        nifty_day_pe = None
+
+                    cross_o = None
+                    if sym == "NIFTY":
+                        bm = bn_minute.get(day, {})
+                        x0, x1 = bm.get(cm - 5), bm.get(cm)
+                        if x0 and x1:
+                            cross_o = (x1 - x0) / x0 * 100
+                    else:
+                        xm = nifty_minute.get(day, {})
+                        x0, x1 = xm.get(cm - 5), xm.get(cm)
+                        if x0 and x1:
+                            cross_o = (x1 - x0) / x0 * 100
+
+                    ok, chg, is_ce, _why = passes_index_radar_1m(
+                        mkt, i, IR_BT,
+                        vix_eod=vix_d,
+                        pcr_day=pcr_d,
+                        nifty_day_pct_for_pe=nifty_day_pe,
+                        cross_other_5m=cross_o,
+                    )
+                    if not ok:
+                        filter_stats[f"reject_{_why or 'unknown'}"] += 1
+                        continue
+
+                    strength, quality = index_radar_quality(float(chg), is_ce, IR_BT, vix_d, pcr_d)
+                    _qf = int(IR_BT.get("quality_floor", 0))
+                    if IR_BT.get("precision_boost"):
+                        _qf = max(_qf, int(IR_BT.get("precision_min_quality", 72)))
+                    if _qf > 0 and quality < _qf:
+                        filter_stats["reject_quality_floor"] += 1
+                        continue
+
+                    atm = round(px / step) * step
+                    entry = round(px * 0.007, 1)
+                    if entry < 20:
+                        entry = 20.0
+                    sl_m = float(IR_BT.get("opt_sl_mult", 0.70))
+                    t1_m = float(IR_BT.get("opt_t1_mult", 1.50))
+                    sl = round(entry * sl_m, 2)
+                    t1 = round(entry * t1_m, 2)
+                    rr = round((t1 - entry) / max(entry - sl, 0.01), 1)
+
+                    ml_for_score = None
+                    if IR_BT.get("daily_pick_use_ml_score") or IR_BT.get("ml_filter_enabled"):
+                        try:
+                            from index_radar_ml import effective_ml_threshold, win_probability
+
+                            _cand_ml = {
+                                "chg_pct": float(chg),
+                                "type": "CE" if is_ce else "PE",
+                                "symbol": sym,
+                                "strength": strength,
+                                "time": c["date"].strftime("%H:%M"),
+                                "vix": vix_d,
+                                "rr": float(rr),
+                                "quality": quality,
+                                "pcr": pcr_d,
+                            }
+                            _pr = win_probability(_cand_ml)
+                            if IR_BT.get("ml_filter_enabled"):
+                                _thr = effective_ml_threshold(float(IR_BT.get("ml_min_win_prob", 0.72)))
+                                if _pr is not None and _pr < _thr:
+                                    filter_stats["reject_ml"] += 1
+                                    continue
+                            ml_for_score = _pr
+                        except Exception:
+                            pass
+
+                    sc = index_hunt_candidate_score(float(quality), float(chg), strength, ml_p=ml_for_score)
+                    pool.append({
+                        "i": i,
+                        "cm": cm,
+                        "score": sc,
+                        "sig_type": "CE" if is_ce else "PE",
+                        "sym": sym,
+                        "chg": chg,
+                        "is_ce": is_ce,
+                        "px": px,
+                        "quality": quality,
+                        "strength": strength,
+                        "candle": c,
+                    })
+
+                chosen = daily_pick_select(pool, IR_BT)
+                filter_stats["daily_pick_pool"] += len(pool)
+                filter_stats["daily_pick_kept"] += len(chosen)
+                if len(pool) > len(chosen):
+                    filter_stats["daily_pick_dropped"] += len(pool) - len(chosen)
+                for item in chosen:
+                    _finalize_one(
+                        item["i"],
+                        item["candle"],
+                        item["chg"],
+                        item["is_ce"],
+                        item["px"],
+                        item["quality"],
+                        item["strength"],
+                    )
+            else:
+                for i, c in enumerate(mkt):
+                    cm = cm_from_candle(c)
+                    px = float(c.get("close") or 0)
+                    if not px:
+                        continue
+
+                    filter_stats["bars_scanned"] += 1
+
+                    npx = nmin_day.get(cm)
+                    if npc_day and npx:
+                        nifty_day_pe = (npx - npc_day) / npc_day * 100
+                    else:
+                        nifty_day_pe = None
+
+                    cross_o = None
+                    if sym == "NIFTY":
+                        bm = bn_minute.get(day, {})
+                        x0, x1 = bm.get(cm - 5), bm.get(cm)
+                        if x0 and x1:
+                            cross_o = (x1 - x0) / x0 * 100
+                    else:
+                        xm = nifty_minute.get(day, {})
+                        x0, x1 = xm.get(cm - 5), xm.get(cm)
+                        if x0 and x1:
+                            cross_o = (x1 - x0) / x0 * 100
+
+                    ok, chg, is_ce, _why = passes_index_radar_1m(
+                        mkt, i, IR_BT,
+                        vix_eod=vix_d,
+                        pcr_day=pcr_d,
+                        nifty_day_pct_for_pe=nifty_day_pe,
+                        cross_other_5m=cross_o,
+                    )
+                    if not ok:
+                        filter_stats[f"reject_{_why or 'unknown'}"] += 1
+                        continue
+
+                    sig_type = "CE" if is_ce else "PE"
+                    if sig_type in last_sig_min and cm - last_sig_min[sig_type] < _ix_dedup_bt:
+                        filter_stats["reject_dedup"] += 1
+                        continue
+                    last_sig_min[sig_type] = cm
+
+                    strength, quality = index_radar_quality(float(chg), is_ce, IR_BT, vix_d, pcr_d)
+                    _qf = int(IR_BT.get("quality_floor", 0))
+                    if IR_BT.get("precision_boost"):
+                        _qf = max(_qf, int(IR_BT.get("precision_min_quality", 72)))
+                    if _qf > 0 and quality < _qf:
+                        filter_stats["reject_quality_floor"] += 1
+                        continue
+
+                    _finalize_one(i, c, chg, is_ce, px, quality, strength)
+
         conn.commit()
 
     conn.close()
@@ -785,6 +1165,9 @@ async def index_signals_backtest(request: Request):
     wins = sum(1 for r in resolved if r["outcome"] == "HIT_T1")
     wr = round(wins/len(resolved)*100) if resolved else 0
     fs_sorted = dict(sorted(filter_stats.items(), key=lambda x: -x[1]))
+    walk_forward = index_hunt_walk_forward_stats(
+        [{"trade_date": r["date"], "outcome": r["outcome"]} for r in results]
+    )
     return JSONResponse({
         "inserted": total_inserted,
         "total": len(results),
@@ -795,7 +1178,349 @@ async def index_signals_backtest(request: Request):
         "to": to_date,
         "filter_stats": fs_sorted,
         "preset": preset,
-        "note": "Win rate = HIT_T1 / (HIT_T1+HIT_SL) on underlying move within 45m; not a guarantee of future performance.",
+        "walk_forward": walk_forward,
+        "note": (
+            "WR = HIT_T1 / (HIT_T1+HIT_SL) within 45m. preset=precision_v2: ranked daily pick per symbol "
+            "(see filter_stats daily_pick_*). ML gate runs only if backend/data/ix_radar_gb.joblib exists. "
+            "Not a guarantee of future performance."
+        ),
+    })
+
+
+# ─── PRIME STRIKES BACKTEST ───────────────────────────────────────────────────
+@app.post("/api/prime-strikes/backtest")
+async def prime_strikes_backtest(request: Request):
+    """
+    PRIME STRIKE — 3-layer confirmed intraday option-buying backtest.
+    VIX hard gate + PCR alignment + 5m momentum + quality-tier lot sizing.
+    In-memory only — not written to DB.
+    """
+    import datetime as _dt, traceback as _tb, sqlite3 as _sq
+    from collections import defaultdict
+
+    body = await request.json()
+    from_date = body.get("from_date", (_dt.date.today() - _dt.timedelta(days=30)).isoformat())
+    to_date   = body.get("to_date",   _dt.date.today().isoformat())
+
+    # ── imports ──
+    try:
+        from config import PRIME_STRIKE_CONFIG, _INDEX_RADAR_BASE
+        from trading_policy import index_hunt_walk_forward_stats
+        from index_radar_logic import (
+            build_minute_close_map, cm_from_candle, daily_pick_select,
+            index_hunt_candidate_score, index_radar_quality, passes_index_radar_1m,
+        )
+        PS = dict(_INDEX_RADAR_BASE)
+        PS.update(PRIME_STRIKE_CONFIG)
+    except Exception as e:
+        logger.error("prime_strikes_backtest import/config error: %s", e)
+        return JSONResponse({"error": f"Config error: {e}"}, status_code=500)
+
+    # ── kite ──
+    try:
+        from feed import get_kite
+        kite = get_kite()
+        if not kite:
+            return JSONResponse({"error": "Kite not available — check token"}, status_code=503)
+    except Exception as e:
+        return JSONResponse({"error": f"Kite error: {e}"}, status_code=503)
+
+    # ── DB (VIX + PCR lookup) ──
+    try:
+        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "backtest.db")
+        conn = _sq.connect(db_path)
+    except Exception as e:
+        return JSONResponse({"error": f"DB error: {e}"}, status_code=500)
+
+    NIFTY_TOK = 256265
+    BN_TOK    = 260105
+    CONFIGS   = [("NIFTY", NIFTY_TOK, 25, 50), ("BANKNIFTY", BN_TOK, 15, 100)]
+
+    t_win0    = int(PS.get("time_start_min", 600))
+    t_win1    = int(PS.get("time_end_min",   780))
+    _t1_th    = float(PS.get("outcome_t1_index_pct", 0.10))
+    _sl_th    = float(PS.get("outcome_sl_index_pct", 0.24))
+    use_hl    = bool(PS.get("outcome_use_hl", True))
+    tier_full = int(PS.get("tier_full_min_quality", 82))
+    max_day   = int(PS.get("max_signals_per_day", 3))
+    max_csl   = int(PS.get("max_consec_sl", 2))
+    all_trades: list = []
+    flt: dict = defaultdict(int)
+
+    try:
+        # ── pre-fetch Nifty 1-min for cross-index + PE day % ──
+        nifty_by_date: dict = defaultdict(list)
+        try:
+            _nh = kite.historical_data(NIFTY_TOK, from_date, to_date, "minute")
+        except Exception:
+            _nh = []
+        for c in (_nh or []):
+            nifty_by_date[c["date"].date().isoformat()].append(c)
+        nifty_days = sorted(nifty_by_date.keys())
+        nifty_prev: dict = {}
+        nifty_min:  dict = {}
+        for di, dk in enumerate(nifty_days):
+            if di > 0:
+                nifty_prev[dk] = float(nifty_by_date[nifty_days[di-1]][-1]["close"] or 0)
+            nifty_min[dk] = build_minute_close_map(nifty_by_date[dk])
+
+        bn_by_date: dict = defaultdict(list)
+        try:
+            _bh = kite.historical_data(BN_TOK, from_date, to_date, "minute")
+        except Exception:
+            _bh = []
+        for c in (_bh or []):
+            bn_by_date[c["date"].date().isoformat()].append(c)
+        bn_min: dict = {dk: build_minute_close_map(bn_by_date[dk]) for dk in bn_by_date}
+
+        # ── main loop ──
+        for sym, tok, lot_sz, step in CONFIGS:
+            try:
+                candles = kite.historical_data(tok, from_date, to_date, "minute")
+            except Exception:
+                continue
+            if not candles:
+                continue
+
+            by_day: dict = defaultdict(list)
+            for c in candles:
+                by_day[c["date"].date().isoformat()].append(c)
+
+            for day, day_c in sorted(by_day.items()):
+                mkt = sorted(
+                    [c for c in day_c if t_win0 <= cm_from_candle(c) <= t_win1],
+                    key=lambda x: x["date"]
+                )
+                if len(mkt) < 15:
+                    continue
+
+                # VIX + PCR from DB
+                vr = conn.execute("SELECT vix FROM vix_daily WHERE date=?", (day,)).fetchone()
+                vix_d = float(vr[0]) if vr and vr[0] is not None else 0.0
+                pr = conn.execute("SELECT pcr FROM chain_daily WHERE date=?", (day,)).fetchone()
+                pcr_d = float(pr[0]) if pr and pr[0] else 1.0
+
+                # Hard VIX day block (only when we actually have VIX data)
+                vix_block = float(PS.get("vix_block_above", 17.0))
+                if vix_d > 0 and vix_d >= vix_block:
+                    flt["vix_day_blocked"] += 1
+                    continue
+
+                npc = nifty_prev.get(day, 0.0)
+                nm  = nifty_min.get(day, {})
+
+                pool: list = []
+                for idx, c in enumerate(mkt):
+                    cm_i = cm_from_candle(c)
+                    px   = float(c.get("close") or 0)
+                    if not px:
+                        continue
+                    flt["bars_scanned"] += 1
+
+                    npx = nm.get(cm_i)
+                    nifty_pe = (npx - npc) / npc * 100 if (npc and npx) else None
+
+                    cross = None
+                    if sym == "NIFTY":
+                        bm = bn_min.get(day, {})
+                        x0, x1 = bm.get(cm_i-5), bm.get(cm_i)
+                        if x0 and x1:
+                            cross = (x1-x0)/x0*100
+                    else:
+                        xm = nifty_min.get(day, {})
+                        x0, x1 = xm.get(cm_i-5), xm.get(cm_i)
+                        if x0 and x1:
+                            cross = (x1-x0)/x0*100
+
+                    ok, chg, is_ce, why = passes_index_radar_1m(
+                        mkt, idx, PS,
+                        vix_eod=vix_d, pcr_day=pcr_d,
+                        nifty_day_pct_for_pe=nifty_pe, cross_other_5m=cross,
+                    )
+                    if not ok:
+                        flt[f"reject_{why or 'unk'}"] += 1
+                        continue
+
+                    strength, quality = index_radar_quality(float(chg), is_ce, PS, vix_d, pcr_d)
+                    qfloor = max(
+                        int(PS.get("quality_floor", 68)),
+                        int(PS.get("precision_min_quality", 76)) if PS.get("precision_boost") else 0,
+                    )
+                    if qfloor > 0 and quality < qfloor:
+                        flt["reject_quality"] += 1
+                        continue
+
+                    entry = max(20.0, round(px * 0.007, 1))
+                    atm   = round(px / step) * step
+                    ml_p  = None
+                    try:
+                        if PS.get("daily_pick_use_ml_score"):
+                            from index_radar_ml import win_probability
+                            ml_p = win_probability({
+                                "chg_pct": float(chg), "type": "CE" if is_ce else "PE",
+                                "symbol": sym, "strength": strength,
+                                "time": c["date"].strftime("%H:%M"),
+                                "vix": vix_d, "rr": 1.67,
+                                "quality": quality, "pcr": pcr_d,
+                            })
+                    except Exception:
+                        pass
+
+                    sc = index_hunt_candidate_score(float(quality), float(chg), strength, ml_p=ml_p)
+                    pool.append({
+                        "i": idx, "cm": cm_i, "score": sc,
+                        "sig_type": "CE" if is_ce else "PE",
+                        "chg": chg, "is_ce": is_ce, "px": px,
+                        "quality": quality, "strength": strength,
+                        "candle": c, "entry": entry, "atm": atm,
+                    })
+
+                chosen = daily_pick_select(pool, PS)
+                flt["pool"] += len(pool)
+                flt["kept"] += len(chosen)
+                chosen.sort(key=lambda x: x["i"])
+
+                day_n, csl = 0, 0
+                for item in chosen:
+                    if day_n >= max_day:
+                        flt["cap_day"] += 1; break
+                    if csl >= max_csl:
+                        flt["cap_csl"] += 1; break
+
+                    idx2     = item["i"]
+                    c2       = item["candle"]
+                    chg2     = item["chg"]
+                    is_ce2   = item["is_ce"]
+                    px2      = item["px"]
+                    quality2 = item["quality"]
+                    strength2= item["strength"]
+                    entry2   = item["entry"]
+                    atm2     = item["atm"]
+                    cm2      = item["cm"]
+                    stype    = item["sig_type"]
+
+                    t1m = float(PS.get("opt_t1_mult", 1.30))
+                    slm = float(PS.get("opt_sl_mult", 0.78))
+                    t1  = round(entry2 * t1m, 2)
+                    sl  = round(entry2 * slm, 2)
+                    rr  = round((t1-entry2)/max(entry2-sl, 0.01), 1)
+
+                    tier = "FULL" if quality2 >= tier_full else "HALF"
+                    lots = 2 if tier == "FULL" else 1
+                    win  = "W1" if cm2 <= 660 else ("W2" if cm2 <= 720 else "W3")
+
+                    outcome = None
+                    for jj in range(idx2+1, min(idx2+46, len(mkt))):
+                        fc = mkt[jj]
+                        if use_hl:
+                            hi = float(fc.get("high") or fc.get("close") or 0)
+                            lo = float(fc.get("low")  or fc.get("close") or 0)
+                            if not hi or not lo:
+                                continue
+                            if is_ce2:
+                                if (hi-px2)/px2*100 >= _t1_th: outcome="HIT_T1"; break
+                                if (lo-px2)/px2*100 <= -_sl_th: outcome="HIT_SL"; break
+                            else:
+                                if (lo-px2)/px2*100 <= -_t1_th: outcome="HIT_T1"; break
+                                if (hi-px2)/px2*100 >= _sl_th:  outcome="HIT_SL"; break
+                        else:
+                            mv = (float(fc["close"])-px2)/px2*100
+                            if (is_ce2 and mv>=_t1_th) or (not is_ce2 and mv<=-_t1_th): outcome="HIT_T1"; break
+                            if (is_ce2 and mv<=-_sl_th) or (not is_ce2 and mv>=_sl_th): outcome="HIT_SL"; break
+                    if outcome is None:
+                        outcome = "EXPIRED"
+
+                    tot_lots = lot_sz * lots
+                    if outcome == "HIT_T1":
+                        pnl = round((t1-entry2)*tot_lots); csl=0
+                    elif outcome == "HIT_SL":
+                        pnl = round(-(entry2-sl)*tot_lots); csl+=1
+                    else:
+                        pnl = 0; csl=0
+
+                    day_n += 1
+                    flt["signals"] += 1
+                    strike = atm2+step if is_ce2 else atm2-step
+
+                    all_trades.append({
+                        "date": day, "symbol": sym, "type": stype,
+                        "time": c2["date"].strftime("%H:%M"),
+                        "window": win, "chg_pct": round(float(chg2),2),
+                        "vix": vix_d, "pcr": round(pcr_d,3),
+                        "quality": quality2, "strength": strength2,
+                        "tier": tier, "lots": lots,
+                        "index_px": round(px2,2), "strike": strike,
+                        "entry": entry2, "t1": t1, "sl": sl, "rr": rr,
+                        "lot_sz": lot_sz, "outcome": outcome, "pnl": pnl,
+                    })
+
+    except Exception as e:
+        logger.error("prime_strikes_backtest error: %s\n%s", e, _tb.format_exc())
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return JSONResponse({"error": f"Backtest error: {e}"}, status_code=500)
+
+    conn.close()
+
+    # ── aggregate ──
+    resolved = [t for t in all_trades if t["outcome"] in ("HIT_T1","HIT_SL")]
+    wins     = sum(1 for t in resolved if t["outcome"]=="HIT_T1")
+    wr       = round(wins/len(resolved)*100) if resolved else 0
+    net_pnl  = sum(t["pnl"] for t in all_trades)
+
+    def _bs(trades):
+        r=[t for t in trades if t["outcome"] in ("HIT_T1","HIT_SL")]
+        w=sum(1 for t in r if t["outcome"]=="HIT_T1")
+        return {"total":len(trades),"resolved":len(r),"wins":w,
+                "losses":len(r)-w,"wr":round(w/len(r)*100) if r else 0,
+                "pnl":sum(t["pnl"] for t in trades)}
+
+    def _vbkt(t):
+        v=t["vix"]
+        if not v: return "no_data"
+        if v<13:  return "<13"
+        if v<16:  return "13-16"
+        if v<17:  return "16-17"
+        return ">17"
+
+    wstats = {k:_bs([t for t in all_trades if t["window"]==k]) for k in ("W1","W2","W3")}
+    wstats["W1"]["label"]="10:00-11:00 (best)"
+    wstats["W2"]["label"]="11:00-12:00"
+    wstats["W3"]["label"]="12:00-13:00"
+    vstats = {k:_bs([t for t in all_trades if _vbkt(t)==k]) for k in ("<13","13-16","16-17",">17","no_data")}
+    tstats = {k:_bs([t for t in all_trades if t["tier"]==k]) for k in ("FULL","HALF")}
+    dstats = {k:_bs([t for t in all_trades if t["type"]==k]) for k in ("CE","PE")}
+
+    try:
+        from trading_policy import index_hunt_walk_forward_stats
+        wf = index_hunt_walk_forward_stats(
+            [{"trade_date":t["date"],"outcome":t["outcome"]} for t in all_trades])
+    except Exception:
+        wf = {"ok": False}
+
+    return JSONResponse({
+        "total":    len(all_trades),
+        "resolved": len(resolved),
+        "wins":     wins,
+        "losses":   len(resolved)-wins,
+        "win_rate": wr,
+        "net_pnl":  net_pnl,
+        "from":     from_date,
+        "to":       to_date,
+        "trades":   all_trades,
+        "window_stats": wstats,
+        "vix_stats":    vstats,
+        "tier_stats":   tstats,
+        "type_stats":   dstats,
+        "walk_forward": wf,
+        "filter_stats": dict(sorted(flt.items(), key=lambda x:-x[1])),
+        "note": (
+            "PRIME STRIKE: VIX<=17 gate | PCR align | 10:00-13:00 | session lock | "
+            "confirm bars | 15m hunt | quality tier lots (FULL=2x HALF=1x). "
+            "WR=HIT_T1/(HIT_T1+HIT_SL) within 45min bars."
+        ),
     })
 
 
@@ -815,6 +1540,8 @@ async def get_state():
         "spikes":        signals.state.get("spikes", []),
         "index_signals": signals.state.get("index_signals", []),
         "adv_index": signals.state.get("adv_index"),
+        "adv_idx_options": signals.state.get("adv_idx_options"),
+        "intra_index": signals.state.get("intra_index"),
         "strategy_profile": get_strategy_profile_name(),
         "position_size_lots": signals.state.get("position_size_lots", 0),
         "position_size_rupees": signals.state.get("position_size_rupees", 0),
@@ -1050,7 +1777,7 @@ async def day_performance(date: str = None):
             "time": d.get("signal_time"),
             "hit_time": d.get("exit_time"),
             "direction": d.get("type"),
-            "trigger": "INDEX RADAR",
+            "trigger": "INDEX HUNT",
             "strength": "",
             "entry": _inr(entry),
             "sl": _inr(d.get("sl")),
@@ -1141,6 +1868,94 @@ async def trading_policy():
     if not build_trading_policy_report:
         return JSONResponse({"error": "trading_policy module missing"}, status_code=500)
     return JSONResponse(build_trading_policy_report())
+
+
+@app.get("/api/intra-index/snapshot")
+async def intra_index_snapshot(
+    fire_threshold: Optional[int] = Query(None, ge=40, le=95, description="FIRE min confidence (default 70)"),
+):
+    """NIFTY 1m ORB + VWAP + heavyweight breadth + paper FIRE flag (9:30–10:30 IST)."""
+    from feed import get_kite
+
+    import intra_index_engine as _ixi
+
+    kite = get_kite()
+    return JSONResponse(_ixi.compute_live_snapshot(kite, fire_threshold=fire_threshold))
+
+
+@app.get("/api/intra-index/health")
+async def intra_index_health():
+    """Cheap check that INTRA INDEX routes are mounted."""
+    return JSONResponse(
+        {
+            "ok": True,
+            "snapshot": "/api/intra-index/snapshot",
+            "backtest_post_get": [
+                "/api/intra-index/backtest",
+                "/api/intra_index/backtest",
+            ],
+        }
+    )
+
+
+async def _intra_index_backtest_core(days: int, asof_cm: int, fire_threshold: int):
+    import asyncio
+
+    from feed import get_kite
+
+    import intra_index_backtest as _ixi_bt
+
+    kite = get_kite()
+    if not kite:
+        return JSONResponse({"ok": False, "error": "Kite not available"}, status_code=503)
+    try:
+        loop = asyncio.get_event_loop()
+        out = await loop.run_in_executor(
+            None,
+            lambda: _ixi_bt.run_intra_index_backtest(
+                kite,
+                days=days,
+                asof_cm=asof_cm,
+                fire_threshold=fire_threshold,
+            ),
+        )
+        return JSONResponse(out)
+    except Exception as e:
+        logger.error(f"intra_index_backtest: {e}", exc_info=True)
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+async def intra_index_backtest_handle(request: Request):
+    """Paper FIRE replay: POST JSON body or GET query (days, asof_cm, fire_threshold)."""
+    body: dict = {}
+    if request.method == "POST":
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+    else:
+        body = dict(request.query_params)
+    try:
+        days = int(body.get("days") or 30)
+        asof_cm = int(body.get("asof_cm") or 630)
+        fire_threshold = int(body.get("fire_threshold") or 70)
+    except (TypeError, ValueError):
+        return JSONResponse({"ok": False, "error": "Invalid days/asof_cm/fire_threshold"}, status_code=400)
+    return await _intra_index_backtest_core(days, asof_cm, fire_threshold)
+
+
+app.add_api_route(
+    "/api/intra-index/backtest",
+    intra_index_backtest_handle,
+    methods=["GET", "POST"],
+    tags=["intra-index"],
+)
+app.add_api_route(
+    "/api/intra_index/backtest",
+    intra_index_backtest_handle,
+    methods=["GET", "POST"],
+    tags=["intra-index"],
+)
 
 
 @app.get("/api/adv-index/snapshot")
@@ -1240,6 +2055,126 @@ async def adv_index_history_one(row_id: int):
     if not row:
         return JSONResponse({"error": "not_found"}, status_code=404)
     return JSONResponse(row)
+
+
+@app.get("/api/adv-idx-options/snapshot")
+async def adv_idx_options_snapshot():
+    """IV proxy, expiry intelligence, max pain + OI skew — fresh option chains (1–3s)."""
+    from feed import get_kite
+    import adv_idx_options as _adio
+
+    kite = get_kite()
+    if not kite:
+        return JSONResponse({"error": "Kite not available", "ts": __import__("time").time()})
+    return JSONResponse(_adio.build_snapshot(kite, signals.state))
+
+
+@app.post("/api/adv-idx-options/backtest")
+async def adv_idx_options_backtest(request: Request):
+    """
+    Context replay: prefers table `adv_idx_options_daily` (see /download); else ohlcv ∩ vix_daily.
+    Response may include `full_report` when using the dedicated table.
+    """
+    import asyncio
+
+    import adv_idx_options_backtest as _adio_bt
+
+    body: dict = {}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    days = int(body.get("days") or 180)
+    min_score = float(body.get("min_score") or 60)
+    verdict_mode = str(body.get("verdict_mode") or "none")
+
+    try:
+        loop = asyncio.get_event_loop()
+        out = await loop.run_in_executor(
+            None,
+            lambda: _adio_bt.run_adv_idx_options_backtest(
+                days=days, min_score=min_score, verdict_mode=verdict_mode
+            ),
+        )
+        return JSONResponse(out)
+    except Exception as e:
+        logger.error(f"adv_idx_options_backtest: {e}", exc_info=True)
+        return JSONResponse({"error": str(e), "trades_executed": 0}, status_code=500)
+
+
+@app.post("/api/adv-idx-options/download")
+async def adv_idx_options_download(request: Request):
+    """Download NIFTY + India VIX daily into `adv_idx_options_daily` (separate from ohlcv/vix_daily)."""
+    import asyncio
+
+    from feed import get_kite
+
+    import adv_idx_options_storage as _adio_st
+
+    kite = get_kite()
+    if not kite:
+        return JSONResponse({"error": "Kite not available"}, status_code=503)
+
+    body: dict = {}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    days = int(body.get("days") or 730)
+
+    try:
+        loop = asyncio.get_event_loop()
+        out = await loop.run_in_executor(
+            None,
+            lambda: _adio_st.download_adv_idx_options_from_kite(kite, days=days),
+        )
+        return JSONResponse(out)
+    except Exception as e:
+        logger.error(f"adv_idx_options_download: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/adv-idx-options/sync-local")
+async def adv_idx_options_sync_local():
+    """Populate adv_idx_options_daily from local ohlcv+vix_daily (no Kite needed)."""
+    import asyncio
+    import adv_idx_options_storage as _adio_st
+
+    try:
+        loop = asyncio.get_event_loop()
+        out = await loop.run_in_executor(None, lambda: _adio_st.populate_from_local_db(days=3650))
+        return JSONResponse(out)
+    except Exception as e:
+        logger.error(f"adv_idx_options_sync_local: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/adv-idx-options/backtest-report")
+async def adv_idx_options_backtest_report(
+    days: int = 180,
+    min_score: float = 60,
+    verdict_mode: str = "none",
+):
+    """Structured report from `adv_idx_options_daily`: summary, monthly, next-session stats."""
+    import asyncio
+
+    import adv_idx_options_storage as _adio_st
+
+    try:
+        loop = asyncio.get_event_loop()
+        out = await loop.run_in_executor(
+            None,
+            lambda: _adio_st.build_adv_idx_options_report(
+                days=int(days),
+                min_score=float(min_score),
+                verdict_mode=str(verdict_mode or "none"),
+            ),
+        )
+        return JSONResponse(out)
+    except Exception as e:
+        logger.error(f"adv_idx_options_backtest_report: {e}", exc_info=True)
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 
 @app.get("/api/live-picks")
@@ -1729,6 +2664,131 @@ async def backtest_run(from_date: str = None, to_date: str = None, mode: str = "
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@app.post("/api/backtest/multi-report")
+async def backtest_multi_report(request: Request):
+    """
+    One gate-engine replay with full history, then rolling metrics for 1W / 1M / 6M calendar lookbacks.
+
+    - refresh_kite (default True): pull NIFTY + India VIX daily from Zerodha Kite into backtest.db.
+    - refresh_nse (default False): refresh PCR + FII from NSE archives (slow); use ⬇ DOWNLOAD DATA for full 3Y.
+    """
+    import asyncio
+    from datetime import datetime, timedelta
+
+    import backtest_data as bd
+    import backtest_engine as be
+
+    body: dict = {}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    mode = str(body.get("mode") or "intraday")
+    if mode not in ("intraday", "positional"):
+        mode = "intraday"
+    refresh_kite = bool(body.get("refresh_kite", True))
+    refresh_nse = bool(body.get("refresh_nse", False))
+    kite_days = max(60, min(int(body.get("kite_days") or 280), 1095))
+    nse_days = max(60, min(int(body.get("nse_days") or 220), 1095))
+    history_span = max(120, min(int(body.get("history_span_days") or 280), 1095))
+
+    periods_cfg = {
+        "1w": {"calendar_days": int(body.get("days_1w") or 7), "label": "Last 7 calendar days"},
+        "1m": {"calendar_days": int(body.get("days_1m") or 30), "label": "Last 30 calendar days"},
+        "6m": {"calendar_days": int(body.get("days_6m") or 183), "label": "Last ~6 months (183d)"},
+    }
+
+    def _work() -> dict:
+        bd.init_db()
+        summary_before = bd.get_data_summary()
+        kite_status = "skipped"
+        from feed import get_kite
+
+        kite = get_kite()
+        if refresh_kite:
+            if kite:
+                bd.download_kite_history(kite, days=kite_days)
+                kite_status = "ok"
+            else:
+                kite_status = "no_kite"
+        if refresh_nse:
+            bd.download_chain_history(days=nse_days)
+            bd.download_fii_history(days=nse_days)
+
+        to_d = datetime.now().date()
+        from_d = to_d - timedelta(days=history_span)
+        full = be.run_backtest(
+            from_d.isoformat(),
+            to_d.isoformat(),
+            mode,
+            persist=False,
+            trim_trade_log=False,
+        )
+
+        if full.get("error"):
+            return {
+                "error": full["error"],
+                "kite_refresh": kite_status,
+                "data_summary": bd.get_data_summary(),
+                "data_summary_before": summary_before,
+            }
+
+        all_trades = full.get("trades_all") or full.get("trades") or []
+        dates = [t.get("date") for t in all_trades if t.get("date")]
+        anchor = to_d
+        if dates:
+            try:
+                anchor = max(datetime.strptime(d, "%Y-%m-%d").date() for d in dates)
+            except ValueError:
+                pass
+
+        periods_out = {}
+        for key, meta in periods_cfg.items():
+            cal = max(1, meta["calendar_days"])
+            cut = (anchor - timedelta(days=cal)).isoformat()
+            slice_rows = [t for t in all_trades if t.get("date") and t["date"] >= cut]
+            agg = be.aggregate_backtest_window(slice_rows)
+            exec_rows = [
+                t
+                for t in sorted(slice_rows, key=lambda x: x.get("date") or "", reverse=True)
+                if t.get("verdict") == "EXECUTE"
+            ][:25]
+            periods_out[key] = {
+                "label": meta["label"],
+                "window_start": cut,
+                "window_end": anchor.isoformat(),
+                "metrics": agg["metrics"],
+                "gate_stats": agg["gate_stats"],
+                "trades_sample": exec_rows,
+            }
+
+        return {
+            "ok": True,
+            "mode": mode,
+            "anchor_date": anchor.isoformat(),
+            "replay_range": {"from": from_d.isoformat(), "to": to_d.isoformat()},
+            "kite_refresh": kite_status,
+            "nse_refresh": "ran" if refresh_nse else "skipped",
+            "data_summary": bd.get_data_summary(),
+            "full_metrics": full.get("metrics"),
+            "periods": periods_out,
+            "disclaimer": (
+                "Gate-engine daily replay (next-day open simulation). "
+                "Zerodha supplies NIFTY + VIX; PCR/FII come from NSE archives in backtest.db — "
+                "run ⬇ DOWNLOAD DATA if coverage is thin."
+            ),
+        }
+
+    try:
+        loop = asyncio.get_event_loop()
+        payload = await loop.run_in_executor(None, _work)
+        return JSONResponse(payload)
+    except Exception as e:
+        logger.error(f"backtest multi-report: {e}", exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.get("/api/backtest/results")
 async def backtest_results(from_date: str = None, to_date: str = None):
     """Return last backtest results from signal_log."""
@@ -1791,19 +2851,31 @@ async def token_status():
     """Check if Kite access token is still valid."""
     from config import KITE_ACCESS_TOKEN
     import time as _time
+    has_tok = bool((KITE_ACCESS_TOKEN or "").strip())
+    if not has_tok:
+        return JSONResponse(
+            {
+                "valid": False,
+                "has_token": False,
+                "error": "KITE_ACCESS_TOKEN missing — set in backend/.env or use token refresh",
+                "uptime_h": round((_time.time() - _start_time) / 3600, 1),
+            }
+        )
     try:
         from feed import get_kite
         kite = get_kite()
         profile = kite.profile()
         return JSONResponse({
-            "valid":    True,
-            "user":     profile.get("user_name", ""),
+            "valid": True,
+            "has_token": True,
+            "user": profile.get("user_name", ""),
             "uptime_h": round((_time.time() - _start_time) / 3600, 1),
         })
     except Exception as e:
         return JSONResponse({
-            "valid":   False,
-            "error":   str(e),
+            "valid": False,
+            "has_token": True,
+            "error": str(e),
             "uptime_h": round((_time.time() - _start_time) / 3600, 1),
         })
 
@@ -1825,7 +2897,7 @@ async def token_refresh_manual():
     if missing:
         return JSONResponse({
             "ok": False,
-            "msg": f"Missing env vars: {', '.join(missing)}. Add these in Railway → Variables tab and redeploy."
+            "msg": f"Missing env vars: {', '.join(missing)}. Add these to backend/.env or your host environment and restart."
         }, status_code=400)
 
     loop = _aio.get_event_loop()
@@ -1854,6 +2926,44 @@ async def token_refresh_manual():
     if result:
         return JSONResponse({"ok": True, "msg": "Token refreshed and applied live"})
     return JSONResponse({"ok": False, "msg": errmsg}, status_code=500)
+
+
+@app.post("/api/token-reload-env")
+async def token_reload_from_env():
+    """
+    Reload KITE_ACCESS_TOKEN from backend/.env into this process (no Playwright).
+    Use after: python auto_token.py, generate_token.py, or pasting a new token into .env
+    while the server is already running.
+    """
+    from pathlib import Path
+    from dotenv import load_dotenv
+
+    _envp = Path(__file__).resolve().parent / ".env"
+    if not _envp.is_file():
+        return JSONResponse({"ok": False, "msg": "backend/.env not found"}, status_code=404)
+    load_dotenv(_envp, override=True)
+    if not os.getenv("KITE_ACCESS_TOKEN", "").strip():
+        return JSONResponse(
+            {"ok": False, "msg": "KITE_ACCESS_TOKEN is empty in backend/.env — run auto_token or paste token"},
+            status_code=400,
+        )
+    try:
+        from scheduler import _apply_new_token
+
+        _apply_new_token()
+        from feed import get_kite
+
+        profile = get_kite().profile()
+        return JSONResponse(
+            {
+                "ok": True,
+                "msg": "Token loaded from .env and applied",
+                "user": profile.get("user_name", ""),
+            }
+        )
+    except Exception as e:
+        logger.error("token-reload-env: %s", e, exc_info=True)
+        return JSONResponse({"ok": False, "msg": str(e)}, status_code=500)
 
 
 @app.get("/api/backtest/dayview")
@@ -2402,12 +3512,15 @@ async def dayview_stocks(date: str):
     """
     Per-stock gate analysis for a specific date.
     G1/G2 shared from index. G3/G4/G5 computed per stock using Kite historical data.
+    Intraday trade sim = first session after signal only. Positional = same entry/TP/SL
+    walked across up to GATE["positional_max_hold_days"] daily sessions (time-stop on last bar).
     Also attempts to fetch 5-min intraday candles for recent dates (within 60 days).
     """
     import statistics as _stat
     from datetime import date as _date_cls, timedelta as _td, datetime as _dt_cls
     from config import KITE_TOKENS, FNO_SYMBOLS, LOT_SIZES, GATE as TH
     from backtest_engine import _g1, _g2, _g3, _g4, _g5, _verdict
+    from dayview_trade_sim import simulate_dayview_positional_long
     import backtest_data as bd
 
     try:
@@ -2478,39 +3591,47 @@ async def dayview_stocks(date: str):
                 verdict_i, pc_i = _verdict([g1_idx, g2_idx, g3, g4, g5])
                 verdict_p, pc_p = _verdict([g1_idx, g2_idx, g3, g4, g5p])
 
-                # Entry/exit simulation using next day open if available
+                # Entry next session open; intraday = 1st bar only, positional = multi-day path
                 try:
-                    nxt_hist = kite.historical_data(token, sel_date + _td(days=1), sel_date + _td(days=5), "day")
+                    nxt_hist = kite.historical_data(token, sel_date + _td(days=1), sel_date + _td(days=45), "day")
                     nxt_d = nxt_hist[0] if nxt_hist else None
                 except Exception:
+                    nxt_hist = []
                     nxt_d = None
 
                 entry = round(nxt_d["open"], 2) if nxt_d else None
                 trade_i = trade_p = None
                 if entry:
-                    for mode, rr in [("intraday", TH["rr_min_intraday"]), ("positional", TH["rr_min_positional"])]:
-                        stop_dist   = round(atr_v * TH["atr_multiplier"], 2)
-                        target_dist = round(stop_dist * rr, 2)
-                        target = round(entry + target_dist, 2)
-                        stop   = round(entry - stop_dist, 2)
-                        nxt_high = round(nxt_d["high"], 2)
-                        nxt_low  = round(nxt_d["low"],  2)
-                        nxt_close= round(nxt_d["close"], 2)
-                        if nxt_high >= target:
-                            exit_p, outcome = target, "WIN"
-                        elif nxt_low <= stop:
-                            exit_p, outcome = stop, "LOSS"
-                        else:
-                            exit_p  = nxt_close
-                            diff    = nxt_close - entry
-                            thr     = max(10, round(atr_v * 0.3))
-                            outcome = "WIN" if diff >= thr else "LOSS" if diff <= -thr else "NEUTRAL"
-                        pnl = round(exit_p - entry, 2)
-                        t = {"entry": entry, "target": target, "stop": stop,
-                             "exit": exit_p, "pnl": pnl, "outcome": outcome,
-                             "next_date": nxt_d["date"].strftime("%Y-%m-%d") if hasattr(nxt_d["date"],"strftime") else str(nxt_d["date"])[:10]}
-                        if mode == "intraday":  trade_i = t
-                        else:                   trade_p = t
+                    stop_dist = round(atr_v * TH["atr_multiplier"], 2)
+                    rr_i = TH["rr_min_intraday"]
+                    target_i = round(entry + round(stop_dist * rr_i, 2), 2)
+                    stop_i = round(entry - stop_dist, 2)
+                    nxt_high = round(nxt_d["high"], 2)
+                    nxt_low = round(nxt_d["low"], 2)
+                    nxt_close = round(nxt_d["close"], 2)
+                    if nxt_high >= target_i:
+                        exit_p, outcome = target_i, "WIN"
+                    elif nxt_low <= stop_i:
+                        exit_p, outcome = stop_i, "LOSS"
+                    else:
+                        exit_p = nxt_close
+                        diff = nxt_close - entry
+                        thr = max(10, round(atr_v * 0.3))
+                        outcome = "WIN" if diff >= thr else "LOSS" if diff <= -thr else "NEUTRAL"
+                    pnl = round(exit_p - entry, 2)
+                    nd = nxt_d["date"].strftime("%Y-%m-%d") if hasattr(nxt_d["date"], "strftime") else str(nxt_d["date"])[:10]
+                    trade_i = {
+                        "entry": entry, "target": target_i, "stop": stop_i,
+                        "exit": exit_p, "pnl": pnl, "outcome": outcome,
+                        "next_date": nd,
+                    }
+                    rr_p = TH["rr_min_positional"]
+                    target_p = round(entry + round(stop_dist * rr_p, 2), 2)
+                    stop_p = round(entry - stop_dist, 2)
+                    max_hold = int(TH.get("positional_max_hold_days", 10))
+                    trade_p = simulate_dayview_positional_long(
+                        entry, target_p, stop_p, nxt_hist, atr_v, max_hold
+                    )
 
                 # 5-min candles if within 60 days
                 candles_5m = []

@@ -1,4 +1,5 @@
-app = "nse-edge-live"
+# Match GitHub Pages API host in frontend/index.html (nse-edge-backend.fly.dev)
+app = "nse-edge-backend"
 primary_region = "sin"
 
 [build]

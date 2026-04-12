@@ -20,6 +20,39 @@ from config import KITE_TOKENS, KITE_TOKEN_TO_SYMBOL, KITE_QUOTE_KEYS
 
 logger = logging.getLogger("feed")
 
+_token_refresh_lock = threading.Lock()
+_last_auto_token_attempt_ts = 0.0
+_AUTO_TOKEN_COOLDOWN_SEC = 180.0
+
+
+def maybe_refresh_kite_token(reason: str = "auth_error") -> None:
+    """Non-interactive token refresh when Kite returns auth errors (throttled)."""
+    global _last_auto_token_attempt_ts
+    now = time.time()
+    if now - _last_auto_token_attempt_ts < _AUTO_TOKEN_COOLDOWN_SEC:
+        return
+    with _token_refresh_lock:
+        now = time.time()
+        if now - _last_auto_token_attempt_ts < _AUTO_TOKEN_COOLDOWN_SEC:
+            return
+        _last_auto_token_attempt_ts = now
+
+    def _bg():
+        try:
+            from auto_token import refresh_token
+
+            if refresh_token():
+                from scheduler import _apply_new_token
+
+                _apply_new_token()
+                logger.info("Kite access token auto-refreshed (%s)", reason)
+            else:
+                logger.warning("Auto token refresh skipped or failed (%s)", reason)
+        except Exception as e:
+            logger.warning("Auto token refresh error (%s): %s", reason, e)
+
+    threading.Thread(target=_bg, daemon=True).start()
+
 # ─── PRICE CACHE ──────────────────────────────────────────────────────────────
 # {symbol: {price, chg_pct, chg_pts, prev, high, low, volume, oi, ts, source}}
 price_cache: Dict[str, dict] = {}
@@ -91,10 +124,41 @@ def fetch_quotes_rest():
     kite = get_kite()
     # Fetch in batches of 500 (Kite limit per call)
     keys = list(KITE_QUOTE_KEYS.values())
-    try:
-        data = kite.quote(keys)
-    except Exception as e:
-        logger.warning(f"REST quote failed: {e}")
+    auth_markers = (
+        "token",
+        "incorrect api",
+        "unauthorized",
+        "forbidden",
+        "invalid",
+        "api_key",
+    )
+    transient_markers = (
+        "timeout",
+        "timed out",
+        "read timed",
+        "connection reset",
+        "connection aborted",
+        "temporarily unavailable",
+        "503",
+        "502",
+    )
+    data = None
+    for attempt in range(3):
+        try:
+            data = kite.quote(keys)
+            break
+        except Exception as e:
+            err = str(e).lower()
+            if any(s in err for s in auth_markers):
+                maybe_refresh_kite_token("rest_quote")
+                logger.warning(f"REST quote failed: {e}")
+                return
+            if any(s in err for s in transient_markers) and attempt < 2:
+                time.sleep(0.4 * (2**attempt))
+                continue
+            logger.warning(f"REST quote failed: {e}")
+            return
+    if not data:
         return
 
     for symbol, qkey in KITE_QUOTE_KEYS.items():

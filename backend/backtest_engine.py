@@ -154,11 +154,84 @@ def _verdict(gates: list):
         return "WAIT", pass_cnt
 
 
+def aggregate_backtest_window(trades: list) -> dict:
+    """Recompute metrics + gate_stats for a subset of daily rows from run_backtest."""
+    if not trades:
+        zs = {i: {"pass_rate": 0.0, "win_rate_when_go": 0.0, "sample": 0} for i in range(1, 6)}
+        return {
+            "metrics": {
+                "total_days": 0,
+                "execute_signals": 0,
+                "wins": 0,
+                "losses": 0,
+                "neutrals": 0,
+                "win_rate_pct": 0.0,
+                "avg_win_pts": 0.0,
+                "avg_loss_pts": 0.0,
+                "profit_factor": 0.0,
+                "total_pnl_pts": 0.0,
+            },
+            "gate_stats": zs,
+        }
+
+    gate_track = {i: {"go": 0, "total": 0, "wins": 0} for i in range(1, 6)}
+    for t in trades:
+        outcome = t.get("outcome")
+        for gi in range(1, 6):
+            gate_track[gi]["total"] += 1
+            if t.get(f"g{gi}") == "go":
+                gate_track[gi]["go"] += 1
+                if outcome == "WIN":
+                    gate_track[gi]["wins"] += 1
+
+    execute = [t for t in trades if t.get("verdict") == "EXECUTE"]
+    wins = [t for t in execute if t.get("outcome") == "WIN"]
+    losses = [t for t in execute if t.get("outcome") == "LOSS"]
+    neutrals = [t for t in execute if t.get("outcome") == "NEUTRAL"]
+    win_rate = round(len(wins) / len(execute) * 100, 1) if execute else 0.0
+    avg_win = round(statistics.mean([t["outcome_pts"] for t in wins]), 2) if wins else 0.0
+    avg_loss = round(statistics.mean([t["outcome_pts"] for t in losses]), 2) if losses else 0.0
+    pf = round(abs(avg_win / avg_loss), 2) if avg_loss and avg_win else 0.0
+    total_pnl = round(
+        sum(t["outcome_pts"] for t in execute if t.get("outcome_pts") is not None), 2
+    )
+
+    gate_stats = {}
+    for gi, st in gate_track.items():
+        go, tot, win = st["go"], st["total"], st["wins"]
+        gate_stats[gi] = {
+            "pass_rate": round(go / tot * 100, 1) if tot else 0,
+            "win_rate_when_go": round(win / go * 100, 1) if go else 0,
+            "sample": go,
+        }
+
+    metrics = {
+        "total_days": len(trades),
+        "execute_signals": len(execute),
+        "wins": len(wins),
+        "losses": len(losses),
+        "neutrals": len(neutrals),
+        "win_rate_pct": win_rate,
+        "avg_win_pts": avg_win,
+        "avg_loss_pts": avg_loss,
+        "profit_factor": pf,
+        "total_pnl_pts": total_pnl,
+    }
+    return {"metrics": metrics, "gate_stats": gate_stats}
+
+
 # ─── MAIN BACKTEST ────────────────────────────────────────────────────────────
-def run_backtest(from_date: str, to_date: str, mode: str = "intraday") -> dict:
+def run_backtest(
+    from_date: str,
+    to_date: str,
+    mode: str = "intraday",
+    *,
+    persist: bool = True,
+    trim_trade_log: bool = True,
+) -> dict:
     """
     Simulate gate logic on historical daily data.
-    Returns metrics + per-gate stats + last 100 trade records.
+    Returns metrics + per-gate stats + trade rows (trimmed unless trim_trade_log=False).
     """
     import backtest_data as bd
     bd.init_db()
@@ -293,7 +366,8 @@ def run_backtest(from_date: str, to_date: str, mode: str = "intraday") -> dict:
                     gate_track[gi]["wins"] += 1
 
     # Save to DB
-    _save_to_db(trades)
+    if persist:
+        _save_to_db(trades)
 
     execute  = [t for t in trades if t["verdict"] == "EXECUTE"]
     wins     = [t for t in execute if t["outcome"] == "WIN"]
@@ -343,16 +417,21 @@ def run_backtest(from_date: str, to_date: str, mode: str = "intraday") -> dict:
         f"{len(execute)} EXECUTE, WR={win_rate}%, PF={pf}"
     )
 
-    # Return all EXECUTE + WAIT trades, plus last 60 NO TRADE rows for context
-    important = [t for t in trades if t["verdict"] in ("EXECUTE", "WAIT")]
-    recent_no = [t for t in trades if t["verdict"] == "NO TRADE"][-60:]
-    combined  = sorted(important + recent_no, key=lambda x: x["date"])
+    if trim_trade_log:
+        important = [t for t in trades if t["verdict"] in ("EXECUTE", "WAIT")]
+        recent_no = [t for t in trades if t["verdict"] == "NO TRADE"][-60:]
+        out_trades = sorted(important + recent_no, key=lambda x: x["date"])
+    else:
+        out_trades = trades
 
-    return {
-        "trades":     combined,
-        "metrics":    metrics,
+    out = {
+        "trades": out_trades,
+        "metrics": metrics,
         "gate_stats": gate_stats,
     }
+    if not trim_trade_log:
+        out["trades_all"] = trades
+    return out
 
 
 def _save_to_db(trades: list):

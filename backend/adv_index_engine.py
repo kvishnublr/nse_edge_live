@@ -184,12 +184,25 @@ def export_adv_index_trades_csv(trades: list[dict[str, Any]], path: Path | str) 
     """Write all trades to CSV; returns absolute path string."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    keys = ["date", "cm", "direction", "breadth", "nifty_5m", "outcome", "exit_pct", "bars"]
+    keys = [
+        "date",
+        "signal_time_ist",
+        "cm",
+        "entry_nifty",
+        "direction",
+        "breadth",
+        "nifty_5m",
+        "outcome",
+        "outcome_label",
+        "exit_pct",
+        "bars",
+    ]
     with path.open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=keys, extrasaction="ignore")
         w.writeheader()
         for t in trades:
-            w.writerow({k: t.get(k) for k in keys})
+            row = {k: t.get(k) for k in keys}
+            w.writerow(row)
     return str(path.resolve())
 
 
@@ -322,13 +335,22 @@ def run_adv_index_backtest(
                         exit_pct = -mvp
                         break
 
+            h_ist, mi_ist = divmod(int(cm_sig), 60)
+            _olab = {
+                "HIT_T1": "Target 1 hit (T1)",
+                "HIT_SL": "Stop loss hit (SL)",
+                "EXPIRED": f"Expired (no T1/SL within {BT_MAX_FWD} min bars)",
+            }
             trades.append({
                 "date": d_str,
                 "cm": cm_sig,
+                "signal_time_ist": f"{h_ist:02d}:{mi_ist:02d}",
+                "entry_nifty": round(entry, 2),
                 "direction": direction,
                 "breadth": round(breadth, 4),
                 "nifty_5m": round(nifty_5m, 4),
                 "outcome": outcome,
+                "outcome_label": _olab.get(outcome, outcome),
                 "exit_pct": round(exit_pct, 4),
                 "bars": bars,
             })
@@ -355,6 +377,10 @@ def run_adv_index_backtest(
             "t1_pct": BT_T1_PCT,
             "sl_pct": BT_SL_PCT,
             "bar_step_min": BT_BAR_STEP,
+            "signal_cm_start": BT_CM0,
+            "signal_cm_end": BT_CM1,
+            "forward_max_minute_bars": BT_MAX_FWD,
+            "time_note": "cm = minutes from midnight IST; signals every bar_step_min in range; entry = NIFTY close at/ before that cm.",
         },
         "methodology": (
             "Proxy backtest: weighted 5m NIFTY 50 cash returns (no historical OI). "

@@ -1,5 +1,5 @@
 // NSE EDGE v5 — Service Worker
-const CACHE = 'nse-edge-v1';
+const CACHE = 'nse-edge-v2';
 const STATIC = ['/', '/index.html'];
 
 self.addEventListener('install', e => {
@@ -13,10 +13,23 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  // Only cache GET requests for static assets; pass through API calls
   if(e.request.method !== 'GET') return;
   if(e.request.url.includes('/api/')) return;
   if(e.request.url.includes('/ws')) return;
+  const url = new URL(e.request.url);
+  const isDoc = e.request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('/index.html');
+  if(isDoc){
+    e.respondWith(
+      fetch(e.request).then(res => {
+        if(res && res.status === 200){
+          const clone = res.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone)).catch(()=>{});
+        }
+        return res;
+      }).catch(() => caches.match(e.request).then(c => c || caches.match('/index.html')))
+    );
+    return;
+  }
   e.respondWith(
     caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
       if(res && res.status === 200 && res.type === 'basic'){

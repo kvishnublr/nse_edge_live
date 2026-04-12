@@ -18,7 +18,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
 
-# Ensure data dir exists (overlaid by Fly volume / Railway volume at runtime)
+# Ensure data dir exists (overlaid by Fly volume or host mount at runtime)
 RUN mkdir -p /app/backend/data
 
 ENV HOST=0.0.0.0

@@ -11,12 +11,12 @@ import pytz
 from dotenv import load_dotenv
 
 # Load .env from backend directory (next to this file)
-# override=False means Railway/system env vars always take priority over .env file
+# override=False means process environment variables take priority over .env file
 _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
 load_dotenv(_env_path, override=False)
 logger = logging.getLogger("config")
 
-# Debug: log which env vars are present (helps diagnose Railway issues)
+# Debug: log which env vars are present (helps diagnose missing credentials on deploy)
 _has_api_key = bool(os.getenv("KITE_API_KEY", "").strip())
 _has_token   = bool(os.getenv("KITE_ACCESS_TOKEN", "").strip())
 print(f"[config] KITE_API_KEY present: {_has_api_key} | KITE_ACCESS_TOKEN present: {_has_token}", flush=True)
@@ -29,9 +29,9 @@ def _validate_config():
     # Required credentials — only API key/secret are hard required
     # KITE_ACCESS_TOKEN can be missing; auto_token will refresh it at startup
     if not KITE_API_KEY:
-        errors.append("KITE_API_KEY missing — set in Railway Variables tab")
+        errors.append("KITE_API_KEY missing — set in environment or backend/.env")
     if not KITE_API_SECRET:
-        errors.append("KITE_API_SECRET missing — set in Railway Variables tab")
+        errors.append("KITE_API_SECRET missing — set in environment or backend/.env")
 
     # Port validation
     if not (1 <= PORT <= 65535):
@@ -57,7 +57,7 @@ HOST = os.getenv("HOST", "0.0.0.0").strip()
 
 def _resolve_listen_port() -> int:
     """
-    Listen port: PORT first (Railway / uvicorn convention, usually 8000), then
+    Listen port: PORT first (cloud / uvicorn convention, usually 8000), then
     NSE_EDGE_PORT for a deliberate local override. Default 8000 so
     http://localhost:8000/ matches typical bookmarks.
     """
@@ -201,6 +201,9 @@ GATE = {
     "rr_min_intraday":    3.0,
     "rr_min_positional":  3.5,
     "atr_multiplier":     1.5,
+    # Dayview / STOCK PICKS positional backtest: walk forward this many *sessions*
+    # (daily bars after entry); time-stop on last bar with WIN/LOSS/NEUTRAL vs entry.
+    "positional_max_hold_days": 10,
     # Spike detection - OPTIMIZED v2 (73% WR)
     "spike_price_pct":    0.55,   # Quick-move focus: minimum session move %
     "spike_vol_mult":     1.6,    # Quick-move focus: minimum volume multiplier
@@ -228,8 +231,9 @@ GATE = {
     "spike_live_no_ft_min_fav_pct": 0.12,
 }
 
-# ─── INDEX RADAR (NIFTY/BANKNIFTY momentum — scheduler._detect_index_signals) ─
-# Goals: fewer false starts, no overnight history bleed, true 5m baseline, no chasing extremes.
+# ─── INDEX HUNT / INDEX RADAR (NIFTY/BANKNIFTY — scheduler._detect_index_signals) ─
+# UI name: INDEX HUNT. Same dict INDEX_RADAR everywhere (API, DB section INDEX_RADAR).
+# Goals: fewer false starts, true 5m baseline, no chasing; hunt_* adds 15m trend leg (SPIKE-style confluence).
 INDEX_RADAR = {
     "time_start_min":     600,    # 10:00 IST (skip opening noise)
     "time_end_min":       840,    # 14:00 IST
@@ -255,6 +259,9 @@ INDEX_RADAR = {
     "trend_support_min_pct": 0.03,   # CE: 30m trend must be ≥ this; PE: ≤ −this
     "pcr_ce_min":         0.95,     # CE minimum PCR (relaxed)
     "cross_index_against_pct": 0.25, # opposite-index tolerance (relaxed)
+    # ── INDEX HUNT confluence (15m same-direction leg — live + backtest) ──
+    "hunt_15m_sec":       900,      # 0 = off; else require 15m return same sign as 5m signal
+    "hunt_15m_min_pct":   0.042,    # min |15m %| on underlying (same units as chg_pct; ~0.04 index %)
     "quality_floor":      52,       # drop only lower-quality noise
     "vix_soft_skips_md_ce": 22.0,   # soft CE skip threshold under elevated VIX
     "outcome_index_pct":  0.25,     # underlying % when T1/SL use same threshold (backtest + index fallback)
@@ -272,38 +279,223 @@ INDEX_RADAR = {
     "precision_chg_max":  0.28,
     "ml_filter_enabled":  False,   # True: keep signal only if GB model P(win) ≥ threshold
     "ml_min_win_prob":    0.72,    # fallback if no ix_radar_ml_meta.json from training
+    # ── Independent 70%+ filters (precision_v2) ──
+    # session_open_lock: CE only when price > first bar close; PE only when below.
+    # confirm_bars_n: require N consecutive 1-min closes in signal direction.
+    # sl_memory_min: skip re-entry if same direction SL'd within N minutes.
+    "session_open_lock":  False,
+    "confirm_bars_n":     1,
+    "sl_memory_min":      0,
 }
 
 # Applied on top of _INDEX_RADAR_BASE for preset=high_accuracy and profile index_precision.
-# Accuracy-first: tighter gates, smaller premium T1, easier index T1 vs SL (higher hit rate, lower R).
+# Accuracy-first: tighter gates, smaller premium T1, easier index T1 vs SL (higher WR target, lower R).
+# outcome_use_hl: backtest uses bar high/low touches (T1 before SL per bar, same order as close loop).
 # Not merged onto balanced_v2 in backtest (see main.index_signals_backtest).
 INDEX_RADAR_HIGH_ACCURACY: dict = {
     "precision_boost": True,
-    "precision_hi_only": False,
+    "precision_hi_only": True,
     "precision_chg_min": 0.22,
-    "precision_chg_max": 0.30,
-    "precision_min_quality": 74,
-    "precision_min_trend_sup": 0.11,
-    "quality_floor": 62,
-    "trend_support_min_pct": 0.08,
-    "trend_against_pct": 0.20,
-    "pcr_ce_min": 1.00,
-    "pcr_pe_min": 1.28,
-    "pe_max_nifty_chg": 0.09,
-    "cross_index_against_pct": 0.14,
-    "anti_chase_ce_pct": 0.08,
-    "anti_chase_pe_pct": 0.08,
-    "dedup_minutes": 22,
-    "chg_min_pct": 0.19,
-    "chg_max_pct": 0.38,
-    "chg_hi_strength_pct": 0.25,
-    "micro_step_min_pct": 0.012,
-    "vix_soft_skips_md_ce": 19.0,
-    "opt_sl_mult": 0.74,
-    "opt_t1_mult": 1.22,
-    "opt_t2_mult": 1.58,
-    "outcome_t1_index_pct": 0.14,
-    "outcome_sl_index_pct": 0.20,
+    "precision_chg_max": 0.33,
+    "precision_min_quality": 78,
+    "precision_min_trend_sup": 0.12,
+    "quality_floor": 66,
+    "trend_support_min_pct": 0.09,
+    "trend_against_pct": 0.18,
+    "pcr_ce_min": 1.03,
+    "pcr_pe_min": 1.30,
+    "pe_max_nifty_chg": 0.08,
+    "cross_index_against_pct": 0.11,
+    "hunt_15m_min_pct": 0.055,
+    "anti_chase_ce_pct": 0.07,
+    "anti_chase_pe_pct": 0.07,
+    "dedup_minutes": 26,
+    "chg_min_pct": 0.20,
+    "chg_max_pct": 0.36,
+    "chg_hi_strength_pct": 0.24,
+    "micro_step_min_pct": 0.014,
+    "vix_soft_skips_md_ce": 18.0,
+    "vix_skip_ce_above": 23.0,
+    "outcome_use_hl": True,
+    "opt_sl_mult": 0.76,
+    "opt_t1_mult": 1.18,
+    "opt_t2_mult": 1.52,
+    "outcome_t1_index_pct": 0.10,
+    "outcome_sl_index_pct": 0.24,
+}
+
+# Extra overlay for preset=elite (backtest + optional live profile index_elite). Targets fewer, higher-WR signals.
+INDEX_RADAR_ELITE: dict = {
+    "precision_min_quality": 82,
+    "quality_floor": 72,
+    "precision_chg_min": 0.24,
+    "precision_chg_max": 0.31,
+    "precision_min_trend_sup": 0.135,
+    "trend_support_min_pct": 0.11,
+    "pcr_ce_min": 1.06,
+    "pcr_pe_min": 1.34,
+    "pe_max_nifty_chg": 0.06,
+    "cross_index_against_pct": 0.08,
+    "hunt_15m_min_pct": 0.068,
+    "dedup_minutes": 32,
+    "vix_skip_ce_above": 21.5,
+    "vix_soft_skips_md_ce": 17.5,
+    "outcome_t1_index_pct": 0.09,
+    "outcome_sl_index_pct": 0.27,
+    "opt_t1_mult": 1.15,
+    "opt_sl_mult": 0.78,
+}
+
+# ─── PRECISION V2: ranked daily pick + session lock + ML when model file exists ────────────
+# Targets high WR with ~1–3 signals per symbol per session day (more on strong trend days).
+# ML: if ix_radar_gb.joblib missing, filter is skipped (all candidates kept).
+INDEX_RADAR_PRECISION_V2: dict = {
+    # Base from high_accuracy
+    **INDEX_RADAR_HIGH_ACCURACY,
+    # ── Ranked daily pick (backtest): keep best 1–3 per symbol/day, time-spaced ──
+    "daily_pick_enabled":       True,
+    "daily_pick_min_per_symbol": 1,
+    "daily_pick_max_per_symbol": 3,
+    "daily_pick_gap_minutes":   36,
+    "daily_pick_use_ml_score":  True,
+    # ── Time window: skip opening noise AND late-day theta / thin liquidity ──
+    "time_start_min":  615,     # 10:15 IST — skip open auction; still room for 1–2 quality signals/day
+    "time_end_min":    825,     # 13:45 IST — before worst theta bleed
+    # ── Session-open direction lock (single biggest WR driver) ────────────
+    "session_open_lock": True,  # CE only above session open, PE only below
+    # ── Consecutive-bar confirmation (1 = prior 1m rule only; 2 = stricter) ─
+    "confirm_bars_n":  1,
+    # ── Momentum band: tighter sweet spot ─────────────────────────────────
+    "precision_boost":     True,
+    "precision_hi_only":   False,  # pool all band-qualified bars; daily_pick + score favor "hi"
+    # 5m % on spot is usually small; wide band + ranking ≈ "best impulses of the day"
+    "precision_chg_min":   0.055,
+    "precision_chg_max":   0.60,
+    "chg_hi_strength_pct": 0.20,
+    "chg_min_pct":         0.055,
+    "chg_max_pct":         0.65,
+    # ── Trend strength (30m) ───────────────────────────────────────────────
+    "precision_min_trend_sup": 0.14,
+    "trend_support_min_pct":   0.10,
+    "trend_against_pct":       0.16,
+    # ── PCR gates ──────────────────────────────────────────────────────────
+    "pcr_ce_min":   1.02,
+    "pcr_pe_min":   1.32,
+    "pe_max_nifty_chg": 0.06,
+    # ── VIX gates (20–21 IV is common; 19 blocked too many valid CEs) ───────
+    "vix_skip_ce_above":    20.75,
+    "vix_soft_skips_md_ce": 16.5,
+    # ── Anti-chase (tighter) ───────────────────────────────────────────────
+    "anti_chase_ce_pct": 0.06,
+    "anti_chase_pe_pct": 0.06,
+    # ── 15-min hunt confluence ─────────────────────────────────────────────
+    "hunt_15m_sec":    900,
+    "hunt_15m_min_pct": 0.045,
+    # ── Signal dedup (no back-to-back signals on same side) ────────────────
+    "dedup_minutes":   30,
+    # ── Quality floor ──────────────────────────────────────────────────────
+    "quality_floor":          68,
+    "precision_min_quality":  76,
+    # ── Cross-index alignment ──────────────────────────────────────────────
+    "cross_index_against_pct": 0.09,
+    # ── R:R improvement: T1=1.28× (28% gain), SL=0.80× (20% loss) ─────────
+    # Break-even WR = 20/(28+20) = 41.7% → 70% WR gives strong edge
+    "opt_t1_mult":  1.28,
+    "opt_sl_mult":  0.80,
+    "opt_t2_mult":  1.65,
+    # ── Backtest outcome thresholds (underlying %) ─────────────────────────
+    "outcome_t1_index_pct": 0.11,   # T1 hit when NIFTY/BNF moves 0.11%
+    "outcome_sl_index_pct": 0.26,   # SL hit when moves 0.26% against
+    "outcome_use_hl":       True,
+    # ── Micro-step: last 1-min bar must accelerate ──────────────────────────
+    "micro_step_min_pct": 0.016,
+    # ── ML: hard-filter when bundle exists; ranking still uses proba for daily_pick_use_ml_score
+    "ml_filter_enabled":   True,
+    "ml_min_win_prob":     0.68,
+}
+
+# ─── PRIME STRIKE CONFIG ──────────────────────────────────────────────────────
+# 3-layer confirmed intraday option-buying strategy.
+# Layer 1: VIX hard gate (≤17 calm market), Layer 2: PCR alignment,
+# Layer 3: 5m momentum (calibrated for calm-VIX days).
+# Daily-pick cap (1–3 per symbol), window 10:00–13:00, session lock,
+# quality tier lot sizing: quality≥80=FULL(2×), quality≥64=HALF(1×).
+# T1=1.30×, SL=0.78×  →  break-even WR ≈ 20.5%  →  60% WR = strong edge.
+#
+# CALIBRATION NOTE:
+# On VIX≤17 (calm) days, Nifty@24000 typical 5-min move = 0.03–0.12%.
+# Setting chg_min_pct=0.09 means ~21pt move on NIFTY — achievable even in quiet sessions.
+# No precision_boost — rely on quality floor, PCR, trend, session_lock for selectivity.
+PRIME_STRIKE_CONFIG: dict = {
+    # ── Base from high_accuracy (keeps opt_mult, outcome params) ─────────────
+    **INDEX_RADAR_HIGH_ACCURACY,
+    # ── Time window: 10:00–13:00 (3 quality windows) ─────────────────────────
+    "time_start_min": 600,   # 10:00 IST
+    "time_end_min":   780,   # 13:00 IST
+    # ── VIX gate: hard block only at day level ────────────────────────────────
+    "vix_block_above":      17.0,   # hard kill entire day if VIX ≥ 17
+    "vix_skip_ce_above":     0.0,   # disabled — day-level block already handles it
+    "vix_soft_skips_md_ce": 16.8,  # soft-skip medium CE only very close to hard limit
+    # ── PCR alignment (realistic PCR range: 0.65–1.25 in DB) ─────────────────
+    "pcr_ce_min":        0.78,   # CE: needs moderate bull PCR
+    "pcr_pe_min":        1.05,   # PE: moderate put bias (achievable most weeks)
+    "pe_max_nifty_chg":  0.10,   # PE: Nifty vs prev-close ≤ 0.10%
+    "pcr_ce_avoid_below": 0.60,  # hard skip CE only in extreme bear PCR
+    # ── Momentum band: calibrated for calm-VIX sessions ─────────────────────
+    # 0.09% on Nifty@24000 = ~22 pts/5 min — present even on quiet days
+    # 0.40% = ~96 pts/5 min — excludes panic/spike outliers
+    "precision_boost":    False,   # OFF — band below is authoritative
+    "precision_hi_only":  False,
+    "precision_chg_min":  0.0,
+    "precision_chg_max":  0.0,
+    "chg_min_pct":         0.09,
+    "chg_max_pct":         0.40,
+    "chg_hi_strength_pct": 0.20,
+    # ── Direction lock ────────────────────────────────────────────────────────
+    "session_open_lock": True,
+    "confirm_bars_n":    1,
+    # ── Trend filter (30-min) ─────────────────────────────────────────────────
+    "trend_support_min_pct": 0.03,
+    "trend_against_pct":     0.20,
+    # ── 15-min confluence (10-min lookback, lower threshold) ─────────────────
+    "hunt_15m_sec":     600,    # 10-min lookback (achievable in calm sessions)
+    "hunt_15m_min_pct": 0.022,  # ~5pt on NIFTY@24000 in 10 min
+    # ── Anti-chase ───────────────────────────────────────────────────────────
+    "anti_chase_ce_pct": 0.09,
+    "anti_chase_pe_pct": 0.09,
+    "anti_chase_sec":    300,
+    # ── Cross-index alignment ─────────────────────────────────────────────────
+    "cross_index_against_pct": 0.12,
+    # ── Micro-step ────────────────────────────────────────────────────────────
+    "micro_step_min_pct": 0.010,
+    # ── Quality floor (main selectivity lever without precision_boost) ────────
+    "quality_floor":         56,
+    "precision_min_quality":  0,   # disabled (precision_boost=False)
+    # ── Dedup ─────────────────────────────────────────────────────────────────
+    "dedup_minutes": 30,
+    # ── Daily pick (best-ranked signals, time-spaced ≥40 min) ────────────────
+    "daily_pick_enabled":       True,
+    "daily_pick_min_per_symbol": 1,
+    "daily_pick_max_per_symbol": 3,
+    "daily_pick_gap_minutes":   40,
+    "daily_pick_use_ml_score":  True,
+    # ── R:R ──────────────────────────────────────────────────────────────────
+    "opt_t1_mult": 1.30,
+    "opt_sl_mult": 0.78,
+    "opt_t2_mult": 1.70,
+    # ── Outcome simulation ────────────────────────────────────────────────────
+    "outcome_t1_index_pct": 0.10,
+    "outcome_sl_index_pct": 0.24,
+    "outcome_use_hl":       True,
+    # ── ML filter: OFF (insufficient training data) ───────────────────────────
+    "ml_filter_enabled": False,
+    "ml_min_win_prob":   0.65,
+    # ── Daily limits ──────────────────────────────────────────────────────────
+    "max_signals_per_day": 3,
+    "max_consec_sl":       2,
+    # ── Tier thresholds ───────────────────────────────────────────────────────
+    "tier_full_min_quality": 80,
+    "tier_half_min_quality": 64,
 }
 
 # ─── SWING RADAR (positional picks — scheduler → log_swing_radar_triggers + UI carousel) ─
@@ -347,6 +539,8 @@ STRATEGY_PROFILES = {
             "chg_min_pct": 0.18,
             "chg_hi_strength_pct": 0.26,
             "pcr_ce_min": 0.96,
+            "hunt_15m_sec": 900,
+            "hunt_15m_min_pct": 0.045,
         },
         "swing_radar": {
             "min_score_log": 62,
@@ -359,6 +553,16 @@ STRATEGY_PROFILES = {
     # Live INDEX_RADAR matches INDEX_RADAR_HIGH_ACCURACY backtest preset (high selectivity).
     "index_precision": {
         "index_radar": dict(INDEX_RADAR_HIGH_ACCURACY),
+        "swing_radar": {},
+    },
+    "index_elite": {
+        "index_radar": {**dict(INDEX_RADAR_HIGH_ACCURACY), **INDEX_RADAR_ELITE},
+        "swing_radar": {},
+    },
+    # Independent 70%+ strategy — no daily gate verdict required.
+    # Fewer signals (~25-35 per month), but targets ≥70% win rate.
+    "precision_v2": {
+        "index_radar": dict(INDEX_RADAR_PRECISION_V2),
         "swing_radar": {},
     },
 }
@@ -410,6 +614,21 @@ def _env_bool(key: str, default: bool) -> bool:
 TELEGRAM_NOTIFY_ADV_SPIKES = _env_bool("TELEGRAM_NOTIFY_ADV_SPIKES", True)
 TELEGRAM_NOTIFY_ADV_INDEX = _env_bool("TELEGRAM_NOTIFY_ADV_INDEX", True)
 # Default off: signal-engine verdict, per-stock EXECUTE, index-radar option signals, morning digest
+
+def _env_float(key: str, default: float) -> float:
+    raw = os.getenv(key, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning("Invalid %s=%r — using default %s", key, raw, default)
+        return default
+
+
+# ADV-IDX-OPTIONS: India VIX band for IV *proxy* rank (not true 52w IV Rank)
+IV_RANK_VIX_LOW = _env_float("IV_RANK_VIX_LOW", 11.0)
+IV_RANK_VIX_HIGH = _env_float("IV_RANK_VIX_HIGH", 28.0)
 TELEGRAM_NOTIFY_SIGNAL_ENGINE = _env_bool("TELEGRAM_NOTIFY_SIGNAL_ENGINE", False)
 TELEGRAM_NOTIFY_INDEX_RADAR = _env_bool("TELEGRAM_NOTIFY_INDEX_RADAR", False)
 _morning_brief = os.getenv("MORNING_TELEGRAM_BRIEF", "0").strip().lower()

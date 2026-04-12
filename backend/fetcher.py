@@ -48,8 +48,6 @@ _nse_session.headers.update(NSE_HEADERS)
 _nse_cookie_ts = 0
 _stock_analytics_cache: Dict[str, dict] = {}
 _stock_analytics_ts = 0.0
-_global_macro_cache: Dict[str, float] = {}
-_global_macro_ts = 0.0
 
 
 def _get_stock_analytics(kite, futures: List[dict]) -> Dict[str, dict]:
@@ -97,45 +95,6 @@ def _get_stock_analytics(kite, futures: List[dict]) -> Dict[str, dict]:
     _stock_analytics_ts = time.time()
     return analytics
 
-
-def fetch_global_macro() -> Dict[str, float]:
-    """Fetch global macro references from Yahoo quote endpoint, cached 5 minutes."""
-    global _global_macro_cache, _global_macro_ts
-    if _global_macro_cache and time.time() - _global_macro_ts < 300:
-        return _global_macro_cache
-    try:
-        out: Dict[str, float] = {}
-        sym_map = {
-            "^TNX": ("us10y", False),
-            "DX-Y.NYB": ("dxy", False),
-            "CL=F": ("crude", False),
-        }
-        for yahoo_sym, (out_key, divide_ten) in sym_map.items():
-            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_sym}?range=5d&interval=1d"
-            resp = requests.get(url, timeout=6, headers={"User-Agent": NSE_HEADERS.get("User-Agent", "Mozilla/5.0")})
-            if resp.status_code != 200:
-                continue
-            result = ((resp.json().get("chart", {}) or {}).get("result") or [None])[0] or {}
-            meta = result.get("meta", {}) or {}
-            px = meta.get("regularMarketPrice")
-            prev_close = meta.get("chartPreviousClose") or meta.get("previousClose")
-            if px is None:
-                continue
-            price = float(px) / 10.0 if divide_ten else float(px)
-            chg = None
-            if prev_close not in (None, 0):
-                base_prev = float(prev_close) / 10.0 if divide_ten else float(prev_close)
-                if base_prev:
-                    chg = (price - base_prev) / base_prev * 100.0
-            out[out_key] = round(price, 2)
-            out[f"{out_key}_chg"] = round(chg, 2) if chg is not None else None
-        if out:
-            _global_macro_cache = out
-            _global_macro_ts = time.time()
-        return _global_macro_cache
-    except Exception as e:
-        logger.debug(f"global macro fetch failed: {e}")
-        return _global_macro_cache
 
 def _nse_refresh_cookie():
     """Refresh NSE session cookie (2-step handshake NSE requires)."""
@@ -453,7 +412,6 @@ def fetch_indices() -> Optional[dict]:
         "vix":            vix.get("price", 0) if vix else 0,
         "vix_chg":        vix.get("chg_pct", 0) if vix else 0,
     }
-    out.update(fetch_global_macro())
     return out
 
 

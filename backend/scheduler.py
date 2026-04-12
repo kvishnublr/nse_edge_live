@@ -15,6 +15,9 @@ from fetcher import IST
 
 _DB_PATH = os.path.join(os.path.dirname(__file__), "data", "backtest.db")
 
+# Throttle REST quote bootstrap when price_cache is empty (slow ticker / token just fixed).
+_job_prices_rest_ts = 0.0
+
 
 def _ix_parse_expiry_date(expiry_text: str):
     """Best-effort parse for chain expiry labels like '13 Apr 2026'."""
@@ -131,10 +134,15 @@ def _notify_index_radar_new(sig: dict) -> None:
         strike = sig.get("strike", "")
         tm = sig.get("time", "")
         chg = float(sig.get("chg_pct") or 0)
+        h15 = sig.get("hunt_15m_pct")
+        line2 = f"<i>{tm} IST</i> · 5m move <b>{chg:+.2f}%</b>"
+        if h15 is not None:
+            line2 += f" · 15m <b>{float(h15):+.2f}%</b>"
+        line2 += "\n"
         msg = (
-            f"📡 <b>INDEX RADAR — {sym} {strike} {typ}</b>\n"
-            f"<i>{tm} IST</i> · 5m move <b>{chg:+.2f}%</b>\n"
-            f"Premium entry <b>₹{float(sig.get('entry') or 0):.2f}</b> · SL ₹{float(sig.get('sl') or 0):.2f} · "
+            f"📡 <b>INDEX HUNT — {sym} {strike} {typ}</b>\n"
+            + line2
+            + f"Premium entry <b>₹{float(sig.get('entry') or 0):.2f}</b> · SL ₹{float(sig.get('sl') or 0):.2f} · "
             f"T1 ₹{float(sig.get('t1') or 0):.2f} · R:R {sig.get('rr', '—')}\n"
             f"VIX {float(sig.get('vix') or 0):.1f} · PCR {float(sig.get('pcr') or 0):.2f} · "
             f"Q {int(sig.get('quality') or 0)} · {sig.get('strength', 'md')}"
@@ -187,7 +195,9 @@ _ws      = None
 _cache   = {"indices": None, "chain": None, "bn_chain": None, "fii": None,
             "stocks": [], "mode": "intraday",
             "ix_px_hist": [],   # [(ts, nifty_px, bn_px), ...] for index spike detection
-            "prev_chain_totals": None}  # for confluence ΔOI (confluence_engine)
+            "prev_chain_totals": None,  # for confluence ΔOI (confluence_engine)
+            "ix_sess_open": None,   # {"date", "nifty", "bn"} for session_open_lock (precision_v2)
+            "ix_daily_pick": None}  # per-day caps for daily_pick_enabled
 
 # ─── CIRCUIT BREAKER (prevent cascading failures) ──────────────────────────────
 _job_errors = {}  # Track consecutive errors per job
@@ -211,6 +221,12 @@ def set_initial_stocks(stocks: list):
     """Seed scheduler cache with initial stocks from startup fetch."""
     if stocks:
         _cache["stocks"] = stocks
+
+
+def set_cache(key: str, value) -> None:
+    """Update a named entry in the scheduler cache (used by refresh_state API)."""
+    if value is not None:
+        _cache[key] = value
 
 
 def _check_circuit(job_name: str) -> bool:
@@ -277,10 +293,22 @@ def refresh_confluence_broadcast(persist: bool = True) -> None:
 # ─── JOB: BROADCAST PRICES (every 1 second) ───────────────────────────────────
 def job_prices():
     """Broadcast latest prices from Kite cache — KiteTicker keeps them fresh."""
+    global _job_prices_rest_ts
     try:
-        from feed import get_all_prices
+        from feed import get_all_prices, fetch_quotes_rest, get_kite, feed_manager
         import backtest_data as bd
+
         prices = get_all_prices()
+        if not prices and not getattr(feed_manager, "_demo_mode", False):
+            now = time.time()
+            if now - _job_prices_rest_ts >= 5.0:
+                _job_prices_rest_ts = now
+                try:
+                    get_kite().profile()
+                    fetch_quotes_rest()
+                    prices = get_all_prices()
+                except Exception:
+                    pass
         if prices:
             bd.update_live_signal_outcomes(prices)
         if prices and _ws:
@@ -296,7 +324,63 @@ def job_chain():
         return
 
     if not is_market_open():
-        # Market closed - skip but don't count as error
+        # Off-hours: push index LTPs + macro + cached chain so UI is never blank.
+        try:
+            from feed import get_all_prices, price_cache
+
+            # Try REST fetch; fall back to price_cache from KiteTicker
+            try:
+                indices = _fetcher.fetch_indices()
+            except Exception:
+                indices = None
+
+            if not indices and price_cache:
+                # Build minimal indices from ticker prices (always available)
+                pc = price_cache
+                nifty_d = pc.get("NIFTY", {})
+                bn_d    = pc.get("BANKNIFTY", {})
+                vix_d   = pc.get("INDIAVIX", {})
+                if nifty_d.get("price"):
+                    indices = {
+                        "nifty":       nifty_d["price"],
+                        "nifty_chg":   nifty_d.get("chg_pct", 0),
+                        "banknifty":   bn_d.get("price", 0),
+                        "banknifty_chg": bn_d.get("chg_pct", 0),
+                        "vix":         vix_d.get("price", 0),
+                        "pcr":         (_cache.get("chain") or {}).get("pcr", 1.0),
+                        "_source": "ticker_fallback",
+                    }
+
+            if indices:
+                _cache["indices"] = indices
+                _signals.state["last_macro"] = indices
+
+            # Sync cache from signals.state if cache is empty (startup case)
+            if not _cache.get("chain") and _signals.state.get("last_chain"):
+                _cache["chain"] = _signals.state["last_chain"]
+            if not _cache.get("stocks") and _signals.state.get("last_stocks"):
+                _cache["stocks"] = _signals.state["last_stocks"]
+            if not _cache.get("fii") and _signals.state.get("last_fii"):
+                _cache["fii"] = _signals.state["last_fii"]
+
+            # Only update state if we have real data (never overwrite good data with None)
+            if _cache.get("chain"):
+                _signals.state["last_chain"] = _cache["chain"]
+            if _cache.get("stocks"):
+                _signals.state["last_stocks"] = _cache["stocks"]
+            if _cache.get("fii"):
+                _signals.state["last_fii"] = _cache["fii"]
+
+            if _ws:
+                if indices:
+                    _ws({"type": "macro", "data": indices, "timestamp": time.time()})
+                if _cache.get("chain"):
+                    _ws({"type": "chain", "data": _cache["chain"], "timestamp": time.time()})
+                px = get_all_prices()
+                if px:
+                    _ws({"type": "prices", "data": px, "ts": time.time()})
+        except Exception as e:
+            logger.debug("job_chain off-hours: %s", e)
         return
 
     try:
@@ -388,6 +472,9 @@ def job_chain():
                 "verdict":     _signals.state["verdict"],
                 "verdict_sub": _signals.state["verdict_sub"],
                 "pass_count":  _signals.state["pass_count"],
+                "confidence":  _signals.state.get("confidence", 0.0),
+                "position_size_lots": _signals.state.get("position_size_lots", 0),
+                "position_size_rupees": _signals.state.get("position_size_rupees", 0),
             }, "timestamp": time.time()})
             if chain:
                 _ws({"type": "chain",  "data": chain,              "timestamp": time.time()})
@@ -425,6 +512,32 @@ def job_chain():
                         _ws({"type": "adv_index", "data": _signals.state.get("adv_index"), "ts": time.time()})
             except Exception as _aix_e:
                 logger.debug("adv_index: %s", _aix_e)
+
+            # INTRA INDEX (NIFTY 1m ORB + VWAP + heavy breadth — throttle ~55s)
+            try:
+                if _kite and time.time() - float(_cache.get("intra_ix_ts", 0) or 0) > 55:
+                    import intra_index_engine as _ixi
+
+                    _ixi_snap = _ixi.compute_live_snapshot(_kite)
+                    _signals.state["intra_index"] = _ixi_snap
+                    _cache["intra_ix_ts"] = time.time()
+                    if _ws:
+                        _ws({"type": "intra_index", "data": _ixi_snap, "ts": time.time()})
+            except Exception as _ixi_e:
+                logger.debug("intra_index: %s", _ixi_e)
+
+            # ADV-IDX-OPTIONS (IV proxy, expiry, max pain / OI skew — throttle ~90s)
+            try:
+                if _kite and time.time() - float(_cache.get("adv_io_ts", 0) or 0) > 90:
+                    import adv_idx_options as _adio
+
+                    _adio_snap = _adio.build_snapshot(_kite, _signals.state)
+                    _signals.state["adv_idx_options"] = _adio_snap
+                    _cache["adv_io_ts"] = time.time()
+                    if _ws:
+                        _ws({"type": "adv_idx_options", "data": _adio_snap, "ts": time.time()})
+            except Exception as _adio_e:
+                logger.debug("adv_idx_options: %s", _adio_e)
 
             # Confluence (same helper as off-hours job)
             refresh_confluence_broadcast(persist=True)
@@ -560,6 +673,16 @@ def _detect_index_signals(chain, indices, bn_chain=None):
     nifty_day = float(indices.get("nifty_chg", 0) or 0)
     pcr = float((chain or {}).get("pcr", 1.0) or 1.0)
 
+    sess_nifty = sess_bn = None
+    if ir.get("session_open_lock"):
+        so = _cache.get("ix_sess_open") or {}
+        dkey = now_dt.strftime("%Y-%m-%d")
+        if so.get("date") != dkey:
+            _cache["ix_sess_open"] = {"date": dkey, "nifty": nifty_px, "bn": bn_px}
+            so = _cache["ix_sess_open"]
+        sess_nifty = float(so.get("nifty") or nifty_px)
+        sess_bn = float(so.get("bn") or bn_px)
+
     hist = _cache["ix_px_hist"]
     min_span = float(ir["min_hist_span_sec"])
     min_samp = int(ir["min_hist_samples"])
@@ -606,6 +729,25 @@ def _detect_index_signals(chain, indices, bn_chain=None):
             if abs(chg) < chg_str:
                 continue
 
+        sess_ref = sess_nifty if px_idx == 1 else sess_bn
+        if sess_ref and ir.get("session_open_lock"):
+            if is_ce and px <= sess_ref:
+                continue
+            if not is_ce and px >= sess_ref:
+                continue
+
+        n_confirm = int(ir.get("confirm_bars_n", 1) or 1)
+        if n_confirm >= 2 and len(hist) >= n_confirm + 1:
+            pts = [hist[k][px_idx] for k in range(-(n_confirm + 1), 0)]
+            if not all(pts):
+                continue
+            if is_ce:
+                if not all(pts[i] > pts[i - 1] for i in range(1, len(pts))):
+                    continue
+            else:
+                if not all(pts[i] < pts[i - 1] for i in range(1, len(pts))):
+                    continue
+
         one_entry = _ix_baseline(hist, now_ts, px_idx, conf_sec)
         if one_entry and one_entry[px_idx]:
             one_chg = (px - one_entry[px_idx]) / one_entry[px_idx] * 100
@@ -646,6 +788,21 @@ def _detect_index_signals(chain, indices, bn_chain=None):
                 if not is_ce and o_chg > cap:
                     continue
 
+        hunt15_sec = int(ir.get("hunt_15m_sec", 0) or 0)
+        chg15_live = None
+        if hunt15_sec > 0:
+            b15 = _ix_baseline(hist, now_ts, px_idx, hunt15_sec)
+            if not b15 or not b15[px_idx]:
+                continue
+            chg15_live = (px - b15[px_idx]) / b15[px_idx] * 100
+            min15 = float(ir.get("hunt_15m_min_pct", 0.04))
+            if is_ce:
+                if chg15_live < min15:
+                    continue
+            else:
+                if chg15_live > -min15:
+                    continue
+
         if len(hist) >= 2:
             e_old, e_new = hist[-2], hist[-1]
             if e_old[px_idx] and e_new[px_idx]:
@@ -671,6 +828,10 @@ def _detect_index_signals(chain, indices, bn_chain=None):
 
         vs = float(ir.get("vix_soft_skips_md_ce", 0))
         if is_ce and vs > 0 and vix and vix >= vs and abs(chg) < chg_str:
+            continue
+
+        vix_ce_cap = float(ir.get("vix_skip_ce_above", 0) or 0)
+        if is_ce and vix_ce_cap > 0 and vix and vix >= vix_ce_cap:
             continue
 
         if not is_ce:
@@ -736,6 +897,8 @@ def _detect_index_signals(chain, indices, bn_chain=None):
             quality += 7
         if strength == "hi":
             quality += 10
+        if chg15_live is not None:
+            quality += 5
         quality = max(40, min(99, quality))
 
         qfloor = int(ir.get("quality_floor", 0))
@@ -743,6 +906,24 @@ def _detect_index_signals(chain, indices, bn_chain=None):
             qfloor = max(qfloor, int(ir.get("precision_min_quality", 72)))
         if qfloor > 0 and quality < qfloor:
             continue
+
+        if ir.get("daily_pick_enabled"):
+            dp = _cache.get("ix_daily_pick")
+            dkey = now_dt.strftime("%Y-%m-%d")
+            if not dp or dp.get("date") != dkey:
+                dp = {
+                    "date": dkey,
+                    "NIFTY": {"n": 0, "last_cm": -99999},
+                    "BANKNIFTY": {"n": 0, "last_cm": -99999},
+                }
+                _cache["ix_daily_pick"] = dp
+            slot = dp.get(sym) or {"n": 0, "last_cm": -99999}
+            max_m = int(ir.get("daily_pick_max_per_symbol", 99) or 99)
+            gap = int(ir.get("daily_pick_gap_minutes", 0) or 0)
+            if slot["n"] >= max_m:
+                continue
+            if gap and (cm - slot["last_cm"]) < gap and slot["last_cm"] > -90000:
+                continue
 
         cand = {
             "id":            f"{sym}_{now_dt.strftime('%H%M')}_{'CE' if is_ce else 'PE'}",
@@ -769,6 +950,7 @@ def _detect_index_signals(chain, indices, bn_chain=None):
             "pcr":           round(pcr, 3),
             "option_expiry": (active_chain or {}).get("expiry"),
             "option_week":   _ix_expiry_week_label((active_chain or {}).get("expiry")),
+            "hunt_15m_pct":  round(chg15_live, 4) if chg15_live is not None else None,
         }
 
         if ir.get("ml_filter_enabled"):
@@ -782,6 +964,13 @@ def _detect_index_signals(chain, indices, bn_chain=None):
                 cand["ml_p"] = round(_p, 4) if _p is not None else None
             except Exception as _e:
                 logger.debug("index radar ml: %s", _e)
+
+        if ir.get("daily_pick_enabled"):
+            dp = _cache.get("ix_daily_pick") or {}
+            slot = dp.get(sym)
+            if slot:
+                slot["n"] = int(slot.get("n") or 0) + 1
+                slot["last_cm"] = cm
 
         results.append(cand)
 
@@ -908,9 +1097,8 @@ def job_token_refresh():
     instance so no restart is needed.
 
     Requires KITE_USER_ID, KITE_PASSWORD, KITE_TOTP_SECRET, KITE_API_KEY,
-    KITE_API_SECRET (Railway Variables or backend/.env). The app process must
-    be running at that time (use Railway “always on” or an external wake/ping
-    if your plan sleeps the service).
+    KITE_API_SECRET (environment or backend/.env). The process must be running
+    at that time (always-on host or an external wake/ping if the service sleeps).
     """
     logger.info("=== Daily token refresh starting (scheduled Mon–Fri 07:55 IST) ===")
     try:
@@ -1039,7 +1227,7 @@ def build_scheduler() -> BackgroundScheduler:
     sched.add_job(job_spikes,        "interval", seconds=10,  id="spikes")
     sched.add_job(job_confluence_idle, "interval", seconds=45, id="confluence_idle")
     # Daily token refresh Mon–Fri 7:55 IST — before cash market open (9:15).
-    # Large misfire_grace_time: if the host wakes late (e.g. Railway cold start),
+    # Large misfire_grace_time: if the host wakes late (e.g. cloud cold start),
     # the job still runs instead of being dropped.
     sched.add_job(
         job_token_refresh,

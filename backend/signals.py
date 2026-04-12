@@ -264,7 +264,7 @@ def send_today_signals_digest(trade_date: str | None = None) -> dict:
         if len(rows_sp) > 45:
             parts.append(f"<i>… +{len(rows_sp) - 45} more</i>\n")
 
-    parts.append(f"\n<b>Index radar (DB)</b> ({len(rows_ix)})\n")
+    parts.append(f"\n<b>Index hunt (DB)</b> ({len(rows_ix)})\n")
     if not rows_ix:
         parts.append("<i>none in DB for this date</i>\n")
     else:
@@ -500,6 +500,8 @@ state = {
     "last_updated": 0,
     "confluence":  None,  # experimental: multi-factor intraday snapshot (confluence_engine.py)
     "adv_index":   None,  # NIFTY50-weighted OI + breadth (adv_index_engine.py)
+    "adv_idx_options": None,  # IV proxy, expiry context, max pain / OI skew (adv_idx_options.py)
+    "intra_index": None,  # NIFTY 1m ORB + VWAP + heavy breadth (intra_index_engine.py)
 }
 
 # ─── PRICE HISTORY HELPERS ────────────────────────────────────────────────────

@@ -45,6 +45,53 @@ def _wr_index(rows: list[dict[str, Any]]) -> tuple[float, int, int]:
     return round(100.0 * w / n, 2), w, n
 
 
+def index_hunt_walk_forward_stats(
+    rows: list[dict[str, Any]],
+    *,
+    test_frac: float | None = None,
+    date_key: str = "trade_date",
+) -> dict[str, Any]:
+    """
+    Walk-forward split on sorted distinct trade dates: first (1 - test_frac) of days = in-sample,
+    remaining days = OOS. Only HIT_T1 / HIT_SL rows count (same WR definition as UI).
+
+    `rows` may use `date` instead of `trade_date` if `date_key` is passed or defaults pick `date`.
+    """
+    tf = OOS_TEST_FRAC if test_frac is None else float(test_frac)
+    tf = min(0.49, max(0.05, tf))
+    resolved = [r for r in rows if r.get("outcome") in ("HIT_T1", "HIT_SL")]
+    if not resolved:
+        return {"ok": False, "reason": "no_resolved", "test_frac": tf}
+
+    norm: list[dict[str, Any]] = []
+    for r in resolved:
+        d = r.get(date_key) or r.get("trade_date") or r.get("date")
+        norm.append({**r, "trade_date": str(d) if d is not None else ""})
+
+    train, test, date_list = _split_by_trade_date(norm, tf)
+    tr_wr, tr_w, tr_n = _wr_index(train)
+    te_wr, te_w, te_n = _wr_index(test)
+    k_split = max(1, int(len(date_list) * (1.0 - tf))) if len(date_list) >= 4 else len(date_list)
+    train_date_labels = date_list[:k_split] if len(date_list) >= 4 else date_list
+    test_date_labels = date_list[k_split:] if len(date_list) >= 4 else []
+
+    return {
+        "ok": True,
+        "test_frac": tf,
+        "distinct_trade_days": len(date_list),
+        "train_days": len(train_date_labels),
+        "test_days": len(test_date_labels),
+        "train_resolved_n": tr_n,
+        "test_resolved_n": te_n,
+        "train_win_rate_pct": tr_wr,
+        "test_win_rate_pct": te_wr if te_n else None,
+        "train_t1_hits": tr_w,
+        "test_t1_hits": te_w,
+        "oos_date_from": test_date_labels[0] if test_date_labels else None,
+        "oos_date_to": test_date_labels[-1] if test_date_labels else None,
+    }
+
+
 def _monthly_buckets(rows: list[dict[str, Any]], date_key: str = "trade_date") -> list[dict[str, Any]]:
     from collections import defaultdict
 
@@ -101,22 +148,32 @@ def build_trading_policy_report(db_path: str | Path | None = None) -> dict[str, 
         if rr_row and rr_row[0] is not None:
             avg_rr = round(float(rr_row[0]), 3)
 
-        train, test, date_list = _split_by_trade_date(ix_list, OOS_TEST_FRAC)
-        tr_wr, _, tr_n = _wr_index(train)
-        te_wr, _, te_n = _wr_index(test)
-        k_split = max(1, int(len(date_list) * (1.0 - OOS_TEST_FRAC))) if len(date_list) >= 4 else 0
-        train_date_labels = date_list[:k_split] if k_split else date_list
-        test_date_labels = date_list[k_split:] if k_split else []
+        wf_s = index_hunt_walk_forward_stats(ix_list)
+        te_n = int(wf_s.get("test_resolved_n") or 0)
+        date_list_len = int(wf_s.get("distinct_trade_days") or 0)
+        test_days_ct = int(wf_s.get("test_days") or 0)
 
         ix_warnings: list[str] = []
         if n_all < MIN_INDEX_RESOLVED:
             ix_warnings.append(
                 f"Index Radar: only {n_all} resolved trades (suggest ≥{MIN_INDEX_RESOLVED} before trusting WR)."
             )
-        if te_n < 6 and len(date_list) >= 4:
+        if te_n < 6 and date_list_len >= 4:
             ix_warnings.append(
-                f"OOS slice is small (n={te_n} on {len(test_date_labels)} days) — high variance."
+                f"OOS slice is small (n={te_n} on {test_days_ct} days) — high variance."
             )
+
+        wf_walk = {
+            "test_frac": wf_s.get("test_frac", OOS_TEST_FRAC),
+            "train_days": wf_s.get("train_days") or 0,
+            "test_days": wf_s.get("test_days") or 0,
+            "train_resolved_n": wf_s.get("train_resolved_n") or 0,
+            "test_resolved_n": te_n,
+            "train_win_rate_pct": float(wf_s.get("train_win_rate_pct") or 0),
+            "test_win_rate_pct": wf_s.get("test_win_rate_pct") if te_n else None,
+            "oos_date_from": wf_s.get("oos_date_from"),
+            "oos_date_to": wf_s.get("oos_date_to"),
+        }
 
         out["index_radar"] = {
             "resolved_n": n_all,
@@ -124,16 +181,8 @@ def build_trading_policy_report(db_path: str | Path | None = None) -> dict[str, 
             "hits_sl": n_all - w_all,
             "win_rate_pct": wr_all,
             "avg_rr": avg_rr,
-            "distinct_trade_days": len(date_list),
-            "walk_forward": {
-                "test_frac": OOS_TEST_FRAC,
-                "train_days": len(train_date_labels),
-                "test_days": len(test_date_labels),
-                "train_resolved_n": tr_n,
-                "test_resolved_n": te_n,
-                "train_win_rate_pct": tr_wr,
-                "test_win_rate_pct": te_wr if te_n else None,
-            },
+            "distinct_trade_days": date_list_len,
+            "walk_forward": wf_walk,
             "by_month": _monthly_buckets(ix_list),
             "warnings": ix_warnings,
         }

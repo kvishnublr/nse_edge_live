@@ -89,6 +89,20 @@ def init_db():
             created_ts REAL,
             updated_ts REAL
         );
+        -- ADV-IDX-OPTIONS: isolated daily series (Kite NIFTY + VIX + computed IV/gamma context). Does not replace ohlcv/vix_daily.
+        CREATE TABLE IF NOT EXISTS adv_idx_options_daily (
+            date TEXT PRIMARY KEY,
+            nifty_open REAL, nifty_high REAL, nifty_low REAL, nifty_close REAL, nifty_volume INTEGER,
+            vix REAL NOT NULL DEFAULT 0,
+            vix_chg REAL,
+            iv_rank_proxy REAL,
+            iv_zone TEXT,
+            gamma_elevated INTEGER NOT NULL DEFAULT 0,
+            weekday INTEGER,
+            options_context_score REAL,
+            source TEXT DEFAULT 'kite',
+            updated_ts REAL
+        );
     """)
     try:
         conn.execute(
@@ -96,6 +110,9 @@ def init_db():
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_lsh_verdict_date ON live_signal_history(verdict, trade_date)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_adv_idx_opt_date ON adv_idx_options_daily(date)"
         )
     except Exception:
         pass
