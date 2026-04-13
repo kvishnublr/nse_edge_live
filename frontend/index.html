@@ -10,10 +10,10 @@
 <meta property="og:title" content="NSE EDGE SYSTEM v5">
 <meta property="og:description" content="AI-Powered Intraday Trading Signals with 70% Win Rate">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' stroke='%2300ff88' stroke-width='2' fill='none' opacity='0.3'/><path d='M8 12h8M12 8v8M9 10l3-4 3 4' stroke='%2300ff88' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' fill='none'/></svg>">
-<title>NSE EDGE SYSTEM v5</title>
+<title>Stockr — Advanced Trading Edge</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0d1520">
-<!-- Optional: set when UI is opened from Live Server / another port (API stays on FastAPI, usually :8000) -->
+<!-- When the UI is on a different host than the FastAPI server, set this to the API origin (no trailing slash). Example: https://nse-edge-backend.fly.dev -->
 <!-- <meta name="nse-api-base" content="http://127.0.0.1:8000"> -->
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Outfit:wght@700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -1457,6 +1457,16 @@ button{font-weight:700}
 .pol-mono{font-size:10px;color:var(--t0);white-space:pre-wrap;line-height:1.45;font-family:var(--fn)}
 .pol-btn{align-self:flex-start;margin-top:4px;font-size:9px;padding:4px 10px;border-radius:4px;border:1px solid var(--bl-b);background:var(--s3);color:var(--bl);cursor:pointer}
 .pol-btn:hover{background:var(--s4)}
+.tab.tab-playbook{color:rgba(192,132,252,.78)}
+.tab.tab-playbook:hover:not(.on){color:#d8b4fe;background:rgba(168,85,247,.08)}
+.tab.tab-playbook.on{color:#e9d5ff}
+.tab.tab-playbook.on::after{background:linear-gradient(90deg,#a855f7,#e9d5ff)}
+.tab.tab-playbook.on .tab-glyph{filter:drop-shadow(0 0 6px rgba(168,85,247,.45))}
+:root.light .tab.tab-playbook{color:#6b21a8}
+:root.light .tab.tab-playbook.on{color:#581c87}
+.pbk-checklist{display:flex;flex-direction:column;gap:6px;font-size:11px;color:var(--t0)}
+.pbk-checklist label{display:flex;align-items:flex-start;gap:8px;cursor:pointer;line-height:1.45}
+.pbk-checklist input{margin-top:3px;flex-shrink:0}
 .light .pol-verdict.pol-ok{background:rgba(0,110,58,.09)!important;border-color:rgba(0,110,58,.28)!important}
 .light .pol-verdict.pol-weak_sample{background:rgba(168,82,0,.09)!important}
 .light .pol-verdict.pol-insufficient_data{background:rgba(196,15,46,.08)!important}
@@ -3965,6 +3975,12 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
           <span class="tab-txt">STOCK PICKS</span>
         </div>
 
+        <div class="tab tab-playbook" style="--tc:#c084fc;--tg:rgba(192,132,252,.14);--ts:rgba(192,132,252,.5)"
+             onclick="sw('playbook',this)" id="pbk-tab" title="Session playbook — one master theme per session, checklist, diagnostic backtest">
+          <span class="tab-glyph" aria-hidden="true">📓</span>
+          <span class="tab-txt">PLAYBOOK</span>
+        </div>
+
         <!-- ═══ GROUP 3 · CONTEXT ═════════════════════════════════════════ -->
         <div class="tab-group-sep" aria-hidden="true"><span>CONTEXT</span></div>
 
@@ -4041,6 +4057,7 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
         <button class="tmm-item" onclick="tabsMoreSw('pnl')"><span>💰</span>P&amp;L TRACK</button>
         <button class="tmm-item" onclick="tabsMoreSw('journal')"><span>📝</span>TRADE LOG</button>
         <button class="tmm-item" onclick="tabsMoreSw('stats')"><span>📊</span>STATS</button>
+        <button class="tmm-item" onclick="tabsMoreSw('playbook')"><span>📓</span>PLAYBOOK</button>
         <button class="tmm-item" onclick="tabsMoreSw('policy')"><span>◆</span>POLICY</button>
         <button class="tmm-item" onclick="tabsMoreSw('learnbt')"><span>ℹ</span>BT GUIDE</button>
       </div>
@@ -5466,6 +5483,40 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
       <div class="pol-card"><div class="pol-k">Spikes (live vs backfilled)</div><pre id="pol-spikes" class="pol-mono"></pre></div>
       <div class="pol-card"><div class="pol-k">Five-gate EXECUTE</div><pre id="pol-exec" class="pol-mono"></pre></div>
       <div class="pol-card"><div class="pol-k">Swing · Confluence</div><pre id="pol-misc" class="pol-mono"></pre></div>
+    </div>
+  </div>
+
+  <!-- TAB: SESSION PLAYBOOK (backend/playbook_design.py) -->
+  <div class="tp" id="tp-playbook" style="flex-direction:column;overflow:hidden;flex:1;min-height:0">
+    <div class="pol-wrap pbk-wrap">
+      <div>
+        <div class="pol-hd">Session playbook</div>
+        <p class="pol-sub"><b>One primary playbook per session</b> — regime tags from VIX · PCR · expiry · max pain pick a master intraday theme so ORB, OI, gamma, and stop-hunt logic do not fight. <b>Pre-build checklist</b> is persisted in <code>backtest.db</code>. Backtest block is <b>diagnostic</b> (daily bars only).</p>
+        <div id="pbk-api-strip" class="pol-sub" style="display:none;margin-top:4px;padding:10px 12px;border-radius:10px;background:var(--st-d);border:1px solid var(--st-b);color:var(--t0);font-size:10px;line-height:1.55;max-width:900px"></div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+          <button type="button" class="pol-btn" onclick="refreshPlaybookDesign()">Refresh live</button>
+          <button type="button" class="pol-btn" onclick="pbRecordSession()" title="Store today’s regime + playbook in playbook_daily">Record session</button>
+          <span class="bd bb" id="pbk-compact">Checklist —</span>
+        </div>
+      </div>
+      <div id="pbk-verdict" class="pol-verdict pol-ok"><div class="pol-k">Live selection</div><div id="pbk-verdict-body" class="pol-mono">Open this tab to load…</div></div>
+      <div class="pol-card"><div class="pol-k">Regime tags</div><pre id="pbk-tags" class="pol-mono" style="max-height:120px;overflow:auto">—</pre></div>
+      <div class="pol-card"><div class="pol-k">Suppressed playbooks (ignore until flat)</div><pre id="pbk-suppressed" class="pol-mono">—</pre></div>
+      <div class="pol-card"><div class="pol-k">Pre-build checklist</div><div id="pbk-checklist" class="pbk-checklist"></div></div>
+      <div class="pol-card">
+        <div class="pol-k">Historical diagnostic backtest</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px">
+          <label class="pol-sub" style="margin:0;display:flex;align-items:center;gap:6px">Days <input type="number" id="pbk-days" value="400" min="60" max="1200" style="width:72px;padding:4px 6px;border-radius:4px;border:1px solid var(--b1);background:var(--s2);color:var(--t0)"></label>
+          <button type="button" class="pol-btn" onclick="pbRunBacktest()">Run</button>
+          <span class="pol-sub" id="pbk-bt-note" style="margin:0"></span>
+        </div>
+        <pre id="pbk-bt-out" class="pol-mono" style="max-height:220px;overflow:auto">—</pre>
+      </div>
+      <div class="pol-card"><div class="pol-k">Recorded sessions</div>
+        <p class="pol-sub" style="margin:0 0 8px;font-size:9px">Today’s row updates automatically whenever you open this tab or tap <b>Refresh live</b> (same data as the live panel). Use <b>Record session</b> to force-save the current snapshot.</p>
+        <button type="button" class="pol-btn" onclick="pbLoadHistory()" style="margin-bottom:6px">Reload history</button>
+        <div style="overflow:auto;max-height:200px"><table class="perf-table" style="width:100%;font-size:11px"><thead><tr><th>Date</th><th>Playbook</th><th>VIX</th><th>PCR</th></tr></thead><tbody id="pbk-hist-body"><tr><td colspan="4" style="text-align:center;color:var(--t2)">—</td></tr></tbody></table></div>
+      </div>
     </div>
   </div>
 
@@ -7265,8 +7316,9 @@ entry_time    strike  type  entry  max   exit  return%
         <!-- KPI cards -->
         <div class="perf-sum">
           <div class="perf-card" style="border-color:rgba(16,185,129,.18)">
-            <div class="perf-k">Total P&amp;L · 1L Model</div>
+            <div class="perf-k">Total P&amp;L · ₹30K / signal</div>
             <div class="perf-v pos" id="perf-total">—</div>
+            <div style="margin-top:6px;font-size:8px;color:var(--t2);line-height:1.35" id="perf-cap-hint">Qty = floor(₹30,000 ÷ entry). P&amp;L = pts × qty.</div>
             <div style="margin-top:8px;height:3px;border-radius:2px;background:rgba(16,185,129,.12)"><div id="perf-pnl-bar" style="height:100%;width:0%;background:var(--go);border-radius:2px;transition:width .6s"></div></div>
           </div>
           <div class="perf-card" style="border-color:rgba(99,102,241,.18)">
@@ -7315,16 +7367,18 @@ entry_time    strike  type  entry  max   exit  return%
               <table class="perf-table">
                 <thead>
                   <tr>
-                    <th style="width:64px">Time</th>
+                    <th style="width:76px">Entry time<br><span style="font-weight:600;opacity:.75">IST</span></th>
                     <th style="width:100px">Section</th>
                     <th style="width:86px">Symbol</th>
                     <th style="width:60px">Dir</th>
                     <th style="min-width:110px">Trigger</th>
-                    <th style="width:80px;text-align:right">Entry</th>
+                    <th style="width:80px;text-align:right">Entry ₹</th>
+                    <th style="width:56px;text-align:right">Qty<br><span style="font-weight:600;opacity:.75">units</span></th>
+                    <th style="width:82px;text-align:right">Cash ₹<br><span style="font-weight:600;opacity:.75">budget</span></th>
                     <th style="width:70px;text-align:right">SL</th>
                     <th style="width:80px;text-align:right">Target</th>
                     <th style="width:80px;text-align:right">LTP/Exit</th>
-                    <th style="width:72px;text-align:right">Hit Time</th>
+                    <th style="width:76px;text-align:right">Exit time<br><span style="font-weight:600;opacity:.75">IST</span></th>
                     <th style="width:88px;text-align:right">P&amp;L</th>
                     <th style="width:94px">Outcome</th>
                   </tr>
@@ -7363,7 +7417,7 @@ entry_time    strike  type  entry  max   exit  return%
             <div class="adv-sum-v" id="adv-dp-wr">—</div>
           </div>
           <div class="adv-sum-card" style="border-color:rgba(16,185,129,.3);background:rgba(16,185,129,.07)">
-            <div class="adv-sum-k" style="color:var(--go)">P&amp;L · ₹10k/trade</div>
+            <div class="adv-sum-k" style="color:var(--go)">P&amp;L · ₹30K/trade</div>
             <div class="adv-sum-v" id="adv-dp-pnl">—</div>
           </div>
         </div>
@@ -7393,9 +7447,9 @@ entry_time    strike  type  entry  max   exit  return%
           <table class="perf-table">
             <thead>
               <tr>
-                <th style="width:62px">Signal</th>
-                <th style="width:62px">Entry</th>
-                <th style="width:62px">Exit</th>
+                <th style="width:62px">Entry time<br><span style="font-weight:600;opacity:.75;font-size:8px">IST</span></th>
+                <th style="width:62px">Exec @</th>
+                <th style="width:62px">Exit time<br><span style="font-weight:600;opacity:.75;font-size:8px">IST</span></th>
                 <th style="width:52px">Dur</th>
                 <th style="width:100px">Symbol</th>
                 <th style="width:58px">Dir</th>
@@ -7971,6 +8025,12 @@ function sw(name,btn){
   }
   if(name==='stats' && typeof refreshStatsTab === 'function') setTimeout(refreshStatsTab, 40);
   if(name==='policy' && typeof refreshTradingPolicy === 'function') setTimeout(refreshTradingPolicy, 40);
+  if(name==='playbook'){
+    setTimeout(function(){
+      if(typeof refreshPlaybookDesign === 'function') refreshPlaybookDesign();
+      if(typeof pbLoadHistory === 'function') pbLoadHistory();
+    }, 40);
+  }
   if(name==='confluence'){
     setTimeout(cfLoadHistory, 80);
     setTimeout(function(){ cfLoadDesk(false); }, 120);
@@ -9199,6 +9259,260 @@ async function refreshTradingPolicy(){
     }
   }catch(e){
     if(vb) vb.textContent = 'Request failed: ' + (e && e.message ? e.message : e);
+  }
+}
+
+window._lastPlaybookSnapshot = null;
+
+function nseEffectiveApiBase(){
+  var b = (typeof window._backendBase === 'string' ? window._backendBase : '').replace(/\/$/,'');
+  if(b) return b;
+  try{
+    if(typeof nseBackendOrigin === 'function')
+      b = String(nseBackendOrigin()).replace(/\/$/,'');
+  }catch(e){}
+  return b || '';
+}
+
+function pbkShowApiError(strip, vb, vwrap, detail, status, triedUrl){
+  var msg = detail || ('HTTP ' + (status || 'error'));
+  if(strip){
+    strip.style.display = 'block';
+    strip.innerHTML =
+      '<b>Playbook API:</b> ' + String(msg) +
+      (triedUrl ? ' <span style="opacity:.75">(' + String(triedUrl) + ')</span>' : '') +
+      '<br><br><b>Why:</b> FastAPI returns <code>Not Found</code> when the server does not expose <code>/api/playbook-design/*</code> yet (redeploy the latest backend) <i>or</i> the UI is calling the wrong host (static hosting has no Python routes).' +
+      '<br><br><b>Fix:</b> <code>localStorage.setItem("nse_edge_api_base","https://YOUR-API-ORIGIN")</code> (no trailing slash) → reload. Or open the app from FastAPI on port 8000. Optional: <code>?api=https://YOUR-API-ORIGIN</code> in the URL.' +
+      '<br><br><b>Local 404 on localhost:8000?</b> (1) Open <code>/api/playbook-design/ping</code> — expect <code>{"ok":true,"playbook_routes":true}</code>. If still 404, port 8000 is <b>not</b> this app (kill the other process or change PORT). (2) Restart: Ctrl+C, then <code>start.ps1</code>. Boot log must say <code>Mounted playbook-design API</code>. (3) <code>/api/health</code> → <code>playbook_design_api: true</code>.';
+  }
+  if(vb){
+    vb.textContent = 'No data — API error: ' + String(msg) + '\n\nSee red help box above.';
+  }
+  if(vwrap) vwrap.className = 'pol-verdict pol-insufficient_data';
+}
+
+async function nseFetchJson(url, opts){
+  var r = await fetch(url, opts || {});
+  var j = {};
+  try{ j = await r.json(); }catch(e2){ j = { _parse_error: true }; }
+  return { ok: r.ok, status: r.status, json: j, url: url };
+}
+
+async function refreshPlaybookDesign(){
+  const base = nseEffectiveApiBase();
+  const vb = document.getElementById('pbk-verdict-body');
+  const vwrap = document.getElementById('pbk-verdict');
+  const tagEl = document.getElementById('pbk-tags');
+  const supEl = document.getElementById('pbk-suppressed');
+  const ckEl = document.getElementById('pbk-checklist');
+  const comp = document.getElementById('pbk-compact');
+  const strip = document.getElementById('pbk-api-strip');
+  if(strip) strip.style.display = 'none';
+  if(vb) vb.textContent = 'Loading…';
+  if(vwrap) vwrap.className = 'pol-verdict pol-ok';
+  if(!base){
+    pbkShowApiError(strip, vb, vwrap, 'No API base — set localStorage nse_edge_api_base or open from FastAPI :8000', '', '');
+    if(comp) comp.textContent = 'Checklist —';
+    return;
+  }
+  var snapUrl = base + '/api/playbook-design/snapshot';
+  try{
+    const res = await nseFetchJson(snapUrl);
+    if(!res.ok){
+      var det = res.json.detail || res.json.error || res.json.message || ('HTTP ' + res.status);
+      pbkShowApiError(strip, vb, vwrap, det, res.status, snapUrl);
+      window._lastPlaybookSnapshot = null;
+      if(comp) comp.textContent = 'Checklist —';
+      if(tagEl) tagEl.textContent = '—';
+      if(supEl) supEl.textContent = '—';
+      if(ckEl) ckEl.innerHTML = '<span style="color:var(--t2);font-size:10px">Load snapshot first.</span>';
+      return;
+    }
+    const j = res.json;
+    if(j.error){
+      pbkShowApiError(strip, vb, vwrap, j.error, res.status, snapUrl);
+      return;
+    }
+    window._lastPlaybookSnapshot = j;
+    const sel = j.selection || {};
+    const reg = j.regime || {};
+    const meta = sel.primary_meta || {};
+    const compo = j.checklist_completion || {};
+    if(comp){
+      comp.textContent = 'Checklist ' + (compo.checked != null ? compo.checked : '—') + '/' + (compo.total != null ? compo.total : '—') + (compo.ratio != null ? ' (' + Math.round(compo.ratio * 100) + '%)' : '');
+    }
+    if(vwrap) vwrap.className = 'pol-verdict pol-ok';
+    if(vb){
+      var lines = [];
+      lines.push('API: ' + base);
+      lines.push('PRIMARY: ' + (sel.primary || '—'));
+      if(meta.title) lines.push(meta.title);
+      if(meta.focus) lines.push(meta.focus);
+      if(meta.gates_hint) lines.push('Gates: ' + meta.gates_hint);
+      if(j.edge_regime) lines.push('Edge regime: ' + j.edge_regime);
+      lines.push('');
+      (sel.reasons || []).forEach(function(x){ lines.push('• ' + x); });
+      (sel.session_notes || []).forEach(function(x){ lines.push('Note: ' + x); });
+      if(sel.meta_rule){ lines.push(''); lines.push(sel.meta_rule); }
+      vb.textContent = lines.join('\n');
+    }
+    if(tagEl){
+      tagEl.textContent = JSON.stringify({ tags: reg.tags, days_to_thursday: reg.days_to_thursday, weekday: reg.weekday, inputs: reg.inputs }, null, 2);
+    }
+    if(supEl){
+      supEl.textContent = JSON.stringify({ suppressed: sel.suppressed_playbooks, catalogue_keys: Object.keys(j.playbook_catalogue || {}) }, null, 2);
+    }
+    if(ckEl){
+      ckEl.innerHTML = '';
+      var list = j.checklist || [];
+      if(!list.length){
+        ckEl.innerHTML = '<span style="color:var(--t2);font-size:10px">No checklist rows — backend DB may need init (restart server).</span>';
+      }
+      list.forEach(function(row){
+        const id = 'pbk-ck-' + row.item_key;
+        const lab = document.createElement('label');
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = !!row.checked;
+        cb.id = id;
+        cb.addEventListener('change', function(){
+          pbToggleCheck(row.item_key, cb.checked);
+        });
+        const sp = document.createElement('span');
+        sp.textContent = row.label || row.item_key;
+        lab.appendChild(cb);
+        lab.appendChild(sp);
+        ckEl.appendChild(lab);
+      });
+    }
+  }catch(e){
+    pbkShowApiError(strip, vb, vwrap, (e && e.message) ? e.message : String(e), '', snapUrl);
+  }
+}
+
+async function pbToggleCheck(itemKey, checked){
+  const base = nseEffectiveApiBase();
+  if(!base) return;
+  try{
+    const res = await nseFetchJson(base + '/api/playbook-design/checklist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_key: itemKey, checked: !!checked })
+    });
+    if(!res.ok){
+      if(typeof notify === 'function') notify('Checklist: ' + (res.json.detail || res.json.error || res.status));
+      return;
+    }
+    await refreshPlaybookDesign();
+  }catch(e){
+    if(typeof notify === 'function') notify('Checklist update failed');
+  }
+}
+
+async function pbRunBacktest(){
+  const base = nseEffectiveApiBase();
+  const out = document.getElementById('pbk-bt-out');
+  const note = document.getElementById('pbk-bt-note');
+  const strip = document.getElementById('pbk-api-strip');
+  const daysEl = document.getElementById('pbk-days');
+  if(!out) return;
+  var days = 400;
+  try{ days = parseInt(daysEl && daysEl.value, 10) || 400; }catch(e2){}
+  if(note) note.textContent = 'Running…';
+  out.textContent = '—';
+  if(!base){
+    out.textContent = JSON.stringify({ error: 'no_api_base', hint: 'Set nse_edge_api_base or open from :8000' }, null, 2);
+    if(note) note.textContent = '';
+    return;
+  }
+  const burl = base + '/api/playbook-design/backtest?days=' + encodeURIComponent(days);
+  try{
+    const res = await nseFetchJson(burl);
+    if(!res.ok){
+      var det = res.json.detail || res.json.error || ('HTTP ' + res.status);
+      out.textContent = JSON.stringify({ detail: det, status: res.status, url: burl }, null, 2);
+      if(note) note.textContent = '';
+      if(strip){
+        strip.style.display = 'block';
+        strip.innerHTML = '<b>Backtest request failed.</b> ' + String(det) + ' — same fix as live snapshot (redeploy API or correct API base).';
+      }
+      return;
+    }
+    const j = res.json;
+    if(j.error){
+      out.textContent = JSON.stringify(j, null, 2);
+      if(note) note.textContent = '';
+      return;
+    }
+    if(strip) strip.style.display = 'none';
+    if(note){
+      note.textContent = (j.window_days || '—') + ' rows · max-pain sample ' + (j.max_pain_sample_days != null ? j.max_pain_sample_days : '—');
+    }
+    out.textContent = JSON.stringify(j, null, 2);
+  }catch(e){
+    out.textContent = 'Request failed: ' + (e && e.message ? e.message : e);
+    if(note) note.textContent = '';
+  }
+}
+
+async function pbRecordSession(){
+  const base = nseEffectiveApiBase();
+  if(!base) return;
+  try{
+    const body = {};
+    if(window._lastPlaybookSnapshot) body.snapshot = window._lastPlaybookSnapshot;
+    const res = await nseFetchJson(base + '/api/playbook-design/record', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if(!res.ok){
+      if(typeof notify === 'function') notify(String(res.json.detail || res.json.error || res.status));
+      return;
+    }
+    const j = res.json;
+    if(j.error){
+      if(typeof notify === 'function') notify(String(j.error));
+      return;
+    }
+    if(typeof notify === 'function') notify('Recorded ' + (j.trade_date || '') + ' → ' + (j.primary || ''));
+    pbLoadHistory();
+  }catch(e){
+    if(typeof notify === 'function') notify('Record failed');
+  }
+}
+
+async function pbLoadHistory(){
+  const base = nseEffectiveApiBase();
+  const tb = document.getElementById('pbk-hist-body');
+  if(!tb) return;
+  tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--t2)">Loading…</td></tr>';
+  if(!base){
+    tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--t2)">No API base</td></tr>';
+    return;
+  }
+  try{
+    const res = await nseFetchJson(base + '/api/playbook-design/history?limit=40');
+    if(!res.ok){
+      tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--st)">' + String(res.json.detail || res.json.error || res.status) + '</td></tr>';
+      return;
+    }
+    const j = res.json;
+    if(j.error || !j.rows){
+      tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--t2)">—</td></tr>';
+      return;
+    }
+    tb.innerHTML = '';
+    j.rows.forEach(function(row){
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + (row.trade_date || '') + '</td><td>' + (row.primary_playbook || '') + '</td><td>' + (row.vix != null ? row.vix : '—') + '</td><td>' + (row.pcr != null ? row.pcr : '—') + '</td>';
+      tb.appendChild(tr);
+    });
+    if(!j.rows.length){
+      tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--t2)">No rows yet — use Record session</td></tr>';
+    }
+  }catch(e){
+    tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--st)">Failed</td></tr>';
   }
 }
 
@@ -11930,18 +12244,19 @@ function ixFmtSignalTime(s) {
       fetch((window._backendBase||'')+'/api/index-signals/history?from_date='+today+'&to_date='+today)
         .then(function(r){ return r.json(); })
         .then(function(data){
-          var sigs = (data.signals||[]).filter(function(s){ return (s.quality||0)>=68; });
-          // Classify tiers
+          var PS_TIER_FULL = 80, PS_TIER_HALF = 64, PS_VIX_BLOCK = 17;
+          var sigs = (data.signals||[]).filter(function(s){ return (s.quality||0) >= PS_TIER_HALF; });
+          // Classify tiers (matches PRIME_STRIKE_CONFIG tier_full / tier_half)
           sigs = sigs.map(function(s){
             var q=s.quality||0;
-            var tier=q>=80?'FULL':'HALF';
-            var lots=q>=82?2:1;
+            var tier=q>=PS_TIER_FULL?'FULL':'HALF';
+            var lots=q>=PS_TIER_FULL?2:1;
             var h=parseInt((s.signal_time||'00:00').split(':')[0]);
             var m=parseInt((s.signal_time||'00:00').split(':')[1]);
             var cm=h*60+m;
             var win=cm<=660?'W1':cm<=720?'W2':'W3';
             var v=s.vix||0;
-            var vixOk=!v||(v<17);
+            var vixOk=!v||(v<PS_VIX_BLOCK);
             return Object.assign({},s,{tier:tier,lots:lots,window:win,vix_ok:vixOk});
           });
           var blocked = sigs.filter(function(s){ return !s.vix_ok; });
@@ -11962,10 +12277,10 @@ function ixFmtSignalTime(s) {
             +'<span style="color:var(--st)">'+(res.length-wins)+' SL</span> · '
             +'<span style="color:'+psWrColor(wr)+';font-weight:700">'+wr+'% WR</span> · '
             +'<span style="color:'+(pnl>=0?'var(--go)':'var(--st)')+'">  '+(pnl>=0?'+\u20B9':'\u2212\u20B9')+psFmt(Math.abs(pnl))+'</span>'
-            +' · <span style="color:var(--t3)">'+active.length+' signals (quality≥68)</span>'
+            +' · <span style="color:var(--t3)">'+active.length+' signals (q≥64)</span>'
             +(blocked.length?' · <span style="color:var(--am)">'+blocked.length+' VIX-blocked</span>':'');
           if(!active.length){
-            if(lbody) lbody.innerHTML='<div style="text-align:center;padding:30px;color:var(--t2);font-size:9px"><div style="font-size:22px;opacity:.3;margin-bottom:10px">◈</div>No qualifying signals today (quality≥68)<br><span style="font-size:7.5px;color:var(--t3)">Signals appear as INDEX HUNT triggers them · VIX>17 blocks the day</span></div>';
+            if(lbody) lbody.innerHTML='<div style="text-align:center;padding:30px;color:var(--t2);font-size:9px"><div style="font-size:22px;opacity:.3;margin-bottom:10px">◈</div>No qualifying signals today (Prime-style: quality≥64, FULL≥80=2 lots)<br><span style="font-size:7.5px;color:var(--t3)">Pulled from today’s INDEX HUNT history · VIX≥17 marks day blocked</span></div>';
             return;
           }
           var rows=active.map(function(s,idx){
@@ -12051,6 +12366,7 @@ function ixFmtSignalTime(s) {
         /* handle both our {error:...} and FastAPI {detail:...} error shapes */
         var errMsg = d.error || (typeof d.detail==='string' ? d.detail : null);
         if(!errMsg && Array.isArray(d.detail)) errMsg = JSON.stringify(d.detail);
+        if(!r.ok && !errMsg) errMsg = 'HTTP ' + r.status;
         if(errMsg || typeof d.total==='undefined'){
           var msg = errMsg || 'Unexpected response (no total field) — restart backend';
           psSetStatus('Error: '+msg,'var(--st)');
@@ -13347,7 +13663,32 @@ async function cfLoadHistory(){
 // INIT
 // ═══════════════════════════════════════════════
 setMode('intraday');
-setTimeout(()=>notify('NSE EDGE  ready — Connecting to live data...'),400);
+setTimeout(()=>notify('Stockr / NSE EDGE ready — connecting to live data…'),400);
+
+(function stockrWelcomeVoice(){
+  var spoken = false;
+  function voiceOff(){
+    try{ return localStorage.getItem('nse_welcome_voice_off') === '1'; }catch(e){ return false; }
+  }
+  function speakOnce(){
+    if(spoken || voiceOff()) return;
+    try{
+      if(!window.speechSynthesis) return;
+      if(sessionStorage.getItem('nse_stockr_welcome_sess') === '1'){ spoken = true; return; }
+      var u = new SpeechSynthesisUtterance('Welcome to Stockr — an advanced trading edge.');
+      u.lang = 'en-IN';
+      u.rate = 0.9;
+      u.pitch = 1;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+      sessionStorage.setItem('nse_stockr_welcome_sess', '1');
+      spoken = true;
+    }catch(e){}
+  }
+  document.addEventListener('click', speakOnce, { once: true, capture: true });
+  document.addEventListener('keydown', speakOnce, { once: true, capture: true });
+  setTimeout(speakOnce, 1500);
+})();
 
 // API base: same origin when UI is served by FastAPI (:8000). Live Server / Vite / :5500 etc.
 // must point at the Python API or every POST (wipe, backtest) returns 404 Not Found.
@@ -16160,6 +16501,12 @@ function asrLiveIngestSpikes(arr, opts) {
         const next = _srApplyBackendStatus(ex.status, fromBackend);
         if (next !== ex.status) {
           ex.status = next;
+          // Hydrate timing fields when backend sends resolved outcome.
+          if (next !== 'LIVE') {
+            ex.executed = true;
+            if (!ex.executedAt) ex.executedAt = sp.time || ex.signalTimeIst || '';
+            if (!ex.exitTime) ex.exitTime = sp.outcome_time || sp.exit_time || '';
+          }
           changed = true;
         }
       }
@@ -16178,6 +16525,9 @@ function asrLiveIngestSpikes(arr, opts) {
     const initial = fromBackend && fromBackend !== 'LIVE'
       ? _srApplyBackendStatus('LIVE', fromBackend)
       : 'LIVE';
+    const resolvedInit = initial !== 'LIVE';
+    const initExecTime = sp.time || '';
+    const initExitTime = sp.outcome_time || sp.exit_time || '';
 
     window._advLiveSpikeLog.unshift({
       id: key,
@@ -16197,8 +16547,9 @@ function asrLiveIngestSpikes(arr, opts) {
       status: initial,
       detectedAt: Date.now(),
       signalTimeIst: sp.time || '',
-      executed: false,
-      executedAt: '',
+      executed: resolvedInit,
+      executedAt: resolvedInit ? initExecTime : '',
+      exitTime: resolvedInit ? initExitTime : '',
     });
     if (!hydrate && typeof window._kzOnNewSpikeRow === 'function') window._kzOnNewSpikeRow(sp);
     changed = true;
@@ -17813,27 +18164,32 @@ function perfDownloadCSV(){
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
   };
   const header = [
-    'date','section','symbol','time','direction','trigger',
-    'entry','sl','target','ltp_exit','hit_time','qty_model','pnl_model_inr','pnl_inr_actual','outcome','status','option_expiry','option_week'
+    'date','section','symbol','entry_time_ist','exit_time_ist','direction','trigger',
+    'entry_price','lots_model','qty_model','deploy_inr','sl','target','ltp_exit','pnl_model_inr','pnl_inr_actual','outcome','status','option_expiry','option_week'
   ];
   const lines = [header.join(',')];
   rows.forEach(r=>{
     const trig = (r.section === 'INDEX_RADAR' && r.option_expiry)
       ? ((r.trigger || 'INDEX HUNT') + ' · EXP ' + r.option_expiry + (r.option_week ? (' ' + r.option_week) : ''))
       : (r.trigger || '');
+    const entT = (r.entry_time_ist != null && r.entry_time_ist !== '') ? r.entry_time_ist : (r.time || '');
+    const exT = (r.exit_time_ist != null && r.exit_time_ist !== '') ? r.exit_time_ist : (r.hit_time || '');
+    const dep = (r.investment_inr != null) ? Math.round(Number(r.investment_inr)) : '';
     const row = [
       day,
       r.section || '',
       r.symbol || '',
-      r.time || '',
+      entT,
+      exT,
       r.direction || '',
       trig,
       _perfFmtPx(r.entry),
+      Number(r.lots_model || 0),
+      Number(r.qty_model || 0),
+      dep,
       _perfFmtPx(r.sl),
       _perfFmtPx(r.t1),
       _perfFmtPx((r.ltp!=null&&r.ltp!==0)?r.ltp:null),
-      r.hit_time || '',
-      Number(r.qty_model || 0),
       Number(_perfPickPnl(r) || 0).toFixed(2),
       Number((r.pnl_inr != null ? r.pnl_inr : r.pnl_pts) || 0).toFixed(2),
       r.outcome || '',
@@ -18108,7 +18464,7 @@ async function loadDayPerf(overrideDate){
   const sumWr = document.getElementById('perf-wr');
   const sumOpen = document.getElementById('perf-open');
   const tsub = document.getElementById('perf-table-sub');
-  if(tb) tb.innerHTML = '<tr><td colspan="12" style="padding:16px;color:var(--t2)">Loading…</td></tr>';
+  if(tb) tb.innerHTML = '<tr><td colspan="14" style="padding:16px;color:var(--t2)">Loading…</td></tr>';
 
   // Priority: explicit override > modal date picker > topbar date > today
   let day = overrideDate || '';
@@ -18137,9 +18493,13 @@ async function loadDayPerf(overrideDate){
     _perfLastData = data;
     _perfFilterSection = 'ALL';
     _perfFilterOutcome = 'ALL';
+    try{
+      const n = data && data.capital_model && data.capital_model.notional_per_signal_inr;
+      if(n != null && !Number.isNaN(Number(n))) window._advCapPerTrade = Number(n);
+    }catch(e2){}
     renderDayPerfFromCache();
   }catch(e){
-    if(tb) tb.innerHTML = '<tr><td colspan="12" style="padding:16px;color:var(--st)">Failed to load performance.</td></tr>';
+    if(tb) tb.innerHTML = '<tr><td colspan="14" style="padding:16px;color:var(--st)">Failed to load performance.</td></tr>';
   }
 }
 
@@ -18187,7 +18547,14 @@ function renderDayPerfFromCache(){
   if(sigSub){ sigSub.textContent = wins + 'W · ' + losses + 'L · ' + (rows.length - wins - losses) + ' open'; }
   const openSub = document.getElementById('perf-open-sub');
   if(openSub){ openSub.textContent = open + ' position' + (open !== 1 ? 's' : '') + ' running'; }
-  if(tsub) tsub.textContent = rows.length + ' rows · OPEN shows MTM';
+  const notion = data.capital_model && data.capital_model.notional_per_signal_inr;
+  const nk = notion != null ? ('₹' + Number(notion).toLocaleString('en-IN') + '/sig') : '₹30,000/sig';
+  if(tsub) tsub.textContent = rows.length + ' rows · ' + nk + ' · OPEN shows MTM';
+  const capHint = document.getElementById('perf-cap-hint');
+  if(capHint){
+    const ru = notion != null ? Number(notion).toLocaleString('en-IN') : '30,000';
+    capHint.textContent = 'Stocks: qty = floor(₹' + ru + ' ÷ entry). INDEX RADAR options: fixed 1 lot execution, cash budget shown as ₹' + ru + ' per trade. P&L = premium move × lot size. Entry/exit times are IST.';
+  }
   if(valEl){
     const v = data.validation || {};
     if(v.ok) valEl.innerHTML = '<span class="perf-pill go">VALIDATION OK</span>';
@@ -18253,7 +18620,7 @@ function renderDayPerfFromCache(){
   // Rows table (filtered)
   if(tb){
     if(!rows.length){
-      tb.innerHTML = '<tr><td colspan="12" style="padding:16px;color:var(--t2)">No alerts in this section.</td></tr>';
+      tb.innerHTML = '<tr><td colspan="14" style="padding:16px;color:var(--t2)">No alerts in this section.</td></tr>';
     } else {
       tb.innerHTML = rows.map(r=>{
         const rpnl = _perfPickPnl(r);
@@ -18263,17 +18630,37 @@ function renderDayPerfFromCache(){
         const trig = (r.section === 'INDEX_RADAR' && r.option_expiry)
           ? ((r.trigger||'INDEX HUNT') + ' · EXP ' + r.option_expiry + (r.option_week ? (' ' + r.option_week) : ''))
           : (r.trigger || '');
+        const entT = (r.entry_time_ist != null && r.entry_time_ist !== '') ? r.entry_time_ist : (r.time || '—');
+        const stOpen = String(r.status || '').toUpperCase() === 'OPEN';
+        let exT = '—';
+        if(!stOpen){
+          if(r.exit_time_ist != null && r.exit_time_ist !== '') exT = r.exit_time_ist;
+          else if(r.hit_time) exT = r.hit_time;
+        }
+        const qty = (r.qty_model != null && r.qty_model !== '') ? Number(r.qty_model) : 0;
+        const lotsM = (r.lots_model != null && r.lots_model !== '') ? Number(r.lots_model) : 0;
+        const qtyHint = (r.section === 'INDEX_RADAR' && lotsM > 0 && qty > 0)
+          ? (lotsM + ' lot(s) · ' + qty + ' units (NSE qty)')
+          : (qty > 0 ? 'Contract / share qty for ₹30K model' : '');
+        const dep = (r.investment_inr != null && Number(r.investment_inr) > 0)
+          ? ('₹' + Math.round(Number(r.investment_inr)).toLocaleString('en-IN'))
+          : (qty > 0 && r.entry ? ('₹' + Math.round(qty * Number(r.entry)).toLocaleString('en-IN')) : '—');
+        const depHint = (r.section === 'INDEX_RADAR')
+          ? ('Fixed cash budget ₹30,000 per INDEX RADAR trade (execution = 1 lot)')
+          : 'qty × entry (≤ notional)';
         return `<tr>
-          <td style="color:var(--t1);font-variant-numeric:tabular-nums">${r.time||'—'}</td>
+          <td style="color:var(--t0);font-variant-numeric:tabular-nums;font-weight:700" title="Entry (signal time)">${entT}</td>
           <td><span class="perf-pill ${secPill}">${(r.section||'—').replace('_',' ')}</span></td>
           <td style="font-weight:800;color:var(--t0)">${r.symbol||'—'}</td>
           <td style="color:var(--t1);font-weight:800">${r.direction||'—'}</td>
           <td style="color:var(--t2)">${trig}</td>
           <td style="text-align:right;font-variant-numeric:tabular-nums">${_perfFmtPx(r.entry)}</td>
+          <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:800;color:var(--bl)" title="${qtyHint || ''}">${qty > 0 ? qty : '—'}</td>
+          <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--t1)" title="${depHint}">${dep}</td>
           <td style="text-align:right;font-variant-numeric:tabular-nums">${_perfFmtPx(r.sl)}</td>
           <td style="text-align:right;font-variant-numeric:tabular-nums">${_perfFmtPx(r.t1)}</td>
           <td style="text-align:right;font-variant-numeric:tabular-nums">${_perfFmtPx((r.ltp!=null&&r.ltp!==0)?r.ltp:null)}</td>
-          <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--t1)">${r.hit_time || '—'}</td>
+          <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--t0);font-weight:700" title="Exit time when position closed">${exT}</td>
           <td style="text-align:right;font-weight:900;color:${rpnl>0?'var(--go)':rpnl<0?'var(--st)':'var(--t1)'}">${_perfFmtInr(rpnl)}</td>
           <td><span class="perf-pill ${outCls}">${out||'—'}</span></td>
         </tr>`;

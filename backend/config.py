@@ -273,6 +273,12 @@ INDEX_RADAR = {
     "opt_sl_mult":        0.70,    # option premium SL = entry × this (live plan)
     "opt_t1_mult":        1.50,    # T1 = entry × this (smaller → easier hit, lower ₹ target)
     "opt_t2_mult":        2.00,
+    # ── Strike/premium guardrails (live index radar option pick) ────────────
+    # Keep fills near liquid strikes; avoid deep ITM and very high-premium legs
+    # where bid/ask spread slippage is materially worse.
+    "strike_otm_steps":   0,       # 0=ATM, 1=one-step OTM
+    "option_entry_min":   35.0,    # skip illiquid tiny-premium noise
+    "option_entry_max":   500.0,   # cap expensive legs to reduce spread/slippage risk
     # ── High precision (fewer signals). ML needs ≥~50 resolved T1/SL rows in DB first. ──
     "precision_boost":    False,    # True: tighter chg band, hi-only, stronger trend + quality
     "precision_hi_only": True,
@@ -325,6 +331,10 @@ INDEX_RADAR_HIGH_ACCURACY: dict = {
     "opt_t2_mult": 1.52,
     "outcome_t1_index_pct": 0.10,
     "outcome_sl_index_pct": 0.24,
+    # Enforce liquid, non-deep contracts in stricter profile too.
+    "strike_otm_steps": 0,
+    "option_entry_min": 35.0,
+    "option_entry_max": 500.0,
 }
 
 # Extra overlay for preset=elite (backtest + optional live profile index_elite). Targets fewer, higher-WR signals.

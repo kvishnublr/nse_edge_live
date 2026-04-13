@@ -1163,24 +1163,32 @@ def build_today_spikes_from_kite_history(kite) -> list:
                 t1_px = entry * 1.005 if sp_type == "buy" else entry * 0.995
                 sl_px = entry * 0.995 if sp_type == "buy" else entry * 1.005
                 outcome = None
+                outcome_time = None
                 for j in range(i + 1, min(i + 31, len(candles))):
                     fc = candles[j]
                     if sp_type == "buy":
                         if fc["low"] <= sl_px:
                             outcome = "HIT SL"
+                            outcome_time = fc["date"].strftime("%H:%M")
                             break
                         if fc["high"] >= t1_px:
                             outcome = "HIT T1"
+                            outcome_time = fc["date"].strftime("%H:%M")
                             break
                     else:
                         if fc["high"] >= sl_px:
                             outcome = "HIT SL"
+                            outcome_time = fc["date"].strftime("%H:%M")
                             break
                         if fc["low"] <= t1_px:
                             outcome = "HIT T1"
+                            outcome_time = fc["date"].strftime("%H:%M")
                             break
                 if outcome is None:
                     outcome = "EXPIRED"
+                    # Time-stop: mark expiry on the last checked bar for UI duration.
+                    k = min(i + 30, len(candles) - 1)
+                    outcome_time = candles[k]["date"].strftime("%H:%M")
                 backfill.append({
                     "symbol": sym,
                     "time": t.strftime("%H:%M"),
@@ -1195,6 +1203,7 @@ def build_today_spikes_from_kite_history(kite) -> list:
                     "score": score,
                     "pc": 3,
                     "outcome": outcome,
+                    "outcome_time": outcome_time,
                 })
         except Exception:
             continue

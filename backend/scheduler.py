@@ -63,6 +63,8 @@ def _ix_migrate_cols():
             conn.execute("ALTER TABLE index_signal_history ADD COLUMN option_expiry TEXT")
         if "option_week" not in have:
             conn.execute("ALTER TABLE index_signal_history ADD COLUMN option_week TEXT")
+        if "exit_time" not in have:
+            conn.execute("ALTER TABLE index_signal_history ADD COLUMN exit_time TEXT")
         # Cleanup historical duplicate rows created before strict upserts:
         # keep latest id for the same business signal identity.
         conn.execute("""
@@ -156,15 +158,17 @@ def _ix_db_upsert(sig):
     """Insert or update an index signal in DB."""
     try:
         conn = sqlite3.connect(_DB_PATH)
+        _exit = sig.get("exit_time") or sig.get("outcome_time")
         conn.execute("""
             INSERT INTO index_signal_history
               (sig_id, trade_date, symbol, type, signal_time, ts,
                index_px, strike, entry, sl, t1, t2, rr, lot_sz, lot_pnl_t1,
                chg_pct, strength, vix, quality, pcr, option_expiry, option_week,
-               outcome, created_ts, updated_ts)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               outcome, exit_time, created_ts, updated_ts)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(sig_id) DO UPDATE SET
               outcome=excluded.outcome,
+              exit_time=COALESCE(excluded.exit_time, index_signal_history.exit_time),
               option_expiry=COALESCE(excluded.option_expiry, option_expiry),
               option_week=COALESCE(excluded.option_week, option_week),
               updated_ts=excluded.updated_ts
@@ -179,6 +183,7 @@ def _ix_db_upsert(sig):
             sig.get("vix", 0), sig.get("quality"), sig.get("pcr"),
             sig.get("option_expiry"), sig.get("option_week"),
             sig.get("outcome"),
+            _exit,
             sig["ts"], time.time()
         ))
         conn.commit()
@@ -711,6 +716,56 @@ def _detect_index_signals(chain, indices, bn_chain=None):
     pcr_ce_av = float(ir.get("pcr_ce_avoid_below", 0))
 
     results = []
+
+    def _pick_otm_liquid(active_chain, spot_px: float, step: int, is_ce: bool):
+        """
+        Pick near-ATM OTM strike with usable premium.
+        Avoid deep ITM contracts (wider spreads / slippage).
+        """
+        if not active_chain:
+            return (0, 0.0)
+        rows = (active_chain.get("strikes") or [])
+        if not rows:
+            return (0, 0.0)
+        atm = int(round(float(spot_px or 0) / float(step)) * step) if step > 0 else int(active_chain.get("atm") or 0)
+        if not atm:
+            atm = int(active_chain.get("atm") or 0)
+        if not atm:
+            return (0, 0.0)
+
+        # Strategy knobs (optional in config).
+        otm_steps = max(0, int(ir.get("strike_otm_steps", 1) or 1))
+        min_p = float(ir.get("option_entry_min", 25.0) or 25.0)
+        max_p = float(ir.get("option_entry_max", 900.0) or 900.0)
+        pref = atm + (otm_steps * step if is_ce else -otm_steps * step)
+        ltp_key = "call_ltp" if is_ce else "put_ltp"
+
+        cands = []
+        for r in rows:
+            try:
+                st = int(r.get("strike") or 0)
+            except Exception:
+                continue
+            # CE: use ATM/OTM side only (strike >= ATM). PE: strike <= ATM.
+            if is_ce and st < atm:
+                continue
+            if (not is_ce) and st > atm:
+                continue
+            ltp = float(r.get(ltp_key) or 0)
+            cands.append((st, ltp))
+        if not cands:
+            return (0, 0.0)
+
+        # Prefer nearest to configured OTM preference, then nearest to ATM.
+        cands.sort(key=lambda x: (abs(x[0] - pref), abs(x[0] - atm)))
+        for st, ltp in cands:
+            if min_p <= ltp <= max_p:
+                return (st, ltp)
+        for st, ltp in cands:
+            if ltp > 0:
+                return (st, ltp)
+        return (0, 0.0)
+
     for sym, px, lot_sz, px_idx in [("NIFTY", nifty_px, 25, 1), ("BANKNIFTY", bn_px, 15, 2)]:
         if not px:
             continue
@@ -840,39 +895,17 @@ def _detect_index_signals(chain, indices, bn_chain=None):
             if nifty_day > pe_nifty:
                 continue
 
-        if sym == "NIFTY" and chain:
+        if sym == "NIFTY":
             active_chain = chain
-            atm = active_chain.get("atm", 0) or round(px / 50) * 50
             step = 50
-            target = atm + step if is_ce else atm - step
-            entry_px = 0.0
-            for s in (active_chain.get("strikes") or []):
-                if s["strike"] == target:
-                    entry_px = float(s.get("call_ltp" if is_ce else "put_ltp", 0) or 0)
-                    break
+            target, entry_px = _pick_otm_liquid(active_chain, px, step, is_ce)
             if not entry_px:
-                for s in (active_chain.get("strikes") or []):
-                    if s.get("is_atm"):
-                        entry_px = float(s.get("call_ltp" if is_ce else "put_ltp", 0) or 0)
-                        target = int(s.get("strike") or target)
-                        break
+                entry_px = round(px * 0.007, 1)
         else:
             # BANKNIFTY: use its own option chain LTP (fallback to proxy only if chain unavailable)
             active_chain = bn_chain
-            atm = (active_chain or {}).get("atm", 0) or round(px / 100) * 100
             step = 100
-            target = atm + step if is_ce else atm - step
-            entry_px = 0.0
-            for s in ((active_chain or {}).get("strikes") or []):
-                if s["strike"] == target:
-                    entry_px = float(s.get("call_ltp" if is_ce else "put_ltp", 0) or 0)
-                    break
-            if not entry_px:
-                for s in ((active_chain or {}).get("strikes") or []):
-                    if s.get("is_atm"):
-                        entry_px = float(s.get("call_ltp" if is_ce else "put_ltp", 0) or 0)
-                        target = int(s.get("strike") or target)
-                        break
+            target, entry_px = _pick_otm_liquid(active_chain, px, step, is_ce)
             if not entry_px:
                 entry_px = round(px * 0.007, 1)
 

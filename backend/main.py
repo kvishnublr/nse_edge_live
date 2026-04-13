@@ -365,6 +365,16 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
 )
 
+# ─── PLAYBOOK API (early mount — playbook_routes.py) ──────────────────────────
+# Routes live in a small module so they cannot be “lost” at the bottom of main.py.
+try:
+    from playbook_routes import router as _playbook_router
+
+    app.include_router(_playbook_router)
+    logger.info("Mounted playbook-design API (%d paths)", len(_playbook_router.routes))
+except Exception as _pb_exc:
+    logger.exception("FATAL: playbook_routes failed to mount: %s", _pb_exc)
+
 
 # ─── FRONTEND ─────────────────────────────────────────────────────────────────
 _FRONTEND = os.path.join(os.path.dirname(__file__), "..", "frontend", "index.html")
@@ -562,6 +572,8 @@ async def health():
         "uptime_sec":     round(now - _start_time),
         "last_updated":   last_updated,
         "data_age_sec":   data_age_sec,
+        # If false/missing after deploy, the running process is an old build (restart backend).
+        "playbook_design_api": True,
     })
 
 
@@ -1256,7 +1268,8 @@ async def prime_strikes_backtest(request: Request):
     _t1_th    = float(PS.get("outcome_t1_index_pct", 0.10))
     _sl_th    = float(PS.get("outcome_sl_index_pct", 0.24))
     use_hl    = bool(PS.get("outcome_use_hl", True))
-    tier_full = int(PS.get("tier_full_min_quality", 82))
+    tier_full = int(PS.get("tier_full_min_quality", 80))
+    tier_half = int(PS.get("tier_half_min_quality", 64))
     max_day   = int(PS.get("max_signals_per_day", 3))
     max_csl   = int(PS.get("max_consec_sl", 2))
     all_trades: list = []
@@ -1414,13 +1427,17 @@ async def prime_strikes_backtest(request: Request):
                     cm2      = item["cm"]
                     stype    = item["sig_type"]
 
+                    if float(quality2) < float(tier_half):
+                        flt["skip_below_half_tier"] += 1
+                        continue
+
                     t1m = float(PS.get("opt_t1_mult", 1.30))
                     slm = float(PS.get("opt_sl_mult", 0.78))
                     t1  = round(entry2 * t1m, 2)
                     sl  = round(entry2 * slm, 2)
                     rr  = round((t1-entry2)/max(entry2-sl, 0.01), 1)
 
-                    tier = "FULL" if quality2 >= tier_full else "HALF"
+                    tier = "FULL" if float(quality2) >= float(tier_full) else "HALF"
                     lots = 2 if tier == "FULL" else 1
                     win  = "W1" if cm2 <= 660 else ("W2" if cm2 <= 720 else "W3")
 
@@ -1532,9 +1549,9 @@ async def prime_strikes_backtest(request: Request):
         "walk_forward": wf,
         "filter_stats": dict(sorted(flt.items(), key=lambda x:-x[1])),
         "note": (
-            "PRIME STRIKE: VIX<=17 gate | PCR align | 10:00-13:00 | session lock | "
-            "confirm bars | 15m hunt | quality tier lots (FULL=2x HALF=1x). "
-            "WR=HIT_T1/(HIT_T1+HIT_SL) within 45min bars."
+            "PRIME STRIKE: VIX<17 day block | PCR align | 10:00–13:00 | session lock | "
+            "confirm bars | 15m hunt | trades only quality≥tier_half (64); FULL≥80=2 lots, else HALF=1. "
+            "WR=HIT_T1/(HIT_T1+HIT_SL) within 45 1m bars."
         ),
     })
 
@@ -1641,8 +1658,8 @@ async def day_performance(date: str = None):
 
     rows = []
     sections = {}
-    # Model sizing for stock rows (user-facing): fixed ₹10,000 per signal.
-    stock_notional_per_signal = 10000.0
+    # Model sizing (user-facing): fixed ₹30,000 deployed per signal → qty = floor(30_000 / entry).
+    stock_notional_per_signal = 30000.0
 
     # ── Spikes + Swing (live_signal_history) ───────────────────────────────
     try:
@@ -1679,8 +1696,8 @@ async def day_performance(date: str = None):
         sec = "SWING" if str(d.get("verdict") or "") == "SWING_RADAR" else "SPIKE_HUNT"
         lot_sz = int((_LOT_SIZES or {}).get(str(sym or "").upper(), 1) or 1)
         pnl_inr = float(pnl_pts or 0) * lot_sz
-        # Stock quantity model: units = floor(₹10,000 / entry).
-        qty_model = int(stock_notional_per_signal / max(entry, 0.01)) if entry > 0 else 0
+        qty_model = int(stock_notional_per_signal // entry) if entry > 0 else 0
+        investment_inr = _inr(float(qty_model) * entry) if qty_model and entry else 0.0
         pnl_model = float(pnl_pts or 0) * float(qty_model or 0)
         row = {
             "section": sec,
@@ -1688,6 +1705,8 @@ async def day_performance(date: str = None):
             "symbol": sym,
             "time": d.get("signal_time"),
             "hit_time": d.get("exit_time"),
+            "entry_time_ist": d.get("signal_time"),
+            "exit_time_ist": d.get("exit_time") if status != "OPEN" else None,
             "direction": dirn,
             "trigger": d.get("trigger") or "",
             "strength": d.get("strength") or "",
@@ -1702,6 +1721,7 @@ async def day_performance(date: str = None):
             "lot_sz": lot_sz,
             "pnl_inr": _inr(pnl_inr),
             "qty_model": int(qty_model or 0),
+            "investment_inr": float(investment_inr),
             "pnl_model_inr": _inr(pnl_model),
         }
         rows.append(row)
@@ -1722,7 +1742,7 @@ async def day_performance(date: str = None):
         conn.row_factory = _sq.Row
         ix = conn.execute(
             """SELECT id, updated_ts, sig_id, trade_date, symbol, type, signal_time, ts, index_px,
-                      strike, entry, sl, t1, t2, rr, lot_sz, outcome,
+                      strike, entry, sl, t1, t2, rr, lot_sz, outcome, exit_time,
                       option_expiry, option_week
                FROM index_signal_history
                WHERE trade_date = ?
@@ -1781,16 +1801,22 @@ async def day_performance(date: str = None):
             else:
                 pnl = 0.0
                 unit_move = 0.0
-        # Keep option sizing as lot-aware notional approximation.
-        qty_model_raw = int(stock_notional_per_signal / max(entry, 0.01)) if entry > 0 else 0
-        qty_model = (qty_model_raw // max(lot, 1)) * max(lot, 1) if lot > 1 else qty_model_raw
+        # User model for INDEX RADAR options:
+        # always 1 lot execution; cash allocation shown as fixed ₹30K per trade.
+        lot_u = max(int(lot or 0), 1)
+        num_lots = 1
+        qty_model = int(lot_u)
         pnl_model = float(unit_move or 0) * float(qty_model or 0)
+        investment_inr = _inr(stock_notional_per_signal)
+        exit_ist = (d.get("exit_time") or live.get("outcome_time") or live.get("exit_time") or "").strip() or None
         row = {
             "section": "INDEX_RADAR",
             "kind": "OPTION",
             "symbol": d.get("symbol"),
             "time": d.get("signal_time"),
-            "hit_time": d.get("exit_time"),
+            "hit_time": exit_ist,
+            "entry_time_ist": d.get("signal_time"),
+            "exit_time_ist": exit_ist if status != "OPEN" else None,
             "direction": d.get("type"),
             "trigger": "INDEX HUNT",
             "strength": "",
@@ -1808,6 +1834,8 @@ async def day_performance(date: str = None):
             "lot_sz": lot,
             "pnl_inr": _inr(pnl),
             "qty_model": int(qty_model or 0),
+            "lots_model": int(num_lots or 0),
+            "investment_inr": float(investment_inr),
             "pnl_model_inr": _inr(pnl_model),
         }
         rows.append(row)
@@ -1863,7 +1891,12 @@ async def day_performance(date: str = None):
         "sections": {k: {**v, "pnl_inr": round(v["pnl_inr"]), "pnl_model_inr": round(v.get("pnl_model_inr", 0.0))} for k, v in sections.items()},
         "rows": rows,
         "capital_model": {
-            "stock_notional_per_signal": int(stock_notional_per_signal),
+            "notional_per_signal_inr": int(stock_notional_per_signal),
+            "qty_rule": (
+                "STOCK: qty = floor(notional/entry); P&L = move × qty. "
+                "INDEX options: fixed 1 lot per signal (qty_units = lot_sz); "
+                "deploy is shown as fixed notional ₹30,000 per trade; P&L = premium_move × lot_sz."
+            ),
         },
         "validation": {
             "ok": len(issues) == 0,

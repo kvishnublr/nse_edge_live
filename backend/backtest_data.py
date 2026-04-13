@@ -116,6 +116,12 @@ def init_db():
         )
     except Exception:
         pass
+    try:
+        import playbook_design as _pbd
+
+        _pbd.ensure_schema(conn)
+    except Exception:
+        pass
     conn.commit()
     conn.close()
 
@@ -990,8 +996,8 @@ def replace_index_signal_rows(sigs: list, trade_date: str | None = None) -> int:
                   (sig_id, trade_date, symbol, type, signal_time, ts,
                    index_px, strike, entry, sl, t1, t2, rr, lot_sz, lot_pnl_t1,
                    chg_pct, strength, vix, quality, pcr, option_expiry, option_week,
-                   outcome, created_ts, updated_ts)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                   outcome, exit_time, created_ts, updated_ts)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     sid,
@@ -1017,6 +1023,7 @@ def replace_index_signal_rows(sigs: list, trade_date: str | None = None) -> int:
                     sig.get("option_expiry"),
                     sig.get("option_week"),
                     sig.get("outcome"),
+                    sig.get("exit_time") or sig.get("outcome_time"),
                     ts,
                     now_wall,
                 ),
