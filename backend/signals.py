@@ -20,7 +20,7 @@ _IST = pytz.timezone("Asia/Kolkata")
 _last_telegram_verdict = None   # debounce — only alert on verdict change
 _stock_exec_alert_ts: dict[str, float] = {}
 STOCK_EXECUTE_TELEGRAM_COOLDOWN_SEC = 1800  # per symbol
-# ADV-SPIKES Telegram/WhatsApp: last send epoch per (symbol, type) — see spike_telegram_dedup_minutes
+# SPIKE HUNT (NIFTY 200) Telegram/WhatsApp: last send epoch per (symbol, type) — see spike_telegram_dedup_minutes
 _spike_alert_last_ts: dict[tuple[str, str], float] = {}
 # Smart dedup: also track score of last sent signal so high-score spikes can override
 _spike_alert_last_score: dict[tuple[str, str], int] = {}
@@ -400,7 +400,7 @@ def _score_spike(vol_mult: float, chg_pct: float, sym: str, candle_min: int,
 
 # ─── SPIKE ALERT (Telegram + WhatsApp) ───────────────────────────────────────
 def _send_spike_alert(spike: dict):
-    """ADV-SPIKES (NIFTY 200 universe): Telegram + WhatsApp when score >= 60."""
+    """SPIKE HUNT (NIFTY 200 universe): Telegram + WhatsApp when score >= 60."""
     from config import TELEGRAM_NOTIFY_ADV_SPIKES, GATE as TH
 
     if not TELEGRAM_NOTIFY_ADV_SPIKES:
@@ -457,7 +457,7 @@ def _send_spike_alert(spike: dict):
     wr_str = f" · Historical WR {sym_wr*100:.0f}%" if sym_wr >= 0 else ""
 
     msg = (
-        f"⚡ <b>ADV-SPIKES (NIFTY 200) — {sym}</b>  [Score: {score}]\n"
+        f"⚡ <b>SPIKE HUNT (NIFTY 200) — {sym}</b>  [Score: {score}]\n"
         f"Signal: {sig}  |  {'+' if chg >= 0 else ''}{chg:.2f}%  |  Vol {vm:.1f}×{wr_str}\n"
         f"LTP: ₹{price:.2f}  |  {t}\n"
         f"<b>ATR-Model</b>  Entry ₹{entry:.2f} · SL ₹{sl:.2f} · T1 ₹{t1:.2f} · T2 ₹{t2:.2f}\n"
@@ -1392,7 +1392,7 @@ def run_signal_engine(indices: dict, chain: dict, fii: dict,
         "position_size_rupees": position_size_rupees,
     })
 
-    # ── Telegram alert on verdict change (optional — off when only ADV-SPIKES / ADV INDEX TG) ──
+    # ── Telegram alert on verdict change (optional — off when only SPIKE HUNT / ADV INDEX TG) ──
     global _last_telegram_verdict
     from config import TELEGRAM_NOTIFY_SIGNAL_ENGINE
 

@@ -604,7 +604,14 @@ async def index_signals_history(
         today = date.today().isoformat()
         # Support both from/to and legacy days param
         if from_date and to_date:
-            f, t = from_date, to_date
+            f, t = str(from_date).strip()[:10], str(to_date).strip()[:10]
+            try:
+                fd, td = date.fromisoformat(f), date.fromisoformat(t)
+                if fd > td:
+                    fd, td = td, fd
+                    f, t = fd.isoformat(), td.isoformat()
+            except ValueError:
+                pass
         elif days:
             f = (date.today() - timedelta(days=days)).isoformat()
             t = today
@@ -612,10 +619,13 @@ async def index_signals_history(
             f = t = today
         conn = _sq.connect(db_path)
         conn.row_factory = _sq.Row
+        # Chronological by session date so early months in [from,to] are not dropped when
+        # LIMIT applies (old: ORDER BY ts DESC took newest 500 ticks globally).
         rows = conn.execute("""
             SELECT * FROM index_signal_history
             WHERE trade_date BETWEEN ? AND ?
-            ORDER BY ts DESC LIMIT 500
+            ORDER BY trade_date ASC, ts ASC
+            LIMIT 8000
         """, (f, t)).fetchall()
         wf_rows = conn.execute("""
             SELECT trade_date, outcome FROM index_signal_history
@@ -634,6 +644,7 @@ async def index_signals_history(
             for r in resolved
         )
         wr = round(wins / len(resolved) * 100) if resolved else 0
+        dates_in = sorted({str(r.get("trade_date") or "") for r in data if r.get("trade_date")})
         return JSONResponse({
             "signals": data,
             "total": len(data),
@@ -642,6 +653,10 @@ async def index_signals_history(
             "win_rate": wr,
             "net_pnl": round(net_pnl),
             "walk_forward": walk_forward,
+            "query_from": f,
+            "query_to": t,
+            "data_trade_date_min": dates_in[0] if dates_in else None,
+            "data_trade_date_max": dates_in[-1] if dates_in else None,
         })
     except Exception as e:
         return JSONResponse({"signals": [], "error": str(e)})
@@ -1570,7 +1585,7 @@ async def set_strategy_profile(name: str):
 @app.get("/api/performance/day")
 async def day_performance(date: str = None):
     """
-    Day performance across all alert sections (spikes + swing radar + index radar).
+    Day performance across all alert sections (SPIKE HUNT + swing radar + index radar).
 
     - For `live_signal_history`: uses stored outcomes and P&L; OPEN rows use current prices for MTM.
     - For `index_signal_history`: uses stored outcomes and plan P&L; OPEN rows use current option LTP for MTM.
@@ -1661,7 +1676,7 @@ async def day_performance(date: str = None):
         else:
             pnl_pts = float(d.get("pnl_pts") or 0)
             pnl_pct = float(d.get("pnl_pct") or 0)
-        sec = "SWING" if str(d.get("verdict") or "") == "SWING_RADAR" else "SPIKE"
+        sec = "SWING" if str(d.get("verdict") or "") == "SWING_RADAR" else "SPIKE_HUNT"
         lot_sz = int((_LOT_SIZES or {}).get(str(sym or "").upper(), 1) or 1)
         pnl_inr = float(pnl_pts or 0) * lot_sz
         # Stock quantity model: units = floor(₹10,000 / entry).
@@ -2849,9 +2864,9 @@ async def backtest_optimize():
 @app.get("/api/token-status")
 async def token_status():
     """Check if Kite access token is still valid."""
-    from config import KITE_ACCESS_TOKEN
+    import config as _cfg
     import time as _time
-    has_tok = bool((KITE_ACCESS_TOKEN or "").strip())
+    has_tok = bool((_cfg.KITE_ACCESS_TOKEN or "").strip())
     if not has_tok:
         return JSONResponse(
             {
@@ -2889,7 +2904,7 @@ async def token_refresh_manual():
 
     _envp = Path(__file__).resolve().parent / ".env"
     if _envp.is_file():
-        load_dotenv(_envp, override=False)
+        load_dotenv(_envp, override=True)
 
     # Pre-flight: check all required credentials are present
     missing = [k for k in ("KITE_USER_ID","KITE_PASSWORD","KITE_TOTP_SECRET","KITE_API_KEY","KITE_API_SECRET")
@@ -2924,6 +2939,13 @@ async def token_refresh_manual():
 
     result, errmsg = await loop.run_in_executor(None, _do)
     if result:
+        try:
+            from feed import fetch_quotes_rest
+
+            fetch_quotes_rest()
+        except Exception as _qe:
+            logger.warning("token-refresh: fetch_quotes_rest: %s", _qe)
+        await refresh_state()
         return JSONResponse({"ok": True, "msg": "Token refreshed and applied live"})
     return JSONResponse({"ok": False, "msg": errmsg}, status_code=500)
 
@@ -2954,6 +2976,13 @@ async def token_reload_from_env():
         from feed import get_kite
 
         profile = get_kite().profile()
+        try:
+            from feed import fetch_quotes_rest
+
+            fetch_quotes_rest()
+        except Exception as _qe:
+            logger.warning("token-reload-env: fetch_quotes_rest: %s", _qe)
+        await refresh_state()
         return JSONResponse(
             {
                 "ok": True,
@@ -4356,7 +4385,7 @@ async def telegram_test():
 
     msg = (
         "✅ <b>NSE EDGE — Telegram test</b>\n"
-        "Bot is connected. ADV-SPIKES + ADV INDEX alerts go to this chat.\n"
+        "Bot is connected. SPIKE HUNT + ADV INDEX alerts go to this chat.\n"
         f"Server verdict: <b>{signals.state['verdict']}</b>  "
         f"Gates: {signals.state['pass_count']}/5"
     )

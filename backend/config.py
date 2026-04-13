@@ -11,9 +11,12 @@ import pytz
 from dotenv import load_dotenv
 
 # Load .env from backend directory (next to this file)
-# override=False means process environment variables take priority over .env file
+# override=False: normal deploys keep host env winning.
+# Windows often has KITE_ACCESS_TOKEN="" in User env — that blocks .env; second pass fixes it.
 _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
 load_dotenv(_env_path, override=False)
+if not os.getenv("KITE_ACCESS_TOKEN", "").strip() or not os.getenv("KITE_API_KEY", "").strip():
+    load_dotenv(_env_path, override=True)
 logger = logging.getLogger("config")
 
 # Debug: log which env vars are present (helps diagnose missing credentials on deploy)
@@ -610,7 +613,7 @@ def _env_bool(key: str, default: bool) -> bool:
     return v not in _neg
 
 
-# Default on: ADV-SPIKES (NIFTY 200 spike TG) + ADV INDEX (on DB persist / bias throttle)
+# Default on: SPIKE HUNT (NIFTY 200 spike TG) + ADV INDEX (on DB persist / bias throttle)
 TELEGRAM_NOTIFY_ADV_SPIKES = _env_bool("TELEGRAM_NOTIFY_ADV_SPIKES", True)
 TELEGRAM_NOTIFY_ADV_INDEX = _env_bool("TELEGRAM_NOTIFY_ADV_INDEX", True)
 # Default off: signal-engine verdict, per-stock EXECUTE, index-radar option signals, morning digest

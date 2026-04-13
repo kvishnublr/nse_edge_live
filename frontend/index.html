@@ -354,7 +354,7 @@ body{
 .dp-pane-spacer{display:none}
 .dp-pane{display:none;flex-direction:column;gap:12px;flex:1;min-height:0}
 .dp-pane.on{display:flex}
-/* ADV-SPIKES summary row */
+/* SPIKE HUNT (NIFTY 200) summary row — same tab as advspikescanner */
 .adv-sum-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
 @media(max-width:860px){.adv-sum-strip{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .adv-sum-card{border:1px solid var(--pu-b);background:rgba(139,92,246,.08);border-radius:8px;padding:10px 12px}
@@ -2461,7 +2461,7 @@ textarea[style*="font-size"] { font-size:12px!important; }
 .psbf,.psbar { height:6px!important; border-radius:3px!important; }
 .se-hb-val { font-size:22px!important; font-weight:800!important; }
 
-/* ── 21. ADV-SPIKES / ADV INDEX — compact stats in merged bar ─────── */
+/* ── 21. SPIKE HUNT / ADV INDEX — compact stats in merged bar ─────── */
 #tp-advspikescanner .sr-stat { min-width:42px!important; }
 #tp-advspikescanner .sr-stat-val { font-size:13px!important; font-weight:800!important; }
 #tp-advspikescanner .sr-stat-lbl { font-size:8px!important; letter-spacing:.3px; }
@@ -4676,11 +4676,11 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
   <table style="display:none"><tbody id="sw-body"></tbody></table>
   </div>
 
-  <!-- SPIKES tab removed; WS spikes still feed ADV-SPIKES -->
+  <!-- SPIKES tab removed; WS spikes still feed SPIKE HUNT (advspikescanner) -->
   <div class="tp" id="tp-spikescanner" style="display:none!important" aria-hidden="true"></div>
 
 
-  <!-- TAB: ADV-SPIKES — LIVE (today + day P&amp;L) | BACKTEST (NIFTY 200, SPIKES-style controls) -->
+  <!-- TAB: SPIKE HUNT — LIVE (today + day P&amp;L) | BACKTEST (NIFTY 200) -->
   <div class="tp" id="tp-advspikescanner" style="padding:0;gap:0;overflow-y:hidden;max-width:100%;flex-direction:column">
 
     <div style="display:flex;border-bottom:1px solid var(--b1);flex-shrink:0">
@@ -4998,7 +4998,7 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
   </div>
   <!-- /tp-primestrike -->
 
-  <!-- TAB: ADV INDEX — same chrome as ADV-SPIKES (LIVE | BACKTEST) -->
+  <!-- TAB: ADV INDEX — same chrome as SPIKE HUNT (LIVE | BACKTEST) -->
   <div class="tp" id="tp-advindex" style="padding:0;gap:0;overflow-y:hidden;max-width:100%;flex-direction:column">
 
     <div style="display:flex;border-bottom:1px solid var(--b1);flex-shrink:0">
@@ -7251,7 +7251,7 @@ entry_time    strike  type  entry  max   exit  return%
       <!-- Tab switcher in header -->
       <div style="margin-left:auto;display:flex;gap:3px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:3px">
         <button class="dp-tab on go" id="dp-tab-signals" onclick="dpSwitchTab('signals')">📊 Signals</button>
-        <button class="dp-tab" id="dp-tab-adv" onclick="dpSwitchTab('adv')">⚡ ADV-SPIKES</button>
+        <button class="dp-tab" id="dp-tab-adv" onclick="dpSwitchTab('adv')">⚡ SPIKE HUNT</button>
       </div>
       <button class="perf-x" onclick="closeDayPerf()" title="Close">✕</button>
     </div>
@@ -7337,7 +7337,7 @@ entry_time    strike  type  entry  max   exit  return%
         </div>
       </div>
 
-      <!-- ── PANE 2: ADV-SPIKES ── -->
+      <!-- ── PANE 2: SPIKE HUNT (NIFTY 200 session log) ── -->
       <div class="dp-pane" id="dp-pane-adv">
 
         <!-- Summary strip — 6 cards now -->
@@ -7385,7 +7385,7 @@ entry_time    strike  type  entry  max   exit  return%
               onkeydown="if(event.key==='Enter')advSetCap(this.value)"
               style="width:72px;font-size:11px;font-weight:800;font-family:var(--fn);font-variant-numeric:tabular-nums;background:transparent;border:none;outline:none;color:var(--go);text-align:right">
           </div>
-          <span style="font-size:10px;color:var(--t2)" id="adv-dp-note">NIFTY 200 universe</span>
+          <span style="font-size:10px;color:var(--t2)" id="adv-dp-note">SPIKE HUNT · NIFTY 200</span>
         </div>
 
         <!-- Table -->
@@ -7413,7 +7413,7 @@ entry_time    strike  type  entry  max   exit  return%
               </tr>
             </thead>
             <tbody id="adv-dp-tbody">
-              <tr><td colspan="17" style="padding:24px;text-align:center;color:var(--t2)">Open ADV-SPIKES tab to load live session data, then reopen this modal.</td></tr>
+              <tr><td colspan="17" style="padding:24px;text-align:center;color:var(--t2)">Open the SPIKE HUNT tab to load live session data, then reopen this modal.</td></tr>
             </tbody>
           </table>
         </div>
@@ -11541,7 +11541,9 @@ function ixFmtSignalTime(s) {
       return ' <span style="font-size:7px;color:var(--t3)">· '+isPart+'OOS: no resolved T1/SL in hold-out days.</span>';
     }
     var c2 = tew >= 70 ? 'var(--go)' : tew >= 55 ? 'var(--am)' : 'var(--st)';
-    var dr = (wf.oos_date_from && wf.oos_date_to) ? ' <span style="font-size:7px;color:var(--t3)">'+wf.oos_date_from+'→'+wf.oos_date_to+'</span>' : '';
+    var dr = (wf.oos_date_from && wf.oos_date_to)
+      ? ' <span style="font-size:7px;color:var(--t3)" title="Walk-forward hold-out days (not your FROM/TO picker)">OOS days '+wf.oos_date_from+'→'+wf.oos_date_to+'</span>'
+      : '';
     return ' <span style="font-size:7px;color:var(--t3)">·</span> '+isPart+'<span style="font-size:7px;color:var(--t3)">OOS last '+tfp+'% days</span> <span style="font-weight:700;color:'+c2+'">'+tew+'%</span><span style="font-size:7px;color:var(--t3)">('+ten+')</span>'+dr;
   };
 
@@ -11603,12 +11605,17 @@ function ixFmtSignalTime(s) {
         const npStr = (np >= 0 ? '+₹' : '−₹') + Math.abs(np).toLocaleString('en-IN');
         const npCol = np >= 0 ? 'var(--go)' : 'var(--st)';
         var wfH = typeof window._irWalkForwardHtml === 'function' ? window._irWalkForwardHtml(data.walk_forward) : '';
-        if(statsEl) statsEl.innerHTML = `<span style="color:var(--go)">${data.wins} HIT T1</span> &nbsp;·&nbsp; <span style="color:var(--st)">${data.losses} HIT SL</span> &nbsp;·&nbsp; <span style="color:${data.win_rate >= 70 ? 'var(--go)' : data.win_rate >= 55 ? 'var(--am)' : 'var(--st)'}">${data.win_rate}% WR</span> &nbsp;·&nbsp; Net P&L: <span style="color:${npCol};font-weight:700">${npStr}</span> &nbsp;·&nbsp; ${data.total} shown`+wfH;
+        var qf = data.query_from || from, qt = data.query_to || to;
+        var spanHint = '';
+        if (data.data_trade_date_min && data.data_trade_date_max && (data.data_trade_date_min !== qf || data.data_trade_date_max !== qt)) {
+          spanHint = ' <span style="font-size:7px;color:var(--t3)" title="Only days with at least one stored signal appear">rows: ' + data.data_trade_date_min + '–' + data.data_trade_date_max + '</span>';
+        }
+        if(statsEl) statsEl.innerHTML = '<span style="font-size:7px;color:var(--t3)">Q ' + qf + '–' + qt + '</span> &nbsp;·&nbsp; <span style="color:var(--go)">' + data.wins + ' HIT T1</span> &nbsp;·&nbsp; <span style="color:var(--st)">' + data.losses + ' HIT SL</span> &nbsp;·&nbsp; <span style="color:' + (data.win_rate >= 70 ? 'var(--go)' : data.win_rate >= 55 ? 'var(--am)' : 'var(--st)') + '">' + data.win_rate + '% WR</span> &nbsp;·&nbsp; Net P&amp;L: <span style="color:' + npCol + ';font-weight:700">' + npStr + '</span> &nbsp;·&nbsp; ' + data.total + ' shown' + spanHint + wfH;
         if(!hl) return;
         if(!sigs.length) { hl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2);font-size:9px">No history found for this period</div>'; return; }
         const f = n => (n||0) >= 1000 ? Math.round(n).toLocaleString('en-IN') : (n||0).toFixed(0);
         hl.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:8px">
-          <caption style="caption-side:top;text-align:left;font-size:7px;color:var(--t1);padding:0 0 6px 4px;letter-spacing:.3px">Entry / T1 / SL = option premium in ₹ · <b>HA</b>/<b>EL</b>/<b>V2</b> = preset tags · <b>V2</b> = ranked daily pick · P&amp;L = full lot · WR = T1/(T1+SL) · <b>IS/OOS</b> = walk-forward on trade days</caption>
+          <caption style="caption-side:top;text-align:left;font-size:7px;color:var(--t1);padding:0 0 6px 4px;letter-spacing:.3px">Entry / T1 / SL = option premium in ₹ · <b>HA</b>/<b>EL</b>/<b>V2</b> = preset tags · <b>V2</b> = ranked daily pick · P&amp;L = full lot · WR = T1/(T1+SL) · <b>IS/OOS</b> = walk-forward split (OOS day range is not your FROM/TO filter)</caption>
           <thead><tr style="background:var(--s2);color:var(--t2);text-transform:uppercase;letter-spacing:.5px">
             <th style="padding:6px 8px;text-align:left">Date</th>
             <th style="padding:6px 4px;text-align:center">TAG</th>
@@ -14775,6 +14782,7 @@ function _topActiveStocks(stocks){
   window._histMode = false;
   window._handle = handle;
   window._liveConnect = connect;
+  window.bootstrapLiveState = bootstrapLiveState;
 
   // Start
   bootstrapLiveState();
@@ -16015,7 +16023,7 @@ function srRender() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// ADV-SPIKES — LIVE (today stream) + BACKTEST (NIFTY 200, same cards)
+// SPIKE HUNT — LIVE (today stream) + BACKTEST (NIFTY 200, same cards)
 // ═══════════════════════════════════════════════════════════════════
 window._advLiveSpikeLog = [];
 window._asrLivePrevKeys = new Set();
@@ -16082,7 +16090,7 @@ async function asrRefreshDayPerfStrip() {
     const d = document.getElementById('tb-date');
     if (d && d.value) day = d.value;
   } catch (e) {}
-  if (subEl) subEl.textContent = 'SPIKE section · ' + day + ' · /api/performance/day';
+  if (subEl) subEl.textContent = 'SPIKE HUNT · ' + day + ' · /api/performance/day';
   const setDash = () => {
     if (pnlEl) pnlEl.textContent = '—';
     if (sigEl) sigEl.textContent = '—';
@@ -16093,7 +16101,10 @@ async function asrRefreshDayPerfStrip() {
     const r = await fetch((window._backendBase || '') + '/api/performance/day?date=' + encodeURIComponent(day));
     const data = await r.json();
     const allRows = Array.isArray(data.rows) ? data.rows : [];
-    const rows = allRows.filter(x => String(x.section || '') === 'SPIKE');
+    const rows = allRows.filter(x => {
+      const s = String(x.section || '');
+      return s === 'SPIKE_HUNT' || s === 'SPIKE';
+    });
     let pnl = 0, open = 0, wins = 0, losses = 0;
     rows.forEach(row => {
       pnl += _perfPickPnl(row);
@@ -17303,8 +17314,12 @@ async function tokenReloadFromEnv() {
     const d = await r.json();
     if (d.ok) {
       if (typeof notify === 'function') notify('Kite token applied: ' + (d.user || 'ok'));
-      if (msg) { msg.textContent = '✓ Token from .env applied — ' + (d.user || 'reload panels if needed'); msg.style.color = 'var(--go)'; }
+      if (msg) { msg.textContent = '✓ Token from .env applied — ' + (d.user || 'live data refreshing…'); msg.style.color = 'var(--go)'; }
       if (icon) icon.textContent = '✓';
+      try {
+        fetch(API + '/api/refresh-state', { method: 'POST' }).catch(function () {});
+        if (typeof window.bootstrapLiveState === 'function') setTimeout(function () { try { window.bootstrapLiveState(); } catch (e) {} }, 400);
+      } catch (e) {}
       setTimeout(function () { const b = document.getElementById('token-banner'); if (b) b.style.display = 'none'; }, 3500);
     } else {
       const m = d.msg || 'failed';
@@ -17374,7 +17389,7 @@ async function tokenBannerRefresh() {
         if(msg) msg.textContent = 'Kite token missing — starting browser refresh (1–3 min)…';
         tokenBannerRefresh();
       } else {
-        if(msg) msg.textContent = 'Kite API rejected the token — try LOAD .ENV if you just updated backend/.env, else REFRESH NOW (1–3 min). ' + (d.error || '');
+        if(msg) msg.textContent = 'Kite rejected this token (daily expiry or wrong API key pairing). Paste a fresh token into backend/.env → LOAD .ENV, or REFRESH NOW (1–3 min). ' + (d.error || '');
         // Do not auto-start Playwright; user picks LOAD .ENV vs full login
       }
     }
@@ -17887,7 +17902,7 @@ function dpSwitchTab(pane){
   if(pane === 'adv') advDpRender();
 }
 
-// ── ADV-SPIKES Day Performance renderer ───────────────────────
+// ── SPIKE HUNT (NIFTY 200) Day Performance renderer ───────────────────────
 window._advDpFilter = 'all';
 window._advCapPerTrade = 30000; // ₹ default per trade
 
@@ -17970,7 +17985,7 @@ function advDpRender(){
   }
 
   const noteEl = document.getElementById('adv-dp-note');
-  if (noteEl) noteEl.textContent = 'NIFTY 200 · ' + total + ' spikes';
+  if (noteEl) noteEl.textContent = 'SPIKE HUNT · NIFTY 200 · ' + total + ' spikes';
   // sync global cap input display
   const capIn = document.getElementById('adv-cap-input');
   if (capIn && document.activeElement !== capIn) capIn.value = GLOBAL_CAP;
@@ -17991,7 +18006,7 @@ function advDpRender(){
   if (!tbody) return;
 
   if (!log.length) {
-    tbody.innerHTML = '<tr><td colspan="17" style="padding:24px;text-align:center;color:var(--t2)">No ADV-SPIKES detected this session.<br><span style="font-size:10px;color:var(--t2)">Open the ADV-SPIKES tab to start receiving live NIFTY 200 spike data.</span></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="17" style="padding:24px;text-align:center;color:var(--t2)">No SPIKE HUNT (NIFTY 200) rows this session.<br><span style="font-size:10px;color:var(--t2)">Open the SPIKE HUNT tab to receive live NIFTY 200 spike data.</span></td></tr>';
     return;
   }
   if (!visible.length) {

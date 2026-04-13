@@ -129,7 +129,7 @@ var oldModal = `<!-- DAY PERFORMANCE modal (full screen) -->
       <!-- Sub-tab switcher -->
       <div class="dp-tabs">
         <button class="dp-tab on go" id="dp-tab-signals" onclick="dpSwitchTab('signals')">📊 All Signals</button>
-        <button class="dp-tab" id="dp-tab-adv" onclick="dpSwitchTab('adv')">⚡ ADV-SPIKES · NIFTY 200</button>
+        <button class="dp-tab" id="dp-tab-adv" onclick="dpSwitchTab('adv')">⚡ SPIKE HUNT · NIFTY 200</button>
       </div>
 
       <!-- ── PANE 1: ALL SIGNALS (existing) ── -->
@@ -195,7 +195,7 @@ var newModal = `<!-- DAY PERFORMANCE modal (full screen) -->
       <!-- Sub-tabs in header -->
       <div style="margin-left:auto;display:flex;gap:3px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:3px">
         <button class="dp-tab on go" id="dp-tab-signals" onclick="dpSwitchTab('signals')" style="border-radius:7px;padding:5px 12px;font-size:9px;border:none;cursor:pointer;font-family:var(--fn);font-weight:800;letter-spacing:.5px;transition:all .14s">📊 Signals</button>
-        <button class="dp-tab" id="dp-tab-adv" onclick="dpSwitchTab('adv')" style="border-radius:7px;padding:5px 12px;font-size:9px;border:none;cursor:pointer;font-family:var(--fn);font-weight:800;letter-spacing:.5px;transition:all .14s">⚡ ADV-SPIKES</button>
+        <button class="dp-tab" id="dp-tab-adv" onclick="dpSwitchTab('adv')" style="border-radius:7px;padding:5px 12px;font-size:9px;border:none;cursor:pointer;font-family:var(--fn);font-weight:800;letter-spacing:.5px;transition:all .14s">⚡ SPIKE HUNT</button>
       </div>
       <button class="perf-x" onclick="closeDayPerf()" title="Close">✕</button>
     </div>
@@ -318,7 +318,7 @@ function dpLoadDate(dateStr){
 
 // ── 5. Update openDayPerf to set picker date ──────────────────────────────
 html = html.replace(
-  'function openDayPerf(){\n  const m = document.getElementById(\'perf-modal\');\n  if(!m) return;\n  m.classList.add(\'open\');\n  loadDayPerf();\n  advDpRender(); // render ADV-SPIKES from live log\n}',
+  'function openDayPerf(){\n  const m = document.getElementById(\'perf-modal\');\n  if(!m) return;\n  m.classList.add(\'open\');\n  loadDayPerf();\n  advDpRender(); // render SPIKE HUNT (NIFTY 200) from live log\n}',
   `function openDayPerf(dateStr){\n  const m = document.getElementById('perf-modal');\n  if(!m) return;\n  m.classList.add('open');\n  var today = new Date().toISOString().slice(0,10);\n  var d = dateStr || today;\n  var picker = document.getElementById('perf-date-picker');\n  if(picker) picker.value = d;\n  loadDayPerf(d===today ? undefined : d);\n  advDpRender();\n}`
 );
 console.log('openDayPerf updated');
