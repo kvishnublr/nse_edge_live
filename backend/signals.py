@@ -505,6 +505,7 @@ state = {
 }
 
 # ─── PRICE HISTORY HELPERS ────────────────────────────────────────────────────
+
 def set_market_closed_state(reason: str = "Market closed") -> None:
     """Clear intraday live outputs while keeping cached reference data intact."""
     gate_names = {

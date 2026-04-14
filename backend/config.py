@@ -267,9 +267,11 @@ INDEX_RADAR = {
     "hunt_15m_min_pct":   0.042,    # min |15m %| on underlying (same units as chg_pct; ~0.04 index %)
     "quality_floor":      52,       # drop only lower-quality noise
     "vix_soft_skips_md_ce": 22.0,   # soft CE skip threshold under elevated VIX
-    "outcome_index_pct":  0.25,     # underlying % when T1/SL use same threshold (backtest + index fallback)
+    "outcome_index_pct":  0.25,     # underlying % when T1/SL use same threshold (backtest + optional index fallback)
     "outcome_t1_index_pct": None,   # None → use outcome_index_pct; smaller = easier T1 (higher WR, less R)
     "outcome_sl_index_pct": None,   # None → use outcome_index_pct; can be > T1 so SL is slightly less twitchy
+    # Live outcomes: False = only real option LTP vs T1/SL (no synthetic "win" from index % alone).
+    "outcome_use_index_fallback": False,
     "opt_sl_mult":        0.70,    # option premium SL = entry × this (live plan)
     "opt_t1_mult":        1.50,    # T1 = entry × this (smaller → easier hit, lower ₹ target)
     "opt_t2_mult":        2.00,
@@ -514,8 +516,14 @@ PRIME_STRIKE_CONFIG: dict = {
 # ─── SWING RADAR (positional picks — scheduler → log_swing_radar_triggers + UI carousel) ─
 # Tighter filters = fewer logs but higher alignment with index / PCR / R:R / weak-symbol stats.
 SWING_RADAR = {
-    "min_score_log": 58,              # persist floor (after weak-symbol penalty) — was 62; empty UI fix
+    "min_score_log": 58,              # persist floor (after weak-symbol penalty)
+    "min_pc_log": 0,                  # neutral by default; stricter profiles raise this
     "min_rr": 1.72,                   # ATR template ~2.0; allow normal float noise
+    "min_abs_chg_pct": 0.0,           # neutral by default
+    "max_abs_chg_pct": 0.0,           # 0 = disabled
+    "min_vol_ratio": 0.0,             # neutral by default
+    "allowed_setups": [],             # e.g. ["Pullback"] for accuracy-first mode
+    "allowed_directions": [],         # e.g. ["SHORT"] for accuracy-first mode
     "vix_strict_above": 22.0,
     "vix_extra_min_score": 3,         # was 5 — less empty on high-VIX days
     "nifty_against_threshold": 0.45,
@@ -532,6 +540,16 @@ SWING_RADAR = {
     "no_trade_bypass_min_pc": 3,
     "weak_symbol_penalty": 8,
     "recovery_vol_min": 1.0,
+    # Precision controls: setup-aware filters for accuracy-first swing profiles.
+    "breakout_long_enabled": True,
+    "breakout_long_min_pc": 0,
+    "breakout_long_min_rs": -9.0,
+    "breakout_long_min_vol": 0.0,
+    "breakout_long_max_chg": 99.0,
+    "pullback_short_only": False,
+    "pullback_short_min_pc": 0,
+    "pullback_short_min_rank_score": 0,
+    "blocked_symbols": [],
 }
 
 # ─── STRATEGY PROFILES (runtime switchable) ───────────────────────────────────
@@ -578,6 +596,31 @@ STRATEGY_PROFILES = {
         "index_radar": dict(INDEX_RADAR_PRECISION_V2),
         "swing_radar": {},
     },
+    "precision_v3": {
+        "index_radar": dict(INDEX_RADAR_PRECISION_V2),
+        "swing_radar": {
+            # Accuracy-first positional profile: fewer signals, cleaner setups.
+            "min_score_log": 70,
+            "min_pc_log": 4,
+            "min_rr": 1.95,
+            "min_abs_chg_pct": 0.35,
+            "max_abs_chg_pct": 2.80,
+            "min_vol_ratio": 1.05,
+            "counter_trend_min_pc": 5,
+            "pcr_soft_min_pc": 5,
+            "allowed_setups": ["Pullback"],
+            "allowed_directions": ["SHORT"],
+            "pullback_short_only": True,
+            "pullback_short_min_pc": 4,
+            "pullback_short_min_rank_score": 72,
+            "breakout_long_enabled": False,
+            "breakout_long_min_pc": 4,
+            "breakout_long_min_rs": 0.20,
+            "breakout_long_min_vol": 1.50,
+            "breakout_long_max_chg": 2.5,
+            "blocked_symbols": ["BAJFINANCE", "TATASTEEL", "INDUSINDBK", "LT", "MARUTI", "SUNPHARMA", "TATAMOTORS"],
+        },
+    },
 }
 _ACTIVE_STRATEGY_PROFILE = ""
 
@@ -585,9 +628,9 @@ _ACTIVE_STRATEGY_PROFILE = ""
 def apply_strategy_profile(name: str | None) -> str:
     """Apply strategy overrides in-place so live imports see updated values."""
     global _ACTIVE_STRATEGY_PROFILE
-    key = str(name or "").strip().lower() or "balanced_v2"
+    key = str(name or "").strip().lower() or "precision_v3"
     if key not in STRATEGY_PROFILES:
-        key = "balanced_v2"
+        key = "precision_v3"
     profile = STRATEGY_PROFILES.get(key, {})
     INDEX_RADAR.clear()
     INDEX_RADAR.update(_INDEX_RADAR_BASE)
@@ -600,11 +643,19 @@ def apply_strategy_profile(name: str | None) -> str:
 
 
 def get_strategy_profile_name() -> str:
-    return _ACTIVE_STRATEGY_PROFILE or "balanced_v2"
+    return _ACTIVE_STRATEGY_PROFILE or "precision_v3"
 
 
 def get_strategy_profiles() -> list[str]:
     return list(STRATEGY_PROFILES.keys())
+
+
+# Apply default profile at import-time so all workers/scripts use consistent rules.
+_DEFAULT_STRATEGY_PROFILE = (os.getenv("STRATEGY_PROFILE", "precision_v3") or "precision_v3").strip().lower()
+try:
+    apply_strategy_profile(_DEFAULT_STRATEGY_PROFILE)
+except Exception:
+    apply_strategy_profile("precision_v3")
 
 # ─── TELEGRAM ALERTS ──────────────────────────────────────────────────────────
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
@@ -783,4 +834,6 @@ def get_market_status():
 
 # Run validation at import
 _validate_config()
-apply_strategy_profile(os.getenv("STRATEGY_PROFILE", "balanced_v2"))
+apply_strategy_profile(os.getenv("STRATEGY_PROFILE", "precision_v3"))
+
+

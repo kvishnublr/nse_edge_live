@@ -2086,6 +2086,41 @@ button{font-weight:700}
 .btdate,.btsel{background:var(--s3);border:1px solid var(--b1);color:var(--t0);font-family:var(--fn);font-size:9px;padding:3px 7px;border-radius:3px;outline:none;cursor:pointer;transition:border-color .15s}
 .btdate{width:120px}.btsel option{background:var(--s2)}
 .btdate:focus,.btsel:focus{border-color:var(--bl)}
+.bt-work-shell{display:flex;flex-direction:column;flex:1;min-height:0;background:var(--bg)}
+.bt-work-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  padding:12px 14px;border-bottom:1px solid var(--b1);
+  background:linear-gradient(135deg,rgba(56,190,255,.08),rgba(167,139,250,.06));
+}
+.bt-work-kicker{font-size:7px;font-weight:800;letter-spacing:.22em;color:var(--bl);text-transform:uppercase}
+.bt-work-title{margin-top:4px;font-size:11px;font-weight:800;color:var(--t0);line-height:1.45}
+.bt-mode-switch{
+  display:inline-flex;align-items:center;gap:4px;padding:4px;border:1px solid var(--b1);
+  border-radius:999px;background:rgba(0,0,0,.12)
+}
+.bt-mode-btn{
+  min-width:118px;height:30px;padding:0 14px;border:none;border-radius:999px;cursor:pointer;
+  font-family:var(--fn);font-size:8px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--t2);background:transparent;transition:background .15s,color .15s,box-shadow .15s
+}
+.bt-mode-btn.on{background:var(--bl);color:#04111d;box-shadow:0 10px 24px rgba(56,190,255,.18)}
+.bt-work-panel{display:none;flex-direction:column;flex:1;min-height:0}
+.bt-work-panel.on{display:flex}
+.bt-live-panel-body,.bt-backtest-scroll{
+  flex:1;min-height:0;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:12px
+}
+.bt-live-grid{display:grid;grid-template-columns:minmax(320px,1.2fr) minmax(260px,.8fr);gap:12px}
+.bt-hero-card,.bt-live-status{padding:12px}
+.bt-live-note{font-size:8px;color:var(--t2);line-height:1.65}
+.bt-hero-actions{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;margin-top:12px}
+.bt-range-hint{font-size:8px;color:var(--t2);line-height:1.6}
+.bt-live-badges{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.bt-day-panel{display:flex;flex-direction:column;gap:10px}
+.bt-day-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width: 1120px){
+  .bt-live-grid,.bt-day-grid{grid-template-columns:1fr}
+  #bt2-metrics{grid-template-columns:repeat(2,1fr)!important}
+}
 .btrst{padding:3px 10px;border-radius:2px;font-family:var(--fn);font-size:8px;font-weight:700;border:1px solid var(--b2);cursor:pointer;color:var(--t2);background:transparent;margin-left:auto;letter-spacing:.5px;transition:all .14s}
 .btrst:hover{color:var(--st);border-color:var(--st)}
 
@@ -3716,7 +3751,7 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
     <div class="tbdate-wrap">
       <span class="tbdate-label">Date View</span>
       <input type="date" id="tb-date" onchange="tbDateChange(this.value)">
-      <button type="button" id="tb-backtest-btn" class="tbbtn" style="display:none" onclick="sw('backtest', document.querySelector('.tab.tab-bt'))">BT</button>
+      <button type="button" id="tb-backtest-btn" class="tbbtn" style="display:none" onclick="window._btWorkspace='live';sw('backtest', document.querySelector('.tab.tab-bt'))">BACKTEST</button>
       <button type="button" id="tb-live-btn" onclick="tbGoLive()">Live</button>
     </div>
     <div class="sep"></div>
@@ -3970,9 +4005,9 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
         </div>
 
         <div class="tab tab-signal" style="--tc:#fbbf24;--tg:rgba(251,191,36,.12);--ts:rgba(251,191,36,.45)"
-             onclick="sw('sestocks',this)" id="ses-tab" title="Gate engine stock picks — scored by signal strength">
+             onclick="sw('sestocks',this)" id="ses-tab" title="AURORA SWING LAB: swing/positional stock picks scored by conviction">
           <span class="tab-glyph" aria-hidden="true">🧲</span>
-          <span class="tab-txt">STOCK PICKS</span>
+          <span class="tab-txt">SWING/POSITIONAL</span>
         </div>
 
         <div class="tab tab-playbook" style="--tc:#c084fc;--tg:rgba(192,132,252,.14);--ts:rgba(192,132,252,.5)"
@@ -5797,156 +5832,188 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
   </div><!-- /tp-analytics -->
 
   <!-- TAB: BACKTEST -->
-  <div class="tp" id="tp-backtest" style="padding:0;gap:0;overflow-y:hidden">
-
-    <!-- Controls bar -->
-    <div class="btctrl">
-      <div class="btrow">
-        <div class="btgrp">
-          <span class="btlbl">PERIOD</span>
-          <button class="btpre" onclick="bt2Pre(this,'1M')">1M</button>
-          <button class="btpre" onclick="bt2Pre(this,'3M')">3M</button>
-          <button class="btpre" onclick="bt2Pre(this,'6M')">6M</button>
-          <button class="btpre" onclick="bt2Pre(this,'1Y')">1Y</button>
-          <button class="btpre" onclick="bt2Pre(this,'2Y')">2Y</button>
-          <button class="btpre on" onclick="bt2Pre(this,'3Y')">3Y</button>
+  <div class="tp" id="tp-backtest" style="padding:0;gap:0;overflow:hidden">
+    <div class="bt-work-shell">
+      <div class="bt-work-head">
+        <div>
+          <div class="bt-work-kicker">Research Workspace</div>
+          <div class="bt-work-title">Keep single-day LIVE replay separate from full BACKTEST runs</div>
         </div>
-        <div class="btgrp"><span class="btlbl">FROM</span><input class="btdate" type="date" id="bt2-from"></div>
-        <div class="btgrp"><span class="btlbl">TO</span><input class="btdate" type="date" id="bt2-to"></div>
-        <div class="btgrp">
-          <span class="btlbl">MODE</span>
-          <select class="btsel" id="bt2-mode">
-            <option value="intraday">Intraday</option>
-            <option value="positional">Positional</option>
-          </select>
-        </div>
-        <button class="btn btn-g" style="font-size:9px;padding:4px 14px" onclick="bt2Run()">▶ RUN BACKTEST</button>
-        <button class="btpre" onclick="bt2Download()" style="margin-left:4px">⬇ DOWNLOAD DATA</button>
-        <button class="btpre" onclick="bt2DownloadFii()" style="margin-left:2px">⬇ FII DATA</button>
-        <button class="btpre" onclick="bt2Optimize()" style="margin-left:2px;color:var(--am);border-color:var(--am)">⚙ OPTIMIZE</button>
-        <button class="btrst" onclick="bt2CalcWeights()">RECALC WEIGHTS</button>
-      </div>
-      <div style="margin-top:5px;font-size:8px;color:var(--t2)" id="bt2-status">Loading data status...</div>
-    </div>
-
-    <!-- Rolling 1W / 1M / 6M report (Zerodha Kite + gate replay) -->
-    <div style="padding:8px 12px;border-bottom:1px solid var(--b1);background:rgba(56,189,248,.06);flex-shrink:0">
-      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
-        <span style="font-size:8px;font-weight:800;letter-spacing:1px;color:var(--bl)">ROLLING REPORT</span>
-        <span style="font-size:7px;color:var(--t2);max-width:min(520px,100%);line-height:1.45">Same 5-gate daily engine as RUN BACKTEST: pulls <b>NIFTY + India VIX</b> from Zerodha, replays ~280d, then slices metrics for last <b>7d</b>, <b>30d</b>, <b>183d</b>. PCR/FII use whatever is already in the DB — run <b>⬇ DOWNLOAD DATA</b> once for coverage.</span>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px">
-        <button type="button" class="btn btn-g" style="font-size:9px;padding:4px 12px" onclick="bt2MultiReport()">▶ SYNC KITE &amp; 1W·1M·6M REPORT</button>
-        <button type="button" class="btpre" style="font-size:9px;padding:4px 10px" onclick="bt2SaveMultiReportJson()" title="Requires a report run first">↓ SAVE REPORT (JSON)</button>
-        <label style="font-size:8px;color:var(--t2);display:inline-flex;align-items:center;gap:4px;cursor:pointer">
-          <input type="checkbox" id="bt2-mr-nse"> <span>Also refresh PCR + FII from NSE (slow)</span>
-        </label>
-      </div>
-      <div style="font-size:8px;color:var(--t2);margin-top:6px;min-height:14px" id="bt2-mr-status"></div>
-      <div id="bt2-mr-wrap" style="display:none;margin-top:8px">
-        <div style="overflow-x:auto">
-          <table class="atbl" id="bt2-mr-table" style="font-size:9px">
-            <thead>
-              <tr>
-                <th>WINDOW</th><th>DAYS</th><th>EXECUTE</th><th>WIN RATE</th><th>P.F.</th><th>Σ P&amp;L (pts)</th><th>W / L / N</th>
-              </tr>
-            </thead>
-            <tbody id="bt2-mr-tbody"></tbody>
-          </table>
-        </div>
-        <details style="margin-top:8px;font-size:8px;color:var(--t2)">
-          <summary style="cursor:pointer;font-weight:700;color:var(--t0)">Sample EXECUTE rows (latest per window)</summary>
-          <pre id="bt2-mr-samples" style="margin:8px 0 0;padding:8px;background:var(--s1);border:1px solid var(--b1);border-radius:4px;max-height:220px;overflow:auto;font-size:8px;line-height:1.35;white-space:pre-wrap;word-break:break-word"></pre>
-        </details>
-      </div>
-    </div>
-
-    <!-- DAY VIEW panel -->
-    <div style="background:var(--b1);border-bottom:1px solid var(--b2);padding:8px 12px;flex-shrink:0">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span style="font-size:9px;letter-spacing:1px;color:var(--t2);font-weight:700">DAY VIEW</span>
-        <input type="date" id="dv-date" class="btdate" style="width:120px">
-        <button class="btn btn-g" style="font-size:9px;padding:3px 12px" onclick="dvLoad()">LOAD DAY</button>
-        <span style="font-size:8px;color:var(--t2)" id="dv-hint">Pick any date to see full gate drill-down + intraday &amp; positional signals</span>
-      </div>
-      <div id="dv-panel" style="display:none;margin-top:6px">
-        <!-- Compact summary strip -->
-        <div style="margin-bottom:6px;padding:4px 6px;background:var(--b0);border-radius:3px" id="dv-summary"></div>
-        <!-- Intraday vs Positional side by side -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-          <div class="acard" style="padding:8px 10px" id="dv-intra"></div>
-          <div class="acard" style="padding:8px 10px" id="dv-pos"></div>
+        <div class="bt-mode-switch" role="tablist" aria-label="Backtest workspace mode">
+          <button type="button" class="bt-mode-btn on" id="bt-work-live-tab" onclick="btWorkspaceSet('live')">LIVE</button>
+          <button type="button" class="bt-mode-btn" id="bt-work-backtest-tab" onclick="btWorkspaceSet('backtest')">BACKTEST</button>
         </div>
       </div>
-    </div>
 
-    <!-- Scrollable content -->
-    <div style="flex:1;min-height:0;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px">
+      <div class="bt-work-panel on" id="bt-work-live">
+        <div class="bt-live-panel-body">
+          <div class="bt-live-grid">
+            <div class="acard bt-hero-card">
+              <div class="acardt">LIVE DAY REPLAY</div>
+              <div class="bt-live-note">Pick one trading day and replay that session in the same live UI. This is the quickest way to inspect what the engine, gates, and picks looked like on that date.</div>
+              <div class="bt-hero-actions">
+                <label style="display:flex;flex-direction:column;gap:4px">
+                  <span class="btlbl">DATE</span>
+                  <input type="date" id="dv-date" class="btdate" style="width:140px">
+                </label>
+                <button class="btn btn-g" style="font-size:9px;padding:4px 14px" onclick="dvLoad()">LOAD DAY</button>
+                <button class="btpre" type="button" onclick="window._btWorkspace='backtest';btWorkspaceSet('backtest')">OPEN RANGE BACKTEST</button>
+                <button class="btpre" type="button" onclick="tbGoLive();sw('sigengine', document.querySelector('.tab.tab-signal'))">GO TO LIVE DASHBOARD</button>
+              </div>
+              <div class="bt-range-hint" id="dv-hint">Pick any date to see full gate drill-down plus intraday and positional outcomes.</div>
+            </div>
+            <div class="acard bt-live-status">
+              <div class="acardt">MODE STATUS</div>
+              <div id="bt-live-mode-title" style="font-size:13px;font-weight:900;color:var(--t0)">LIVE MODE</div>
+              <div id="bt-live-mode-copy" class="bt-live-note" style="margin-top:6px">Choose a date to pause live updates and inspect that historical session inside the normal dashboard.</div>
+              <div class="bt-live-badges">
+                <span class="bd bg" id="bt-live-mode-pill">LIVE</span>
+                <span class="bd bb" id="bt-live-mode-date">TODAY</span>
+              </div>
+              <div class="bt-live-note">The top-bar Date View control and this replay panel stay in sync.</div>
+            </div>
+          </div>
 
-      <!-- Metrics row -->
-      <div class="strow" id="bt2-metrics" style="display:grid;grid-template-columns:repeat(8,1fr);gap:6px">
-        <div class="stc"><div class="stck">TOTAL DAYS</div><div class="stcv cb" id="bt2-days">—</div></div>
-        <div class="stc"><div class="stck">EXECUTE (5/5)</div><div class="stcv cg" id="bt2-sigs">—</div></div>
-        <div class="stc"><div class="stck">WATCH (4/5)</div><div class="stcv ca" id="bt2-watch">—</div></div>
-        <div class="stc"><div class="stck">WIN RATE</div><div class="stcv" id="bt2-wr">—</div></div>
-        <div class="stc"><div class="stck">PROFIT FACTOR</div><div class="stcv" id="bt2-pf">—</div></div>
-        <div class="stc"><div class="stck">AVG WIN (pts)</div><div class="stcv cg" id="bt2-aw">—</div></div>
-        <div class="stc"><div class="stck">AVG LOSS (pts)</div><div class="stcv cr" id="bt2-al">—</div></div>
-        <div class="stc"><div class="stck">TOTAL P&amp;L (pts)</div><div class="stcv" id="bt2-pnl">—</div></div>
-      </div>
-
-      <!-- Gate analysis + weights side by side -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div class="acard">
-          <div class="acardt">GATE WIN RATE — WHEN GATE PASSES (EXECUTE signals only)</div>
-          <div id="bt2-gate-stats" style="margin-top:6px"></div>
-        </div>
-        <div class="acard">
-          <div class="acardt">CONFIDENCE WEIGHTS — GATE PREDICTIVE POWER</div>
-          <div style="font-size:8px;color:var(--t2);margin-bottom:6px">Higher weight = gate is a stronger predictor of winning trades</div>
-          <div id="bt2-weights" style="margin-top:4px"></div>
-          <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--b1)">
-            <div style="font-size:8px;color:var(--t2);letter-spacing:1px;margin-bottom:3px">LIVE CONFIDENCE SCORE</div>
-            <div style="display:flex;align-items:center;gap:6px">
-              <div style="display:flex;gap:2px" id="bt2-conf-dots"></div>
-              <span style="font-size:18px;font-weight:800;color:var(--bl)" id="bt2-live-conf">—</span>
-              <span style="font-size:10px;color:var(--t2)">/10</span>
+          <div id="dv-panel" class="bt-day-panel" style="display:none">
+            <div class="acard" style="padding:10px 12px">
+              <div class="acardt">DAY SUMMARY</div>
+              <div id="dv-summary" style="margin-top:8px"></div>
+            </div>
+            <div class="bt-day-grid">
+              <div class="acard" style="padding:8px 10px" id="dv-intra"></div>
+              <div class="acard" style="padding:8px 10px" id="dv-pos"></div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Coverage info -->
-      <div id="bt2-coverage" style="display:none" class="acard">
-        <div class="acardt">DATA COVERAGE</div>
-        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:4px" id="bt2-cov-detail"></div>
-      </div>
-
-      <!-- Trades table -->
-      <div class="acard" style="flex:1">
-        <div class="acardt" style="display:flex;justify-content:space-between;align-items:center">
-          <span>BACKTEST TRADE LOG
-            <span style="font-size:8px;font-weight:400;margin-left:8px;color:var(--t2)">
-              <span style="color:var(--go)">&#9646; EXECUTE</span> = all 5 gates pass &nbsp;
-              <span style="color:var(--am)">&#9646; WATCH</span> = 4/5 gates pass (near miss)
-            </span>
-          </span>
-          <span style="font-size:8px;color:var(--t2)" id="bt2-showing">—</span>
+      <div class="bt-work-panel" id="bt-work-backtest">
+        <div class="btctrl">
+          <div class="btrow">
+            <div class="btgrp">
+              <span class="btlbl">PERIOD</span>
+              <div style="display:flex;gap:3px;flex-wrap:wrap" id="bt2-periods">
+                <button class="btpre" onclick="bt2Pre(this,'1M')">1M</button>
+                <button class="btpre" onclick="bt2Pre(this,'3M')">3M</button>
+                <button class="btpre" onclick="bt2Pre(this,'6M')">6M</button>
+                <button class="btpre" onclick="bt2Pre(this,'1Y')">1Y</button>
+                <button class="btpre" onclick="bt2Pre(this,'2Y')">2Y</button>
+                <button class="btpre on" onclick="bt2Pre(this,'3Y')">3Y</button>
+                <button class="btpre" onclick="bt2Pre(this,'5Y')">5Y</button>
+              </div>
+            </div>
+            <div class="btgrp"><span class="btlbl">FROM</span><input class="btdate" type="date" id="bt2-from" onchange="bt2SyncRangeMeta()"></div>
+            <div class="btgrp"><span class="btlbl">TO</span><input class="btdate" type="date" id="bt2-to" onchange="bt2SyncRangeMeta()"></div>
+            <div class="btgrp">
+              <span class="btlbl">MODE</span>
+              <select class="btsel" id="bt2-mode">
+                <option value="intraday">Intraday</option>
+                <option value="positional">Positional</option>
+              </select>
+            </div>
+            <button class="btn btn-g" style="font-size:9px;padding:4px 14px" onclick="bt2Run()">RUN BACKTEST</button>
+            <button class="btpre" onclick="bt2Download()" style="margin-left:4px">DOWNLOAD RANGE DATA</button>
+            <button class="btpre" onclick="bt2DownloadFii()" style="margin-left:2px">FII ONLY</button>
+            <button class="btpre" onclick="bt2Optimize()" style="margin-left:2px;color:var(--am);border-color:var(--am)">OPTIMIZE</button>
+            <button class="btrst" onclick="bt2CalcWeights()">RECALC WEIGHTS</button>
+          </div>
+          <div class="bt-range-hint" id="bt2-range-note">Download uses the selected FROM and TO span, capped at 5 years of daily history.</div>
+          <div style="margin-top:5px;font-size:8px;color:var(--t2)" id="bt2-status">Loading data status...</div>
         </div>
-        <div style="overflow-x:auto;margin-top:6px">
-          <table class="atbl">
-            <thead><tr>
-              <th>DATE</th><th>TIME</th><th>VERDICT</th><th>GATES</th>
-              <th>NIFTY</th><th>VIX</th><th>PCR</th>
-              <th>G1</th><th>G2</th><th>G3</th><th>G4</th><th>G5</th>
-              <th>ENTRY</th><th>TARGET</th><th>STOP</th><th>EXIT</th><th>P&amp;L</th><th>RESULT</th>
-            </tr></thead>
-            <tbody id="bt2-trades"></tbody>
-          </table>
+
+        <div style="padding:8px 12px;border-bottom:1px solid var(--b1);background:rgba(56,189,248,.06);flex-shrink:0">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+            <span style="font-size:8px;font-weight:800;letter-spacing:1px;color:var(--bl)">ROLLING REPORT</span>
+            <span style="font-size:7px;color:var(--t2);max-width:min(520px,100%);line-height:1.45">Uses the same 5-gate daily engine as RUN BACKTEST. The download button follows the selected range and can now pull up to 5 years of daily OHLCV, VIX, PCR, and FII history.</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px">
+            <button type="button" class="btn btn-g" style="font-size:9px;padding:4px 12px" onclick="bt2MultiReport()">SYNC KITE AND 1W 1M 6M REPORT</button>
+            <button type="button" class="btpre" style="font-size:9px;padding:4px 10px" onclick="bt2SaveMultiReportJson()" title="Requires a report run first">SAVE REPORT JSON</button>
+            <label style="font-size:8px;color:var(--t2);display:inline-flex;align-items:center;gap:4px;cursor:pointer">
+              <input type="checkbox" id="bt2-mr-nse"> <span>Also refresh PCR + FII from NSE (slow)</span>
+            </label>
+          </div>
+          <div style="font-size:8px;color:var(--t2);margin-top:6px;min-height:14px" id="bt2-mr-status"></div>
+          <div id="bt2-mr-wrap" style="display:none;margin-top:8px">
+            <div style="overflow-x:auto">
+              <table class="atbl" id="bt2-mr-table" style="font-size:9px">
+                <thead>
+                  <tr>
+                    <th>WINDOW</th><th>DAYS</th><th>EXECUTE</th><th>WIN RATE</th><th>P.F.</th><th>TOTAL P&amp;L (pts)</th><th>W / L / N</th>
+                  </tr>
+                </thead>
+                <tbody id="bt2-mr-tbody"></tbody>
+              </table>
+            </div>
+            <details style="margin-top:8px;font-size:8px;color:var(--t2)">
+              <summary style="cursor:pointer;font-weight:700;color:var(--t0)">Sample EXECUTE rows (latest per window)</summary>
+              <pre id="bt2-mr-samples" style="margin:8px 0 0;padding:8px;background:var(--s1);border:1px solid var(--b1);border-radius:4px;max-height:220px;overflow:auto;font-size:8px;line-height:1.35;white-space:pre-wrap;word-break:break-word"></pre>
+            </details>
+          </div>
+        </div>
+
+        <div class="bt-backtest-scroll">
+          <div class="strow" id="bt2-metrics" style="display:grid;grid-template-columns:repeat(8,1fr);gap:6px">
+            <div class="stc"><div class="stck">TOTAL DAYS</div><div class="stcv cb" id="bt2-days">-</div></div>
+            <div class="stc"><div class="stck">EXECUTE (5/5)</div><div class="stcv cg" id="bt2-sigs">-</div></div>
+            <div class="stc"><div class="stck">WATCH (4/5)</div><div class="stcv ca" id="bt2-watch">-</div></div>
+            <div class="stc"><div class="stck">WIN RATE</div><div class="stcv" id="bt2-wr">-</div></div>
+            <div class="stc"><div class="stck">PROFIT FACTOR</div><div class="stcv" id="bt2-pf">-</div></div>
+            <div class="stc"><div class="stck">AVG WIN (pts)</div><div class="stcv cg" id="bt2-aw">-</div></div>
+            <div class="stc"><div class="stck">AVG LOSS (pts)</div><div class="stcv cr" id="bt2-al">-</div></div>
+            <div class="stc"><div class="stck">TOTAL P&amp;L (pts)</div><div class="stcv" id="bt2-pnl">-</div></div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="acard">
+              <div class="acardt">GATE WIN RATE WHEN GATE PASSES</div>
+              <div id="bt2-gate-stats" style="margin-top:6px"></div>
+            </div>
+            <div class="acard">
+              <div class="acardt">CONFIDENCE WEIGHTS</div>
+              <div style="font-size:8px;color:var(--t2);margin-bottom:6px">Higher weight means the gate is a stronger predictor of winning trades.</div>
+              <div id="bt2-weights" style="margin-top:4px"></div>
+              <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--b1)">
+                <div style="font-size:8px;color:var(--t2);letter-spacing:1px;margin-bottom:3px">LIVE CONFIDENCE SCORE</div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <div style="display:flex;gap:2px" id="bt2-conf-dots"></div>
+                  <span style="font-size:18px;font-weight:800;color:var(--bl)" id="bt2-live-conf">-</span>
+                  <span style="font-size:10px;color:var(--t2)">/10</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="bt2-coverage" style="display:none" class="acard">
+            <div class="acardt">DATA COVERAGE</div>
+            <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:4px" id="bt2-cov-detail"></div>
+          </div>
+
+          <div class="acard" style="flex:1">
+            <div class="acardt" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+              <span>BACKTEST TRADE LOG
+                <span style="font-size:8px;font-weight:400;margin-left:8px;color:var(--t2)">
+                  <span style="color:var(--go)">EXECUTE</span> = all 5 gates pass and
+                  <span style="color:var(--am)">WATCH</span> = 4 of 5 gates pass.
+                </span>
+              </span>
+              <span style="font-size:8px;color:var(--t2)" id="bt2-showing">-</span>
+            </div>
+            <div style="overflow-x:auto;margin-top:6px">
+              <table class="atbl">
+                <thead><tr>
+                  <th>DATE</th><th>TIME</th><th>VERDICT</th><th>GATES</th>
+                  <th>NIFTY</th><th>VIX</th><th>PCR</th>
+                  <th>G1</th><th>G2</th><th>G3</th><th>G4</th><th>G5</th>
+                  <th>ENTRY</th><th>TARGET</th><th>STOP</th><th>EXIT</th><th>P&amp;L</th><th>RESULT</th>
+                </tr></thead>
+                <tbody id="bt2-trades"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
-
-    </div><!-- /scroll -->
+    </div>
   </div><!-- /tp-backtest -->
 
   <!-- TAB: BACKTEST GUIDE -->
@@ -6918,7 +6985,7 @@ entry_time    strike  type  entry  max   exit  return%
   </div><!-- /tp-sigengine -->
 
   <!-- TAB: SE STOCKS — End-to-End Trade Analysis -->
-  <div class="tp" id="tp-sestocks" style="gap:0;padding:0;overflow:hidden;flex-direction:column">
+  <div class="tp" id="tp-sestocks" style="gap:0;padding:0;overflow-x:hidden;overflow-y:auto;flex-direction:column;min-height:0">
   <style>
   /* ══ SE STOCKS ═══════════════════════════════════════════════════════════ */
   #ses-header{display:flex;align-items:center;gap:10px;padding:0 12px;height:36px;flex-shrink:0;background:var(--s1);border-bottom:1px solid var(--b1)}
@@ -6933,7 +7000,7 @@ entry_time    strike  type  entry  max   exit  return%
   .ses-stat-val{font-family:var(--fh);font-size:13px;font-weight:700;line-height:1;letter-spacing:-.3px}
   .ses-stat-lbl{font-size:6.5px;color:var(--t2);letter-spacing:.8px;margin-top:2px;font-weight:400}
   /* ── SE STOCKS TABLE ─────────────────────────────── */
-  #ses-cards{flex:1;overflow-y:auto;overflow-x:auto;display:block;padding:0}
+  #ses-cards{flex:0 0 auto;min-height:320px;overflow-y:visible;overflow-x:auto;display:block;padding:0}
   /* Table shell */
   .ses-tbl{width:100%;border-collapse:collapse;table-layout:fixed}
   .ses-tbl thead{position:sticky;top:0;z-index:2;background:var(--s1)}
@@ -7002,22 +7069,19 @@ entry_time    strike  type  entry  max   exit  return%
   /* Conf bar */
   .ses-conf-bar{width:100%;height:3px;background:var(--s3);border-radius:1.5px}
   .ses-conf-fill{height:100%;border-radius:1.5px}
+  .ses-hero{display:flex;flex-direction:column;gap:4px;padding:8px 12px;border-bottom:1px solid rgba(167,139,250,.35);background:linear-gradient(120deg,rgba(167,139,250,.16),rgba(56,190,255,.08) 55%,rgba(0,0,0,0));}
+  .ses-hero-kicker{font-size:6.5px;letter-spacing:1.8px;color:var(--pu);font-weight:800}
+  .ses-hero-title{font-size:10.5px;letter-spacing:1.1px;color:var(--t0);font-weight:800}
+  .ses-hero-sub{font-size:7px;color:var(--t2);line-height:1.45}
   </style>
-
-  <!-- Mode distinction banner -->
-  <div style="display:flex;border-bottom:1px solid var(--b1);flex-shrink:0;background:var(--s2)">
-    <div style="flex:1;padding:4px 12px;border-right:1px solid var(--b1);display:flex;align-items:center;gap:8px">
-      <span style="font-size:7px;font-weight:700;letter-spacing:1.5px;color:var(--bl)">⚡ INTRADAY</span>
-      <span style="font-size:6.5px;color:var(--t3)">Same-day scalp · Entry at open · Exit before 3:20 PM · Tight SL (1.2%)</span>
-    </div>
-    <div style="flex:1;padding:4px 12px;display:flex;align-items:center;gap:8px">
-      <span style="font-size:7px;font-weight:700;letter-spacing:1.5px;color:var(--pu)">📈 POSITIONAL</span>
-      <span style="font-size:6.5px;color:var(--t3)">Swing trade · 2–5 day hold · Wider SL (2%) · Higher target (5%)</span>
-    </div>
+  <!-- Positional hero banner -->
+  <div class="ses-hero">
+    <div class="ses-hero-kicker">AURORA SWING LAB</div>
+    <div class="ses-hero-title">SWING/POSITIONAL STOCK PICKS</div>
+    <div class="ses-hero-sub">Multi-session setups - next-session entry - TP/SL tracked across up to 10 trading days.</div>
   </div>
-
   <div id="ses-header">
-    <span class="ses-title">SE STOCKS</span>
+    <span class="ses-title">AURORA SWING LAB</span>
     <div style="width:1px;height:16px;background:var(--b2)"></div>
     <button class="ses-filter-btn on" onclick="sesFilter('all',this)">ALL</button>
     <button class="ses-filter-btn" onclick="sesFilter('execute',this)" style="border-color:rgba(0,232,122,.3)">EXECUTE</button>
@@ -7031,7 +7095,7 @@ entry_time    strike  type  entry  max   exit  return%
       title="Load historical per-stock analysis for this date">
     <button class="ses-filter-btn" id="ses-hist-btn" onclick="sesLoadHistory()" style="border-color:var(--bl-b);color:var(--bl)">⬇ LOAD DATE</button>
     <button class="ses-filter-btn" id="ses-live-btn" onclick="sesGoLive()" style="display:none;border-color:var(--go-b);color:var(--go)">◉ LIVE</button>
-    <!-- Intraday / Positional toggle (hidden — table shows both columns) -->
+    <!-- Mode toggle kept hidden; section now renders positional plan -->
     <button class="ses-filter-btn on" id="ses-mode-intra" onclick="sesModeSwitch('intraday',this)" style="display:none">INTRA</button>
     <button class="ses-filter-btn" id="ses-mode-pos" onclick="sesModeSwitch('positional',this)" style="display:none">POSITIONAL</button>
     <div style="margin-left:auto;font-size:7.5px;color:var(--t2)" id="ses-updated">—</div>
@@ -7054,18 +7118,9 @@ entry_time    strike  type  entry  max   exit  return%
     <div class="ses-stat"><div class="ses-stat-val cr" id="ses-s-short">0</div><div class="ses-stat-lbl">SHORT</div></div>
     <!-- Divider -->
     <div style="width:1px;background:var(--b1);margin:4px 0;flex-shrink:0"></div>
-    <!-- INTRADAY backtest stats -->
-    <div class="ses-stat" style="background:rgba(56,190,255,.04);min-width:80px">
-      <div style="font-size:6px;letter-spacing:1.5px;color:var(--bl);font-weight:700;margin-bottom:2px">⚡ INTRADAY</div>
-      <div style="display:flex;align-items:baseline;gap:4px">
-        <div class="ses-stat-val" id="ses-s-iwin" style="color:var(--go);font-size:12px">—</div>
-        <div style="font-size:7px;color:var(--t3)">WIN</div>
-      </div>
-      <div style="font-size:7px;color:var(--t2);margin-top:1px" id="ses-s-iavg">avg — pts</div>
-    </div>
     <!-- POSITIONAL backtest stats -->
     <div class="ses-stat" style="background:rgba(167,139,250,.04);min-width:80px">
-      <div style="font-size:6px;letter-spacing:1.5px;color:var(--pu);font-weight:700;margin-bottom:2px">📈 POSITIONAL</div>
+      <div style="font-size:6px;letter-spacing:1.5px;color:var(--pu);font-weight:700;margin-bottom:2px">SWING/POSITIONAL EDGE</div>
       <div style="display:flex;align-items:baseline;gap:4px">
         <div class="ses-stat-val" id="ses-s-pwin" style="color:var(--go);font-size:12px">—</div>
         <div style="font-size:7px;color:var(--t3)">WIN</div>
@@ -7083,9 +7138,10 @@ entry_time    strike  type  entry  max   exit  return%
       <span id="ses-rpt-chev" style="font-size:9px;color:var(--t2)">▾</span>
     </button>
     <div id="ses-report-body" style="display:none;padding:0 12px 12px;border-top:1px solid var(--b1)">
-      <p style="font-size:7px;color:var(--t3);line-height:1.45;margin:8px 0 10px">Same as single-day load: entry at <b>next session open</b>. <b>Intraday</b> sim uses that session’s bar only. <b>Positional</b> walks up to <b>10 trading days</b> on daily bars (fixed TP/SL from entry, time-stop on the last day with WIN/LOSS/NEUTRAL vs entry) — so POS vs INTRA stats should diverge when swings need more than one session. Counts <b>every</b> symbol-day with an outcome unless you tick <b>EXECUTE names only</b>. <b>Neutral</b> = no clean TP/SL path (or flat vs entry on time-stop). Not rupee P&amp;L. <b>6 months</b> ≈ one API call per calendar day — can take <b>20–60+ min</b>; keep this tab open and a valid Kite token.</p>
+      <p style="font-size:7px;color:var(--t3);line-height:1.45;margin:8px 0 10px">Positional simulation only: entry at <b>next session open</b>, then target/stop tracking for up to <b>10 trading days</b> with WIN/LOSS/NEUTRAL outcome and a time-stop on the final day. Counts <b>every</b> symbol-day unless you tick <b>EXECUTE names only</b>. Neutral = no clean TP/SL path (or flat vs entry on time-stop). Not rupee P&amp;L. <b>1 year</b> may take <b>40-120+ min</b> depending on API speed; keep this tab open and maintain a valid Kite token.</p>
       <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px">
         <span style="font-size:6.5px;color:var(--t3);letter-spacing:.5px">PRESET</span>
+        <button type="button" class="ses-filter-btn" onclick="sesPresetReportRange('1y')" title="Last 365 calendar days">1 YR</button>
         <button type="button" class="ses-filter-btn" onclick="sesPresetReportRange('6m')" title="Last ~183 calendar days">6 MO</button>
         <button type="button" class="ses-filter-btn" onclick="sesPresetReportRange('3m')" title="Last ~92 days">3 MO</button>
         <button type="button" class="ses-filter-btn" onclick="sesPresetReportRange('2w')" title="Last 14 days">2 WK</button>
@@ -7197,7 +7253,7 @@ entry_time    strike  type  entry  max   exit  return%
 
   <div style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:0 12px;height:30px;flex-shrink:0;background:var(--s2);border-bottom:1px solid var(--b1)">
-    <span style="font-size:8px;font-weight:700;letter-spacing:1.5px;color:var(--t1)" id="rp-hd">INTRADAY PICKS</span>
+    <span style="font-size:8px;font-weight:700;letter-spacing:1.5px;color:var(--t1)" id="rp-hd">POSITIONAL PICKS</span>
     <span class="bd bg" style="font-size:6.5px;padding:1px 6px;border-radius:2px;letter-spacing:.5px">LIVE RANKED</span>
   </div>
   <div id="rp-picks" class="rpicks" style="flex-shrink:0"></div>
@@ -7715,8 +7771,11 @@ function renderHistPicksHtml(picks, mode) {
   const filtered = isPos ? picks.filter(p => parseFloat(p.rr_p || p.rr) >= 2.5) : picks;
   const list = filtered.length ? filtered : picks;
   rpp.innerHTML = list.map(p => {
-    const vc  = p.verdict==='EXECUTE' ? 'var(--go)' : p.verdict==='WATCH' ? 'var(--am)' : 'var(--t2)';
-    const bdc = p.verdict==='EXECUTE' ? 'bg' : p.verdict==='WATCH' ? 'ba' : 'bm';
+    const status = p.verdict || (p.conf==='CONFIRMED' || p.conf==='HIGH CONF' ? 'EXECUTE' : p.conf==='WATCH' ? 'WATCH' : 'SCAN');
+    const isExec = status === 'EXECUTE';
+    const isWatch = status === 'WATCH';
+    const vc  = isExec ? 'var(--go)' : isWatch ? 'var(--am)' : 'var(--t2)';
+    const bdc = isExec ? 'bg' : isWatch ? 'ba' : 'bm';
     const confStyle = p.conf==='CONFIRMED'
       ? 'color:var(--go);border:1px solid rgba(0,232,122,.35);background:rgba(0,232,122,.10)'
       : p.conf==='HIGH CONF'
@@ -7752,15 +7811,29 @@ function renderHistPicksHtml(picks, mode) {
     const outcomeHtml = oc && p.outcome !== 'NO_DATA' && p.outcome !== 'UNKNOWN'
       ? `<div style="margin:4px 0 2px;padding:3px 7px;border-radius:3px;border:1px solid ${oc.border};background:${oc.bg};font-size:8px;font-weight:700;color:${oc.col};letter-spacing:.5px;text-align:center">${oc.label}</div>`
       : '';
-    const footerHtml = `<div style="display:flex;align-items:center;gap:5px;margin-top:4px">
+    const statePill = isExec
+      ? `<span style="font-size:7.5px;font-weight:800;padding:2px 7px;border-radius:999px;letter-spacing:.45px;background:rgba(0,232,122,.16);border:1px solid rgba(0,232,122,.35);color:var(--go)">&#9889; EXECUTE</span>`
+      : isWatch
+      ? `<span style="font-size:7.5px;font-weight:800;padding:2px 7px;border-radius:999px;letter-spacing:.45px;background:rgba(255,183,0,.12);border:1px solid rgba(255,183,0,.28);color:var(--am)">&#128064; WATCH</span>`
+      : `<span style="font-size:7.5px;font-weight:800;padding:2px 7px;border-radius:999px;letter-spacing:.45px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);color:var(--t2)">&#128204; POSITIONAL</span>`;
+    const footerHtml = `<div style="display:flex;align-items:center;gap:5px;margin-top:4px;flex-wrap:wrap">
+      ${statePill}
       ${p.conf ? `<span style="font-size:7.5px;font-weight:700;padding:1px 5px;border-radius:2px;letter-spacing:.4px;${confStyle}">${p.conf}</span>` : ''}
       ${rr ? `<span style="font-size:8px;color:var(--t2)">R:R 1:${rr}</span>` : ''}
-      ${p.signal_time ? `<span style="font-size:8px;color:var(--t2);margin-left:auto">⏱ ${p.signal_time}</span>` : ''}
+      ${p.signal_time ? `<span style="font-size:8px;color:var(--t2);margin-left:auto">&#9201; ${p.signal_time}</span>` : ''}
     </div>`;
-    return `<div class="rpk ${p.cls||'rpk-am'}">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
+    const cardAccent = isExec
+      ? 'border:1px solid rgba(0,232,122,.22);box-shadow:0 10px 26px rgba(0,232,122,.08), inset 0 0 0 1px rgba(0,232,122,.04);background:linear-gradient(180deg, rgba(0,232,122,.06), rgba(255,255,255,.01));'
+      : isWatch
+      ? 'border:1px solid rgba(255,183,0,.18);box-shadow:0 8px 20px rgba(255,183,0,.06), inset 0 0 0 1px rgba(255,183,0,.03);'
+      : '';
+    return `<div class="rpk ${p.cls||'rpk-am'}" style="${cardAccent}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;gap:8px">
         <span class="rpkn tv-link" data-tvsym="${p.sym}" style="color:${vc}">${p.sym}</span>
-        <span class="bd ${bdc}">${p.score||0}</span>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+          ${isExec ? '<span style="font-size:11px;filter:drop-shadow(0 0 8px rgba(0,232,122,.35))">&#9889;</span>' : ''}
+          <span class="bd ${bdc}">${p.score||0}</span>
+        </div>
       </div>
       <div class="rpkm">${p.meta||''}</div>
       ${levelsHtml}
@@ -7863,7 +7936,7 @@ function setMode(m){
       </div>`;
     }
   } else {
-    document.getElementById('rp-hd').textContent=m==='intraday'?'INTRADAY PICKS':'POSITIONAL PICKS';
+    document.getElementById('rp-hd').textContent='POSITIONAL PICKS';
     _renderLivePicks();
     const liveGateSummary = window._lastGateSummary || {};
     const liveGates = liveGateSummary.gates || {};
@@ -8018,7 +8091,13 @@ function sw(name,btn){
   }
   const tp=document.getElementById('tp-'+name);
   if(tp)tp.classList.add('on');
-  if(name==='backtest') setTimeout(bt2Run, 100);
+  if(name==='backtest'){
+    const targetView = window._btWorkspace || (window._histMode ? 'live' : 'backtest');
+    setTimeout(function(){
+      if(typeof btWorkspaceSet === 'function') btWorkspaceSet(targetView);
+      if(targetView === 'backtest' && typeof bt2Run === 'function') bt2Run();
+    }, 100);
+  }
   if(name==='learnbt'){
     const el = document.getElementById('tp-learnbt');
     if(el) el.scrollTop = 0;
@@ -15174,21 +15253,96 @@ function generateMockChartData(){}
 // ═══════════════════════════════════════════════
 const API = nseBackendOrigin();
 
+function btWorkspaceSet(view) {
+  const mode = view === 'backtest' ? 'backtest' : 'live';
+  window._btWorkspace = mode;
+  const liveTab = document.getElementById('bt-work-live-tab');
+  const backtestTab = document.getElementById('bt-work-backtest-tab');
+  const livePanel = document.getElementById('bt-work-live');
+  const backtestPanel = document.getElementById('bt-work-backtest');
+  if(liveTab) liveTab.classList.toggle('on', mode === 'live');
+  if(backtestTab) backtestTab.classList.toggle('on', mode === 'backtest');
+  if(livePanel) livePanel.classList.toggle('on', mode === 'live');
+  if(backtestPanel) backtestPanel.classList.toggle('on', mode === 'backtest');
+  if(mode === 'backtest') bt2SyncRangeMeta();
+  btLiveStatusSync();
+}
+
+function btHumanRangeLabel(days) {
+  if(days >= 1825) return '5Y';
+  if(days >= 1095) return '3Y';
+  if(days >= 730) return '2Y';
+  if(days >= 365) return '1Y';
+  return days + 'D';
+}
+
+function bt2SelectedDownloadDays() {
+  const from = document.getElementById('bt2-from')?.value;
+  const to = document.getElementById('bt2-to')?.value;
+  if(!from || !to) return 1095;
+  const diff = Math.floor((new Date(to) - new Date(from)) / 86400000) + 1;
+  if(!Number.isFinite(diff) || diff <= 0) return 1095;
+  return Math.max(60, Math.min(diff, 1825));
+}
+
+function bt2SyncRangeMeta() {
+  const note = document.getElementById('bt2-range-note');
+  if(!note) return 1095;
+  const from = document.getElementById('bt2-from')?.value;
+  const to = document.getElementById('bt2-to')?.value;
+  if(!from || !to) {
+    note.textContent = 'Download uses the selected FROM and TO span, capped at 5 years of daily history.';
+    note.style.color = 'var(--t2)';
+    return 1095;
+  }
+  const rawDays = Math.floor((new Date(to) - new Date(from)) / 86400000) + 1;
+  const safeDays = bt2SelectedDownloadDays();
+  const capped = Number.isFinite(rawDays) && rawDays > 1825;
+  note.innerHTML = 'Current range: <b>' + from + '</b> to <b>' + to + '</b> and <b>' + (Number.isFinite(rawDays) ? rawDays : safeDays) + '</b> calendar days. Download span: <b>' + btHumanRangeLabel(safeDays) + '</b>' + (capped ? ' (latest 1825 days max).' : '.');
+  note.style.color = capped ? 'var(--am)' : 'var(--t2)';
+  return safeDays;
+}
+
+function btLiveStatusSync() {
+  const title = document.getElementById('bt-live-mode-title');
+  const copy = document.getElementById('bt-live-mode-copy');
+  const pill = document.getElementById('bt-live-mode-pill');
+  const date = document.getElementById('bt-live-mode-date');
+  if(!title || !copy || !pill || !date) return;
+  if(window._histMode && window._histDate) {
+    title.textContent = 'HISTORICAL DAY ACTIVE';
+    copy.textContent = 'The selected day is loaded into the live UI and this replay panel. Use GO TO LIVE DASHBOARD to exit historical mode.';
+    pill.textContent = 'BACKTEST';
+    pill.className = 'bd bb';
+    date.textContent = window._histDate;
+  } else {
+    title.textContent = 'LIVE MODE';
+    copy.textContent = 'Choose a date to pause live updates and inspect that historical session inside the normal dashboard.';
+    pill.textContent = 'LIVE';
+    pill.className = 'bd bg';
+    date.textContent = 'TODAY';
+  }
+}
+
 (function bt2Init(){
   const to   = new Date();
   const from = new Date(); from.setFullYear(from.getFullYear() - 3);
   document.getElementById('bt2-to').value   = to.toISOString().split('T')[0];
   document.getElementById('bt2-from').value = from.toISOString().split('T')[0];
-  // Default day view to yesterday (last trading day)
   const yest = new Date(); yest.setDate(yest.getDate()-1);
   document.getElementById('dv-date').value  = yest.toISOString().split('T')[0];
+  bt2SyncRangeMeta();
+  btLiveStatusSync();
+  btWorkspaceSet(window._histMode ? 'live' : 'backtest');
   bt2RefreshStatus();
   bt2LoadWeights();
 })();
 
 function bt2Pre(btn, period) {
-  document.querySelectorAll('#tp-backtest .btpre').forEach(b => b.classList.remove('on'));
+  document.querySelectorAll('#bt2-periods .btpre').forEach(b => b.classList.remove('on'));
   btn.classList.add('on');
+  window._btWorkspace = 'backtest';
+  if(typeof btWorkspaceSet === 'function') btWorkspaceSet('backtest');
   const to   = new Date();
   const from = new Date();
   if(period==='1M') from.setMonth(from.getMonth()-1);
@@ -15197,21 +15351,31 @@ function bt2Pre(btn, period) {
   else if(period==='1Y') from.setFullYear(from.getFullYear()-1);
   else if(period==='2Y') from.setFullYear(from.getFullYear()-2);
   else if(period==='3Y') from.setFullYear(from.getFullYear()-3);
+  else if(period==='5Y') from.setFullYear(from.getFullYear()-5);
   document.getElementById('bt2-from').value = from.toISOString().split('T')[0];
   document.getElementById('bt2-to').value   = to.toISOString().split('T')[0];
+  bt2SyncRangeMeta();
   bt2Run();
 }
 
 async function bt2Download() {
-  document.getElementById('bt2-status').textContent = 'Downloading 1-year data (NIFTY OHLCV + VIX + chain PCR)...';
+  const days = bt2SyncRangeMeta();
+  const label = btHumanRangeLabel(days);
+  window._btWorkspace = 'backtest';
+  if(typeof btWorkspaceSet === 'function') btWorkspaceSet('backtest');
+  document.getElementById('bt2-status').textContent = 'Downloading ' + label + ' data (NIFTY OHLCV + VIX + chain PCR + FII)...';
   try {
-    const r = await fetch(API+'/api/backtest/download', {method:'POST'});
+    const r = await fetch(API+'/api/backtest/download', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({days: days})
+    });
     const d = await r.json();
-    document.getElementById('bt2-status').textContent = d.message || 'Download started';
-    notify('Data download started — takes 1-2 min');
+    document.getElementById('bt2-status').textContent = d.message || ('Download started for ' + label + ' history');
+    notify('Data download started for ' + label + ' range');
     setTimeout(bt2RefreshStatus, 8000);
   } catch(e) {
-    document.getElementById('bt2-status').textContent = 'Download failed — backend may not be running';
+    document.getElementById('bt2-status').textContent = 'Download failed - backend may not be running';
   }
 }
 
@@ -15245,13 +15409,16 @@ function bt2RenderMultiReport(d){
 }
 
 async function bt2MultiReport(){
+  window._btWorkspace = 'backtest';
+  if(typeof btWorkspaceSet === 'function') btWorkspaceSet('backtest');
+  bt2SyncRangeMeta();
   const st = document.getElementById('bt2-mr-status');
   const wrap = document.getElementById('bt2-mr-wrap');
   const modeEl = document.getElementById('bt2-mode');
   const mode = modeEl ? modeEl.value : 'intraday';
   const nseEl = document.getElementById('bt2-mr-nse');
   const refreshNse = nseEl && nseEl.checked;
-  if(st) st.textContent = 'Working… Zerodha Kite sync + gate replay (30–90s if NSE refresh on)';
+  if(st) st.textContent = 'Working... Zerodha Kite sync + gate replay (30-90s if NSE refresh on)';
   if(wrap) wrap.style.display = 'none';
   try{
     const r = await fetch(API + '/api/backtest/multi-report', {
@@ -15265,18 +15432,18 @@ async function bt2MultiReport(){
       notify('Multi-report: ' + d.error);
       return;
     }
-    const kr = d.kite_refresh || '—';
-    const ar = d.anchor_date || '—';
-    const nr = d.nse_refresh || '—';
-    if(st) st.textContent = 'Kite '+kr+' · NSE '+nr+' · anchor '+ar+' · replay '+String(d.replay_range&&d.replay_range.from||'')+' → '+String(d.replay_range&&d.replay_range.to||'');
+    const kr = d.kite_refresh || '-';
+    const ar = d.anchor_date || '-';
+    const nr = d.nse_refresh || '-';
+    if(st) st.textContent = 'Kite ' + kr + ' | NSE ' + nr + ' | anchor ' + ar + ' | replay ' + String(d.replay_range&&d.replay_range.from||'') + ' to ' + String(d.replay_range&&d.replay_range.to||'');
     bt2RenderMultiReport(d);
     if(wrap) wrap.style.display = 'block';
-    notify('Rolling 1W·1M·6M report ready');
+    notify('Rolling 1W 1M 6M report ready');
     window._lastBt2MultiReport = d;
     bt2RefreshStatus();
   }catch(e){
     if(st) st.textContent = String(e);
-    notify('Multi-report failed — backend running?');
+    notify('Multi-report failed - backend running?');
   }
 }
 
@@ -15304,13 +15471,16 @@ async function bt2Run() {
   const from = document.getElementById('bt2-from').value;
   const to   = document.getElementById('bt2-to').value;
   const mode = document.getElementById('bt2-mode').value;
+  window._btWorkspace = 'backtest';
+  if(typeof btWorkspaceSet === 'function') btWorkspaceSet('backtest');
+  bt2SyncRangeMeta();
   if(!from || !to) { notify('Select date range first'); return; }
 
   const showEl = document.getElementById('bt2-showing');
-  if(showEl) showEl.textContent = 'Running backtest…';
+  if(showEl) showEl.textContent = 'Running backtest...';
   const tradesEl = document.getElementById('bt2-trades');
   if(tradesEl) tradesEl.innerHTML = `<tr><td colspan="18" style="text-align:center;padding:20px;color:var(--t2);font-size:9px">
-    <div style="display:inline-block;border:2px solid var(--b2);border-top-color:var(--go);border-radius:50%;width:16px;height:16px;animation:spin .8s linear infinite;margin-bottom:6px"></div><br>Running backtest…
+    <div style="display:inline-block;border:2px solid var(--b2);border-top-color:var(--go);border-radius:50%;width:16px;height:16px;animation:spin .8s linear infinite;margin-bottom:6px"></div><br>Running backtest...
   </td></tr>`;
 
   try {
@@ -15321,9 +15491,9 @@ async function bt2Run() {
     bt2LoadWeights();
     const sigs = d.metrics?.execute_signals || 0;
     const wr   = d.metrics?.win_rate_pct || 0;
-    notify(sigs ? `Backtest: ${sigs} signals · WR ${wr}%` : 'Backtest complete — no signals in range (try ⬇ DOWNLOAD DATA first)');
+    notify(sigs ? `Backtest: ${sigs} signals | WR ${wr}%` : 'Backtest complete - no signals in range (try DOWNLOAD RANGE DATA first)');
   } catch(e) {
-    notify('Backtest failed — is the backend running? Open http://127.0.0.1:8000/ or your PORT.');
+    notify('Backtest failed - is the backend running?');
     if(showEl) showEl.textContent = 'Backend offline';
     if(tradesEl) tradesEl.innerHTML = `<tr><td colspan="18" style="text-align:center;padding:20px;color:var(--st);font-size:9px">
       Backend not reachable. Start backend with <b>start.sh</b> then retry.
@@ -15475,22 +15645,31 @@ async function bt2RefreshStatus() {
     const r = await fetch(API+'/api/backtest/status');
     const d = await r.json();
     const fii = d.fii?.count || 0;
-    const s = `OHLCV: ${d.ohlcv?.count||0} days · VIX: ${d.vix?.count||0} days · Chain: ${d.chain?.count||0} days · FII: ${fii} days · Signals: ${d.signal_log?.count||0}`;
+    const s = `OHLCV: ${d.ohlcv?.count||0} days | VIX: ${d.vix?.count||0} days | Chain: ${d.chain?.count||0} days | FII: ${fii} days | Signals: ${d.signal_log?.count||0}`;
     document.getElementById('bt2-status').textContent = s;
+    bt2SyncRangeMeta();
   } catch(e) {
     document.getElementById('bt2-status').textContent = 'Status unavailable';
   }
 }
 
 async function bt2DownloadFii() {
+  const days = bt2SyncRangeMeta();
+  const label = btHumanRangeLabel(days);
+  window._btWorkspace = 'backtest';
+  if(typeof btWorkspaceSet === 'function') btWorkspaceSet('backtest');
   try {
     notify('Downloading FII history from NSE...');
-    const r = await fetch(API+'/api/backtest/download-fii', {method:'POST'});
+    const r = await fetch(API+'/api/backtest/download-fii', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({days: days})
+    });
     const d = await r.json();
-    document.getElementById('bt2-status').textContent = d.message || 'FII download started';
+    document.getElementById('bt2-status').textContent = d.message || ('FII download started for ' + label + ' range');
     setTimeout(bt2RefreshStatus, 5000);
   } catch(e) {
-    notify('FII download failed — check backend');
+    notify('FII download failed - check backend');
   }
 }
 
@@ -15551,10 +15730,17 @@ async function tbDateChange(val) {
     if(d.error) { notify('No data for ' + val + ': ' + d.error); return; }
     window._histData = d;    // cache for mode-switch re-render
     window._histDate = val;  // cache date for header
+    const dvDateEl = document.getElementById('dv-date');
+    if(dvDateEl) dvDateEl.value = val;
+    window._btWorkspace = 'live';
     try{
       const btTab = document.querySelector('.tab.tab-bt');
       if(btTab) sw('backtest', btTab);
     }catch(e){}
+    if(typeof btWorkspaceSet === 'function') btWorkspaceSet('live');
+    setTimeout(function(){
+      try{ dvLoad(); }catch(e){}
+    }, 80);
 
     // ── Direct topbar price update (bypass handle race conditions) ──────────
     if(d.prices) {
@@ -17530,7 +17716,7 @@ function tbGoLive() {
   // Restore right panel header + badge
   const rpHd = document.getElementById('rp-hd');
   if(rpHd) {
-    rpHd.textContent = 'INTRADAY PICKS';
+    rpHd.textContent = 'POSITIONAL PICKS';
     const rpBadge = rpHd.nextElementSibling;
     if(rpBadge) { rpBadge.textContent = 'LIVE RANKED'; rpBadge.className = 'bd bg'; }
   }
@@ -17541,6 +17727,7 @@ function tbGoLive() {
   _renderMacroContext();
   // Reconnect WS to get fresh live data
   if(window._liveConnect) window._liveConnect();
+  btLiveStatusSync();
   notify('Back to live data');
 }
 
@@ -17548,19 +17735,20 @@ function tbGoLive() {
 // DAY VIEW (backtest tab drill-down + topbar historical mode)
 // ═══════════════════════════════════════════════
 function dvLoadDate(date) {
-  // Set the topbar date picker + enter historical mode (full UI replay)
   const tbDateEl = document.getElementById('tb-date');
   if(tbDateEl) tbDateEl.value = date;
+  const dvDateEl = document.getElementById('dv-date');
+  if(dvDateEl) dvDateEl.value = date;
+  window._btWorkspace = 'live';
+  if(typeof btWorkspaceSet === 'function') btWorkspaceSet('live');
   tbDateChange(date);
-  // Also load the detailed drill-down in the backtest panel
-  document.getElementById('dv-date').value = date;
-  dvLoad();
-  document.getElementById('dv-panel').scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
 async function dvLoad() {
   const date = document.getElementById('dv-date').value;
   if(!date) { notify('Select a date first'); return; }
+  window._btWorkspace = 'live';
+  if(typeof btWorkspaceSet === 'function') btWorkspaceSet('live');
   document.getElementById('dv-hint').textContent = 'Loading...';
   try {
     const r = await fetch(`${API}/api/backtest/dayview?date=${date}`);
@@ -17569,8 +17757,10 @@ async function dvLoad() {
     dvRender(d);
     document.getElementById('dv-panel').style.display = 'block';
     document.getElementById('dv-hint').textContent = `Loaded: ${date}`;
+    btLiveStatusSync();
+    document.getElementById('dv-panel').scrollIntoView({behavior:'smooth', block:'start'});
   } catch(e) {
-    document.getElementById('dv-hint').textContent = 'Failed — check backend';
+    document.getElementById('dv-hint').textContent = 'Failed - check backend';
   }
 }
 
@@ -18080,7 +18270,7 @@ function showShortcuts(){
       <button onclick="document.getElementById('kbd-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--t2);font-size:14px">✕</button>
     </div>
     ${[
-      ['1–9','Tabs 1–9: Signal, Gate, OI Scan, Option Scan, Vol Radar, Index Hunt, Spike Hunt, Stock Picks, Key Levels'],
+      ['1–9','Tabs 1–9: Signal, Gate, OI Scan, Option Scan, Vol Radar, Index Hunt, Spike Hunt, Swing/Positional, Key Levels'],
       ['B','Open Backtest tab'],
       ['S','Toggle sound alerts'],
       ['E','Export current tab as CSV'],
@@ -18169,8 +18359,12 @@ function perfDownloadCSV(){
   ];
   const lines = [header.join(',')];
   rows.forEach(r=>{
-    const trig = (r.section === 'INDEX_RADAR' && r.option_expiry)
-      ? ((r.trigger || 'INDEX HUNT') + ' · EXP ' + r.option_expiry + (r.option_week ? (' ' + r.option_week) : ''))
+    const trig = (r.section === 'INDEX_RADAR')
+      ? (
+          (r.trigger || 'INDEX HUNT')
+          + (r.strike ? (' · ' + r.strike + ' ' + (r.direction || '')) : '')
+          + (r.option_expiry ? (' · EXP ' + r.option_expiry + (r.option_week ? (' ' + r.option_week) : '')) : '')
+        )
       : (r.trigger || '');
     const entT = (r.entry_time_ist != null && r.entry_time_ist !== '') ? r.entry_time_ist : (r.time || '');
     const exT = (r.exit_time_ist != null && r.exit_time_ist !== '') ? r.exit_time_ist : (r.hit_time || '');
@@ -18627,8 +18821,12 @@ function renderDayPerfFromCache(){
         const out = String(r.outcome || r.status || '').toUpperCase();
         const outCls = out.includes('HIT_T1') || out.includes('TARGET') ? 'go' : out.includes('HIT_SL') || out.includes('SL') ? 'st' : out.includes('OPEN') ? 'bl' : 'am';
         const secPill = (r.section === 'INDEX_RADAR') ? 'bl' : (r.section === 'SWING') ? 'am' : 'go';
-        const trig = (r.section === 'INDEX_RADAR' && r.option_expiry)
-          ? ((r.trigger||'INDEX HUNT') + ' · EXP ' + r.option_expiry + (r.option_week ? (' ' + r.option_week) : ''))
+        const trig = (r.section === 'INDEX_RADAR')
+          ? (
+              (r.trigger||'INDEX HUNT')
+              + (r.strike ? (' · ' + r.strike + ' ' + (r.direction || '')) : '')
+              + (r.option_expiry ? (' · EXP ' + r.option_expiry + (r.option_week ? (' ' + r.option_week) : '')) : '')
+            )
           : (r.trigger || '');
         const entT = (r.entry_time_ist != null && r.entry_time_ist !== '') ? r.entry_time_ist : (r.time || '—');
         const stOpen = String(r.status || '').toUpperCase() === 'OPEN';
@@ -19356,7 +19554,7 @@ function _sesKillZone() {
 
 let _sesHistoryMode = false; // true when showing backfilled history
 let _sesRptRunning = false;
-let _sesTradeMode   = 'intraday'; // 'intraday' | 'positional'
+let _sesTradeMode   = 'positional'; // 'intraday' | 'positional'
 let _sesRawStocks   = [];  // raw API stocks for mode re-render
 
 function sesModeSwitch(mode, btn) {
@@ -19503,17 +19701,13 @@ function _sesApplyHistoryData(stocks) {
                       : 'SCAN';
 
     const dir = chgPct > 0.3 ? 'LONG' : chgPct < -0.3 ? 'SHORT' : null;
-
-    // Recommendation: which mode won, or has better expected value
-    const iWin = ti?.outcome === 'WIN', pWin = tp?.outcome === 'WIN';
-    const iPnl = ti?.pnl || 0, pPnl = tp?.pnl || 0;
-    let rec = 'SKIP', recColor = 'var(--t2)';
-    if(iWin && pWin)         { rec = iPnl >= pPnl ? 'INTRA ★' : 'POS ★';  recColor = 'var(--go)'; }
-    else if(iWin && !pWin)   { rec = 'INTRA ★';  recColor = 'var(--go)'; }
-    else if(!iWin && pWin)   { rec = 'POS ★';    recColor = 'var(--go)'; }
-    else if(!ti && !tp)      { rec = 'NO DATA';  recColor = 'var(--t2)'; }
-    else                     { rec = iPnl > pPnl ? 'INTRA' : 'POS';    recColor = 'var(--am)'; }
-    if(!ti && !tp) recColor = 'var(--t2)';
+    // Recommendation: positional-only ranking for swing outcomes
+    const op = tp?.outcome;
+    let rec = 'SETUP', recColor = 'var(--t2)';
+    if(op === 'WIN')      { rec = 'HOLD WIN';  recColor = 'var(--go)'; }
+    else if(op === 'LOSS'){ rec = 'STOP HIT';  recColor = 'var(--st)'; }
+    else if(op === 'NEUTRAL'){ rec = 'TIME EXIT'; recColor = 'var(--am)'; }
+    else if(tp)           { rec = 'POSITIONAL'; recColor = 'var(--pu)'; }
 
     return {
       sym: s.sym, price, chgPct, volRatio,
@@ -19524,9 +19718,9 @@ function _sesApplyHistoryData(stocks) {
       isHistory: true, lot: s.lot || 1,
       rec, recColor,
       // For summary/filter compat
-      entryLow: ti ? ti.entry : price, entryHigh: ti ? ti.entry : price,
-      target: ti ? ti.target : price, stop: ti ? ti.stop : price,
-      outcome: ti?.outcome || tp?.outcome || null, pnl: ti?.pnl || null,
+      entryLow: tp ? tp.entry : price, entryHigh: tp ? tp.entry : price,
+      target: tp ? tp.target : price, stop: tp ? tp.stop : price,
+      outcome: tp?.outcome || null, pnl: tp?.pnl || null,
     };
   });
 
@@ -19537,17 +19731,13 @@ function _sesApplyHistoryData(stocks) {
   });
 
   _renderSESCards();
-
-  // Win rate: intra + positional side by side
-  const withI = _sesCards.filter(c => c.trade_i?.outcome);
+  // Win rate: positional only
   const withP = _sesCards.filter(c => c.trade_p?.outcome);
-  const iWR = withI.length ? Math.round(withI.filter(c=>c.trade_i.outcome==='WIN').length/withI.length*100) : null;
   const pWR = withP.length ? Math.round(withP.filter(c=>c.trade_p.outcome==='WIN').length/withP.length*100) : null;
   const wrLbl = document.getElementById('ses-hist-wr-lbl');
   if(wrLbl) {
-    const iCol = iWR>=50?'var(--go)':iWR>=35?'var(--am)':'var(--st)';
     const pCol = pWR>=50?'var(--go)':pWR>=35?'var(--am)':'var(--st)';
-    wrLbl.innerHTML = `INTRA <b style="color:${iCol}">${iWR!=null?iWR+'%':'—'}</b> · POS <b style="color:${pCol}">${pWR!=null?pWR+'%':'—'}</b> win rate`;
+    wrLbl.innerHTML = 'POS <b style="color:' + pCol + '">' + (pWR!=null?pWR+'%':'-') + '</b> win rate';
   }
 
   _sesSummaryBar({lbl: 'HISTORY'});
@@ -19584,8 +19774,8 @@ function sesToggleRangeReport() {
   if (chev) chev.textContent = show ? '▴' : '▾';
 }
 
-/** Max calendar days per run (~6.5 mo). Each day hits /api/dayview/stocks once. */
-var SES_RPT_MAX_CAL_DAYS = 200;
+/** Max calendar days per run (~1 year). Each day hits /api/dayview/stocks once. */
+var SES_RPT_MAX_CAL_DAYS = 380;
 
 function sesPresetReportRange(preset) {
   const f = document.getElementById('ses-rpt-from');
@@ -19593,7 +19783,8 @@ function sesPresetReportRange(preset) {
   if (!f || !t) return;
   const end = new Date();
   const start = new Date(end);
-  if (preset === '6m') start.setUTCDate(start.getUTCDate() - 183);
+  if (preset === '1y') start.setUTCDate(start.getUTCDate() - 365);
+  else if (preset === '6m') start.setUTCDate(start.getUTCDate() - 183);
   else if (preset === '3m') start.setUTCDate(start.getUTCDate() - 92);
   else start.setUTCDate(start.getUTCDate() - 13);
   t.value = end.toISOString().slice(0, 10);
@@ -19625,18 +19816,18 @@ async function sesRunRangeReport() {
     if (typeof notify === 'function') notify('FROM must be ≤ TO');
     return;
   }
-  const maxSpan = typeof SES_RPT_MAX_CAL_DAYS === 'number' ? SES_RPT_MAX_CAL_DAYS : 200;
+  const maxSpan = typeof SES_RPT_MAX_CAL_DAYS === 'number' ? SES_RPT_MAX_CAL_DAYS : 380;
   let span = 0;
   for (let x = from; x <= to; x = _sesAddCalendarDay(x, 1)) {
     span++;
     if (span > maxSpan) {
-      if (typeof notify === 'function') notify('Max ' + maxSpan + ' calendar days (~6½ mo) — narrow the range');
+      if (typeof notify === 'function') notify('Max ' + maxSpan + ' calendar days (~1 year) - narrow the range');
       return;
     }
   }
 
   if (span > 90 && typeof confirm === 'function') {
-    if (!confirm('Run ' + span + ' calendar days? That is one heavy API call per day (often 20–60+ minutes for ~6 months). Keep this tab open. Continue?')) return;
+    if (!confirm('Run ' + span + ' calendar days? That is one heavy API call per day (often 40-120+ minutes for ~1 year). Keep this tab open. Continue?')) return;
   }
 
   if (_sesRptRunning) return;
@@ -19644,7 +19835,6 @@ async function sesRunRangeReport() {
   if (btn) { btn.disabled = true; btn.textContent = '⏳…'; }
   if (out) out.innerHTML = '';
 
-  const aggI = { WIN: 0, LOSS: 0, NEUTRAL: 0 };
   const aggP = { WIN: 0, LOSS: 0, NEUTRAL: 0 };
   let daysOk = 0, daysErr = 0, dayN = 0;
   const okDates = [];
@@ -19675,9 +19865,7 @@ async function sesRunRangeReport() {
         okDates.push(cur);
         for (const s of stocks) {
           if (execOnly && s.verdict_i !== 'EXECUTE' && s.verdict_p !== 'EXECUTE') continue;
-          const oi = s.trade_i && s.trade_i.outcome;
           const op = s.trade_p && s.trade_p.outcome;
-          if (oi === 'WIN' || oi === 'LOSS' || oi === 'NEUTRAL') aggI[oi]++;
           if (op === 'WIN' || op === 'LOSS' || op === 'NEUTRAL') aggP[op]++;
         }
       } catch (e) {
@@ -19718,8 +19906,7 @@ async function sesRunRangeReport() {
     }
 
     let html = '<div style="font-size:7px;color:var(--t2);margin-bottom:4px">Range <b>' + from + '</b> → <b>' + to + '</b> · calendar days loaded <b>' + daysOk + '</b>' + (daysErr ? ' · errors/skips <b style="color:var(--st)">' + daysErr + '</b>' : '') + (execOnly ? ' · <b>EXECUTE filter on</b>' : '') + '</div>';
-    html += fmtBlock('⚡ INTRADAY (same rules as table)', 'var(--bl)', aggI);
-    html += fmtBlock('📈 POSITIONAL (swing plan)', 'var(--pu)', aggP);
+    html += fmtBlock('AURORA SWING (positional plan)', 'var(--pu)', aggP);
     if (errDates.length && errDates.length <= 8) {
       html += '<div style="margin-top:8px;font-size:7px;color:var(--st)">Issues: ' + errDates.slice(0, 8).join(' · ') + '</div>';
     } else if (errDates.length) {
@@ -19746,15 +19933,6 @@ function _sesSummaryBar(kz) {
   _sv('ses-s-scan',    scanN);
   _sv('ses-s-long',    longN);
   _sv('ses-s-short',   shortN);
-
-  // ── INTRADAY backtest stats ─────────────────────────────
-  const withI = _sesCards.filter(c => c.trade_i?.outcome);
-  const iWins = withI.filter(c => c.trade_i.outcome === 'WIN');
-  const iWR   = withI.length ? Math.round(iWins.length / withI.length * 100) : null;
-  const iAvg  = iWins.length ? Math.round(iWins.reduce((s,c)=>s+(c.trade_i.pnl||0),0)/iWins.length) : null;
-  _sv('ses-s-iwin', iWR !== null ? iWR + '%' : (withI.length ? '0%' : '—'));
-  _sv('ses-s-iavg', iAvg !== null ? `avg +${iAvg} pts` : withI.length ? `${withI.length} trades` : 'no data');
-  _sc('ses-s-iwin', iWR >= 55 ? 'var(--go)' : iWR >= 40 ? 'var(--am)' : iWR !== null ? 'var(--st)' : 'var(--t2)');
 
   // ── POSITIONAL backtest stats ───────────────────────────
   const withP = _sesCards.filter(c => c.trade_p?.outcome);
@@ -19871,7 +20049,6 @@ function _renderSESCards() {
     <div style="font-size:9px;font-weight:600;color:${confCol}">${confW}%</div>
     <div class="ses-conf-bar" style="margin-top:2px"><div class="ses-conf-fill" style="width:${confW}%;background:${confCol}"></div></div>
   </td>
-  ${_tradeTds(c.trade_i, isLive, c.price, c.dir, true)}
   ${_tradeTds(c.trade_p, isLive, c.price, c.dir, false)}
   <td class="sc-tk sr-take" style="color:${recColor}">${rec}</td>
 </tr>`;
@@ -19885,12 +20062,10 @@ function _renderSESCards() {
         <th rowspan="2" class="sc-sig">SIGNAL</th>
         <th rowspan="2" class="sc-gates">GATES</th>
         <th rowspan="2" class="sc-conf">CONF</th>
-        <th colspan="4" class="hg-intra grp-hdr">⚡ INTRADAY — DAY TRADE</th>
-        <th colspan="4" class="hg-pos grp-hdr">📈 POSITIONAL — SWING 2–5D</th>
+        <th colspan="4" class="hg-pos grp-hdr">SWING/POSITIONAL - MULTI-DAY PLAN</th>
         <th rowspan="2" class="sc-tk">TAKE</th>
       </tr>
       <tr>
-        <th class="sc-ie hg-intra">ENTRY</th><th class="sc-it hg-intra">TARGET</th><th class="sc-is hg-intra">STOP</th><th class="sc-ir hg-intra">RESULT</th>
         <th class="sc-pe hg-pos">ENTRY</th><th class="sc-pt hg-pos">TARGET</th><th class="sc-ps hg-pos">STOP</th><th class="sc-pr hg-pos">RESULT</th>
       </tr>
     </thead>
@@ -21132,3 +21307,19 @@ function hpRenderWrCanvas(days){
 
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

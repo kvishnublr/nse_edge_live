@@ -23,6 +23,7 @@ import fetcher
 import signals
 import scheduler as sched
 from feed import feed_manager, get_all_prices
+from live_picks import compute_live_picks
 from config import (
     HOST, PORT, KITE_API_KEY, KITE_ACCESS_TOKEN, is_market_open, is_market_session_day, get_market_status,
     apply_strategy_profile, get_strategy_profile_name, get_strategy_profiles,
@@ -232,11 +233,11 @@ async def lifespan(app: FastAPI):
 
     # Restore today's index signals from DB so TODAY tab is never blank after restart
     try:
-        import sqlite3 as _sq, datetime as _dt, json as _json
         if not is_market_session_day():
             signals.state["index_signals"] = []
             signals.state["index_signals_date"] = datetime.date.today().isoformat()
             raise RuntimeError("skip holiday/weekend index restore")
+        import sqlite3 as _sq, datetime as _dt, json as _json
         _db = os.path.join(os.path.dirname(__file__), "data", "backtest.db")
         _today = _dt.date.today().isoformat()
         _conn = _sq.connect(_db)
@@ -1651,7 +1652,6 @@ async def day_performance(date: str = None):
             target = int(strike or 0)
         except Exception:
             target = 0
-        nearest = None
         for r in rows_:
             try:
                 st = int(r.get("strike") or 0)
@@ -1660,11 +1660,7 @@ async def day_performance(date: str = None):
             v = float(r.get(key) or 0)
             if target and st == target and v > 0:
                 return v
-            if target:
-                d = abs(st - target)
-                if nearest is None or d < nearest[0]:
-                    nearest = (d, v)
-        return float((nearest[1] if nearest else 0) or 0)
+        return 0.0
 
     rows = []
     sections = {}
@@ -1752,7 +1748,7 @@ async def day_performance(date: str = None):
         conn.row_factory = _sq.Row
         ix = conn.execute(
             """SELECT id, updated_ts, sig_id, trade_date, symbol, type, signal_time, ts, index_px,
-                      strike, entry, sl, t1, t2, rr, lot_sz, outcome, exit_time,
+                      strike, entry, sl, t1, t2, rr, lot_sz, outcome, exit_time, outcome_ltp,
                       option_expiry, option_week
                FROM index_signal_history
                WHERE trade_date = ?
@@ -1794,7 +1790,17 @@ async def day_performance(date: str = None):
         status = "OPEN" if not d.get("outcome") else "CLOSED"
         lot = int(d.get("lot_sz") or 0) or (25 if d.get("symbol") == "NIFTY" else 15)
         entry = float(d.get("entry") or 0)
-        ltp = float((live.get("ltp") if live else 0) or 0)
+        ltp = 0.0
+        if status != "OPEN":
+            _ol0 = d.get("outcome_ltp")
+            try:
+                _ol0 = float(_ol0) if _ol0 is not None and _ol0 != "" else 0.0
+            except Exception:
+                _ol0 = 0.0
+            if _ol0 > 0:
+                ltp = _ol0
+        if not ltp:
+            ltp = float((live.get("ltp") if live else 0) or 0)
         if not ltp:
             ltp = _opt_ltp(d.get("symbol"), d.get("strike"), d.get("type"))
         if status == "OPEN" and entry and ltp:
@@ -1819,6 +1825,12 @@ async def day_performance(date: str = None):
         pnl_model = float(unit_move or 0) * float(qty_model or 0)
         investment_inr = _inr(stock_notional_per_signal)
         exit_ist = (d.get("exit_time") or live.get("outcome_time") or live.get("exit_time") or "").strip() or None
+        ol = d.get("outcome_ltp")
+        if ol is not None:
+            try:
+                ol = float(ol)
+            except Exception:
+                ol = None
         row = {
             "section": "INDEX_RADAR",
             "kind": "OPTION",
@@ -1841,6 +1853,7 @@ async def day_performance(date: str = None):
             "pnl_pts": _inr(pnl),
             "pnl_pct": 0.0,
             "strike": d.get("strike"),
+            "outcome_ltp": _inr(ol) if ol is not None and ol > 0 else None,
             "lot_sz": lot,
             "pnl_inr": _inr(pnl),
             "qty_model": int(qty_model or 0),
@@ -1886,6 +1899,39 @@ async def day_performance(date: str = None):
             issues.append({"symbol": r.get("symbol"), "section": r.get("section"), "issue": "sl_with_positive_pnl"})
         if (("TARGET" in out) or ("HIT_T1" in out) or ("HIT_T2" in out)) and p < 0:
             issues.append({"symbol": r.get("symbol"), "section": r.get("section"), "issue": "target_with_negative_pnl"})
+        if r.get("section") == "INDEX_RADAR":
+            t1v = float(r.get("t1") or 0)
+            slv = float(r.get("sl") or 0)
+            olv = r.get("outcome_ltp")
+            olv = float(olv) if olv is not None and olv != "" else None
+            if "HIT_T1" in out or "HIT_T2" in out:
+                if olv is None:
+                    issues.append(
+                        {
+                            "symbol": r.get("symbol"),
+                            "section": r.get("section"),
+                            "issue": "index_hit_target_no_exit_ltp",
+                            "detail": "Outcome predates premium proof or index-proxy win; re-open with outcome_use_index_fallback off.",
+                        }
+                    )
+                elif t1v > 0 and olv + 0.02 < t1v:
+                    issues.append(
+                        {
+                            "symbol": r.get("symbol"),
+                            "section": r.get("section"),
+                            "issue": "index_hit_target_exit_ltp_below_t1",
+                            "detail": f"exit_ltp={olv:.2f} t1={t1v:.2f}",
+                        }
+                    )
+            if "HIT_SL" in out and olv is not None and slv > 0 and olv > slv + 0.02:
+                issues.append(
+                    {
+                        "symbol": r.get("symbol"),
+                        "section": r.get("section"),
+                        "issue": "index_sl_exit_ltp_above_sl",
+                        "detail": f"exit_ltp={olv:.2f} sl={slv:.2f}",
+                    }
+                )
 
     return JSONResponse({
         "date": day,
@@ -2238,111 +2284,8 @@ async def adv_idx_options_backtest_report(
 @app.get("/api/live-picks")
 async def get_live_picks():
     """Compute live stock picks from current stocks cache."""
-    stocks  = signals.state.get("last_stocks", [])
-    indices = signals.state.get("last_macro", {}) or {}
-    chain   = signals.state.get("last_chain", {}) or {}
-    pcr     = chain.get("pcr", 1.0)
-    vix     = indices.get("vix", 15.0)
-    g_pass  = signals.state.get("pass_count", 0)   # global gate pass count
-    global_verdict = signals.state.get("verdict", "WAIT")
-
-    picks = []
-    for s in stocks:
-        sym    = s.get("symbol", "")
-        price  = s.get("price", 0) or 0
-        if not price or sym in ("NIFTY", "BANKNIFTY", "INDIAVIX"):
-            continue
-        chg    = s.get("chg_pct", 0) or 0
-        vol_r  = s.get("vol_ratio", 1.0) or 1.0
-        oi_pct = s.get("oi_chg_pct", 0) or 0
-        # Score stock-level quality
-        stock_score = 0
-        if abs(chg) >= 1.5: stock_score += 3
-        elif abs(chg) >= 0.5: stock_score += 1
-        if vol_r >= 2.0: stock_score += 2
-        elif vol_r >= 1.3: stock_score += 1
-        if abs(oi_pct) >= 5: stock_score += 2
-        elif abs(oi_pct) >= 2: stock_score += 1
-        if stock_score < 1:
-            continue  # skip flat/no-activity stocks
-
-        # Simple ATR proxy: 1.5% of price
-        atr    = price * 0.015
-        if chg >= 1.5:
-            setup    = "Breakout"
-            entry_p  = price * 1.002
-        elif chg > 0:
-            setup    = "Pullback"
-            entry_p  = price - 0.2 * atr
-        elif chg > -0.5:
-            setup    = "Recovery"
-            entry_p  = price + 0.1 * atr
-        else:
-            setup    = "Momentum"
-            entry_p  = price
-
-        sl_p   = entry_p - 1.5 * atr
-        tgt_p  = entry_p + 2.5 * (entry_p - sl_p)
-        tgt_pp = entry_p + 4.0 * (entry_p - sl_p)
-        rr     = round((tgt_p - entry_p) / max(entry_p - sl_p, 1), 1)
-        rr_p   = round((tgt_pp - entry_p) / max(entry_p - sl_p, 1), 1)
-        score  = min(99, round(40 + g_pass * 8 + stock_score * 4 + (5 if vol_r >= 1.5 else 0)))
-        pc     = int(s.get("pc", g_pass) or g_pass)
-        stock_verdict = str(s.get("verdict", global_verdict or "WAIT"))
-        signal_label = str(s.get("signal", "WATCH")).upper()
-        if stock_verdict == "EXECUTE" and pc >= 5:
-            conf = "CONFIRMED"
-            cls = "rpk-go"
-        elif stock_verdict in ("EXECUTE", "WATCH") or pc >= 3:
-            conf = "HIGH CONF" if pc >= 4 else "WATCH"
-            cls = "rpk-go" if pc >= 4 else "rpk-am"
-        elif global_verdict == "NO TRADE" or s.get("g1") == "st" or s.get("g5") == "st":
-            conf = "NO TRADE"
-            cls = "rpk-st"
-            stock_verdict = "NO TRADE"
-        else:
-            conf = "WATCH"
-            cls = "rpk-am"
-
-        sec_map = {
-            "HDFCBANK":"Banking","ICICIBANK":"Banking","AXISBANK":"Banking",
-            "KOTAKBANK":"Banking","INDUSINDBK":"Banking","SBIN":"PSU Bank",
-            "BANKNIFTY":"Index","TCS":"IT","INFY":"IT","MARUTI":"Auto",
-            "TATAMOTORS":"Auto","LT":"Infra","BAJFINANCE":"NBFC","RELIANCE":"Energy",
-            "TATASTEEL":"Steel","SUNPHARMA":"Pharma","BAJFINANCE":"NBFC",
-        }
-        sector = sec_map.get(sym, "Market")
-        oi_pct = s.get("oi_chg_pct", 0) or 0
-
-        def _pf(p):
-            return str(round(p, 1)) if p < 2000 else str(int(round(p)))
-
-        picks.append({
-            "sym":      sym,
-            "score":    score,
-            "pc":       pc,
-            "conf":     conf,
-            "cls":      cls,
-            "setup":    setup,
-            "close":    price,
-            "chg_pct":  round(chg, 2),
-            "vol_ratio":round(vol_r, 1),
-            "oi_chg_pct": round(oi_pct, 1),
-            "entry":    _pf(entry_p),
-            "sl":       _pf(sl_p),
-            "target":   _pf(tgt_p),
-            "target_p": _pf(tgt_pp),
-            "rr":       rr,
-            "rr_p":     rr_p,
-            "meta":     f"{setup} · {sector} · Vol {vol_r:.1f}x · OI {oi_pct:+.1f}% · VIX {vix:.1f}",
-            "reason":   f"{stock_verdict} · {pc}/5 gates · {signal_label} · R:R 1:{rr}",
-            "reason_p": f"{stock_verdict} · {pc}/5 gates · Swing target · R:R 1:{rr_p}",
-            "g1": s.get("g1","wt"), "g2": s.get("g2","wt"),
-            "g3": s.get("g3","wt"), "g4": s.get("g4","wt"), "g5": s.get("g5","wt"),
-        })
-
-    picks.sort(key=lambda x: (-x["pc"], -x["score"]))
-    return JSONResponse({"picks": picks[:8], "count": len(picks)})
+    lp = compute_live_picks(signals.state)
+    return JSONResponse({"picks": lp["picks"][:8], "count": lp["total"]})
 
 
 @app.get("/api/signals/history")
@@ -2580,6 +2523,12 @@ async def swing_radar_backtest_api(request: Request):
         max_fd = 12
     max_fd = max(3, min(max_fd, 30))
 
+    raw_clear = body.get("clear_existing", True)
+    if isinstance(raw_clear, str):
+        clear_existing = raw_clear.strip().lower() not in {"0", "false", "no", "off"}
+    else:
+        clear_existing = bool(raw_clear)
+
     kite = get_kite()
     if not kite:
         return JSONResponse({"error": "Kite not available"}, status_code=503)
@@ -2587,12 +2536,20 @@ async def swing_radar_backtest_api(request: Request):
     loop = asyncio.get_running_loop()
 
     def _run():
-        return srb.run_swing_radar_backtest(kite, from_d, to_d, max_forward_days=max_fd)
+        return srb.run_swing_radar_backtest(kite, from_d, to_d, max_forward_days=max_fd, clear_existing=clear_existing)
 
     result = await loop.run_in_executor(None, _run)
     if result.get("error"):
         return JSONResponse(result, status_code=400)
     return JSONResponse(result)
+
+
+@app.get("/api/swing-radar-backtest-report")
+async def swing_radar_backtest_report(from_date: str | None = None, to_date: str | None = None):
+    import swing_radar_backtest as srb
+
+    report = srb.build_swing_backtest_report(from_date, to_date)
+    return JSONResponse(report)
 
 
 @app.get("/api/chain/{symbol}")
@@ -2665,9 +2622,15 @@ async def backtest_status():
 
 
 @app.post("/api/backtest/download")
-async def backtest_download():
-    """Start 3-year historical data download (runs in background thread)."""
+async def backtest_download(request: Request):
+    """Start historical data download (runs in background thread)."""
     import asyncio, backtest_data as bd
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    days = max(60, min(int(body.get("days") or 1095), 1825))
 
     async def _dl():
         loop = asyncio.get_event_loop()
@@ -2675,16 +2638,16 @@ async def backtest_download():
             bd.init_db()
             from feed import get_kite
             kite = get_kite()
-            await loop.run_in_executor(None, lambda: bd.download_kite_history(kite, days=1095))
-            await loop.run_in_executor(None, lambda: bd.download_chain_history(days=1095))
-            await loop.run_in_executor(None, lambda: bd.download_fii_history(days=1095))
+            await loop.run_in_executor(None, lambda: bd.download_kite_history(kite, days=days))
+            await loop.run_in_executor(None, lambda: bd.download_chain_history(days=days))
+            await loop.run_in_executor(None, lambda: bd.download_fii_history(days=days))
             await loop.run_in_executor(None, bd.fill_outcomes)
             logger.info("Backtest data download complete")
         except Exception as e:
             logger.error(f"Backtest download error: {e}", exc_info=True)
 
     asyncio.create_task(_dl())
-    return JSONResponse({"message": "Download started — NIFTY OHLCV + VIX + chain PCR for 3 years. Check /api/backtest/status."})
+    return JSONResponse({"message": f"Download started - up to {days} days of NIFTY OHLCV, VIX, chain PCR, and FII history. Check /api/backtest/status."})
 
 
 @app.post("/api/backtest/run")
@@ -4397,20 +4360,26 @@ async def spikes_universe_cards(
 
 
 @app.post("/api/backtest/download-fii")
-async def backtest_download_fii():
-    """Download 3-year FII/DII daily net flow history from NSE."""
+async def backtest_download_fii(request: Request):
+    """Download FII/DII daily net flow history from NSE."""
     import asyncio, backtest_data as bd
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    days = max(60, min(int(body.get("days") or 1095), 1825))
 
     async def _dl():
         loop = asyncio.get_event_loop()
         try:
-            await loop.run_in_executor(None, lambda: bd.download_fii_history(days=1095))
+            await loop.run_in_executor(None, lambda: bd.download_fii_history(days=days))
             logger.info("FII history download complete")
         except Exception as e:
             logger.error(f"FII download error: {e}", exc_info=True)
 
     asyncio.create_task(_dl())
-    return JSONResponse({"message": "FII history download started. Check /api/backtest/status."})
+    return JSONResponse({"message": f"FII history download started for up to {days} days. Check /api/backtest/status."})
 
 
 # ─── TELEGRAM ─────────────────────────────────────────────────────────────────
@@ -4773,3 +4742,5 @@ async def history_stats(months: int = 3):
 if __name__ == "__main__":
     uvicorn.run("main:app", host=HOST, port=PORT,
                 log_level="info", access_log=False, reload=False)
+
+

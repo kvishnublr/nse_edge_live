@@ -544,6 +544,7 @@ def swing_radar_candidates(
     _verdict: str,
     _pass_count: int,
     min_score: int = 60,
+    limit: int | None = 12,
 ) -> list:
     """
     Core Swing Radar stock filtering (same rules as live persist). Returns up to 12 picks.
@@ -555,7 +556,13 @@ def swing_radar_candidates(
     except Exception:
         SWR = {
             "min_score_log": 58,
+            "min_pc_log": 0,
             "min_rr": 1.72,
+            "min_abs_chg_pct": 0.0,
+            "max_abs_chg_pct": 0.0,
+            "min_vol_ratio": 0.0,
+            "allowed_setups": [],
+            "allowed_directions": [],
             "vix_strict_above": 22.0,
             "vix_extra_min_score": 3,
             "nifty_against_threshold": 0.45,
@@ -579,11 +586,26 @@ def swing_radar_candidates(
         weak_syms = {str(x).upper() for x in (get_signal_accuracy_filters().get("weak_symbols") or [])}
     except Exception:
         pass
+    blocked_syms = {str(x).upper() for x in (SWR.get("blocked_symbols") or []) if str(x).strip()}
 
     vix = float((indices or {}).get("vix", 0) or 0)
     pcr = float((chain or {}).get("pcr", 0) or 0)
     nifty_chg = float((indices or {}).get("nifty_chg", 0) or 0)
     verdict_raw = str(_verdict or "").upper().strip().replace(" ", "_")
+    min_pc = int(SWR.get("min_pc_log", 0) or 0)
+    min_abs_chg = float(SWR.get("min_abs_chg_pct", 0.0) or 0.0)
+    max_abs_chg = float(SWR.get("max_abs_chg_pct", 0.0) or 0.0)
+    min_vol_ratio = float(SWR.get("min_vol_ratio", 0.0) or 0.0)
+
+    def _cfg_upper_set(val) -> set[str]:
+        if isinstance(val, str):
+            return {p.strip().upper() for p in val.split(",") if p.strip()}
+        if isinstance(val, (list, tuple, set)):
+            return {str(x).strip().upper() for x in val if str(x).strip()}
+        return set()
+
+    allowed_setups = _cfg_upper_set(SWR.get("allowed_setups"))
+    allowed_directions = _cfg_upper_set(SWR.get("allowed_directions"))
 
     min_log = int(SWR.get("min_score_log", min_score))
     if vix >= float(SWR.get("vix_strict_above", 22.0)):
@@ -593,7 +615,7 @@ def swing_radar_candidates(
     skip_syms = {"NIFTY", "BANKNIFTY", "INDIAVIX"}
     for s in stocks:
         sym = str(s.get("symbol", "") or "").upper()
-        if not sym or sym in skip_syms:
+        if not sym or sym in skip_syms or sym in blocked_syms:
             continue
         price = float(s.get("price", 0) or 0)
         if price <= 0:
@@ -606,9 +628,18 @@ def swing_radar_candidates(
             continue
 
         pc = int(s.get("pc", 0) or 0)
+        if pc < min_pc:
+            continue
         vol_r = float(s.get("vol_ratio", 0) or 0)
+        if vol_r < min_vol_ratio:
+            continue
         rs = float(s.get("rs_pct", 0) or 0)
         oi_p = float(s.get("oi_chg_pct", 0) or 0)
+        abs_chg = abs(chg)
+        if abs_chg < min_abs_chg:
+            continue
+        if max_abs_chg > 0 and abs_chg > max_abs_chg:
+            continue
         atr_pct = float(s.get("atr_pct", 0) or max(abs(chg) * 0.8, 1.2))
         atr = max(price * atr_pct / 100.0, price * 0.006)
         direction = "LONG" if chg >= 0 else "SHORT"
@@ -654,6 +685,32 @@ def swing_radar_candidates(
         else:
             setup = "Recovery"
 
+        if allowed_setups and setup.upper() not in allowed_setups:
+            continue
+        if allowed_directions and direction.upper() not in allowed_directions:
+            continue
+
+        if bool(SWR.get("pullback_short_only", False)) and not (setup == "Pullback" and direction == "SHORT"):
+            continue
+
+        if setup == "Pullback" and direction == "SHORT":
+            if pc < int(SWR.get("pullback_short_min_pc", 0)):
+                continue
+            if rank_score < float(SWR.get("pullback_short_min_rank_score", 0)):
+                continue
+
+        if setup == "Breakout" and direction == "LONG":
+            if not bool(SWR.get("breakout_long_enabled", True)):
+                continue
+            if pc < int(SWR.get("breakout_long_min_pc", 0)):
+                continue
+            if rs < float(SWR.get("breakout_long_min_rs", -9.0)):
+                continue
+            if vol_r < float(SWR.get("breakout_long_min_vol", 0.0)):
+                continue
+            if abs(chg) > float(SWR.get("breakout_long_max_chg", 99.0)):
+                continue
+
         if setup == "Breakout":
             v_need = float(
                 SWR.get("vol_breakout_min_vix", 1.22)
@@ -687,8 +744,16 @@ def swing_radar_candidates(
             }
         )
 
-    picks.sort(key=lambda x: -x["rank_score"])
-    return picks[:12]
+    picks.sort(
+        key=lambda x: (
+            -x["rank_score"],
+            -x["pc"],
+            -abs(float(x.get("chg") or 0)),
+            -float(x.get("vol_r") or 0),
+            str(x.get("sym") or ""),
+        )
+    )
+    return picks if limit is None else picks[: max(0, int(limit))]
 
 
 def log_swing_radar_triggers(
@@ -996,8 +1061,8 @@ def replace_index_signal_rows(sigs: list, trade_date: str | None = None) -> int:
                   (sig_id, trade_date, symbol, type, signal_time, ts,
                    index_px, strike, entry, sl, t1, t2, rr, lot_sz, lot_pnl_t1,
                    chg_pct, strength, vix, quality, pcr, option_expiry, option_week,
-                   outcome, exit_time, created_ts, updated_ts)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                   outcome, exit_time, outcome_ltp, created_ts, updated_ts)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     sid,
@@ -1024,6 +1089,7 @@ def replace_index_signal_rows(sigs: list, trade_date: str | None = None) -> int:
                     sig.get("option_week"),
                     sig.get("outcome"),
                     sig.get("exit_time") or sig.get("outcome_time"),
+                    sig.get("outcome_ltp"),
                     ts,
                     now_wall,
                 ),
@@ -1193,3 +1259,5 @@ def get_signal_accuracy_filters():
         "symbol_stats": {k: {"sample": v["n"], "win_rate": round(v["w"] / v["n"] * 100, 1)} for k, v in symbol_stats.items()},
         "bucket_stats": {k: {"sample": v["n"], "win_rate": round(v["w"] / v["n"] * 100, 1)} for k, v in bucket_stats.items()},
     }
+
+

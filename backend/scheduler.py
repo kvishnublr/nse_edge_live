@@ -65,6 +65,8 @@ def _ix_migrate_cols():
             conn.execute("ALTER TABLE index_signal_history ADD COLUMN option_week TEXT")
         if "exit_time" not in have:
             conn.execute("ALTER TABLE index_signal_history ADD COLUMN exit_time TEXT")
+        if "outcome_ltp" not in have:
+            conn.execute("ALTER TABLE index_signal_history ADD COLUMN outcome_ltp REAL")
         # Cleanup historical duplicate rows created before strict upserts:
         # keep latest id for the same business signal identity.
         conn.execute("""
@@ -164,11 +166,12 @@ def _ix_db_upsert(sig):
               (sig_id, trade_date, symbol, type, signal_time, ts,
                index_px, strike, entry, sl, t1, t2, rr, lot_sz, lot_pnl_t1,
                chg_pct, strength, vix, quality, pcr, option_expiry, option_week,
-               outcome, exit_time, created_ts, updated_ts)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               outcome, exit_time, outcome_ltp, created_ts, updated_ts)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(sig_id) DO UPDATE SET
               outcome=excluded.outcome,
               exit_time=COALESCE(excluded.exit_time, index_signal_history.exit_time),
+              outcome_ltp=COALESCE(excluded.outcome_ltp, index_signal_history.outcome_ltp),
               option_expiry=COALESCE(excluded.option_expiry, option_expiry),
               option_week=COALESCE(excluded.option_week, option_week),
               updated_ts=excluded.updated_ts
@@ -184,6 +187,7 @@ def _ix_db_upsert(sig):
             sig.get("option_expiry"), sig.get("option_week"),
             sig.get("outcome"),
             _exit,
+            sig.get("outcome_ltp"),
             sig["ts"], time.time()
         ))
         conn.commit()
@@ -1039,27 +1043,21 @@ def _ix_attach_option_ltps(signals, chain, bn_chain):
                 sig["option_expiry"] = ch.get("expiry")
             if not sig.get("option_week"):
                 sig["option_week"] = _ix_expiry_week_label(ch.get("expiry"))
-        ltp = None
+        new_ltp = None
         if ch and strike:
-            nearest = None
             for row in ch.get("strikes") or []:
                 try:
                     st = int(row.get("strike") or 0)
                 except (TypeError, ValueError):
                     continue
+                if st != strike:
+                    continue
                 raw = row.get("call_ltp" if is_ce else "put_ltp", 0)
-                if st == strike:
-                    ltp = float(raw or 0)
-                    break
-                # Fallback for stale/missing strike: use nearest listed strike quote.
-                d = abs(st - strike)
-                if nearest is None or d < nearest[0]:
-                    nearest = (d, float(raw or 0))
-            if (not ltp or ltp <= 0) and nearest:
-                ltp = nearest[1]
-        if ltp and ltp > 0:
-            sig["ltp"] = round(ltp, 2)
-        else:
+                new_ltp = float(raw or 0)
+                break
+        if new_ltp and new_ltp > 0:
+            sig["ltp"] = round(new_ltp, 2)
+        elif not sig.get("ltp"):
             sig["ltp"] = round(float(sig.get("entry") or 0), 2)
 
 
@@ -1092,26 +1090,29 @@ def _update_index_outcomes(signals, indices):
             if ltp >= t1:
                 sig["outcome"] = "HIT_T1"
                 sig["outcome_time"] = _otm
+                sig["outcome_ltp"] = round(ltp, 2)
                 continue
             if ltp <= sl:
                 sig["outcome"] = "HIT_SL"
                 sig["outcome_time"] = _otm
+                sig["outcome_ltp"] = round(ltp, 2)
                 continue
 
-        # Fallback: index move threshold (kept for resilience)
-        entry_idx = float(sig.get("entry_index_px", 0) or 0)
-        cur       = nifty if sig.get("symbol") == "NIFTY" else bn
-        if entry_idx and cur:
-            mv    = (cur - entry_idx) / entry_idx * 100
-            is_ce = sig.get("type") == "CE"
-            if   (is_ce and mv >= ix_t1) or (not is_ce and mv <= -ix_t1):
-                sig["outcome"] = "HIT_T1"
-                sig["outcome_time"] = _otm
-                continue
-            if (is_ce and mv <= -ix_sl) or (not is_ce and mv >= ix_sl):
-                sig["outcome"] = "HIT_SL"
-                sig["outcome_time"] = _otm
-                continue
+        # Optional fallback: index move threshold (can mark T1/SL without premium touch — off by default).
+        if _IXR.get("outcome_use_index_fallback"):
+            entry_idx = float(sig.get("entry_index_px", 0) or 0)
+            cur       = nifty if sig.get("symbol") == "NIFTY" else bn
+            if entry_idx and cur:
+                mv    = (cur - entry_idx) / entry_idx * 100
+                is_ce = sig.get("type") == "CE"
+                if   (is_ce and mv >= ix_t1) or (not is_ce and mv <= -ix_t1):
+                    sig["outcome"] = "HIT_T1"
+                    sig["outcome_time"] = _otm
+                    continue
+                if (is_ce and mv <= -ix_sl) or (not is_ce and mv >= ix_sl):
+                    sig["outcome"] = "HIT_SL"
+                    sig["outcome_time"] = _otm
+                    continue
 
         # Time expiry
         if now_ts - sig.get("ts", now_ts) > 2700:

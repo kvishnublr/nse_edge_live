@@ -69,12 +69,157 @@ def _simulate_daily(sym_series: list, start_i: int, direction: str, entry: float
     return "EXPIRED", round(last_close, 2), last_date, round(pct, 4), max_forward
 
 
+def summarize_swing_backtest_rows(rows: list[dict]) -> dict:
+    if not rows:
+        return {
+            "total_trades": 0,
+            "resolved_trades": 0,
+            "target_hits": 0,
+            "sl_hits": 0,
+            "expired": 0,
+            "win_rate_pct": 0.0,
+            "resolved_win_rate_pct": 0.0,
+            "avg_pnl_pct": 0.0,
+            "median_pnl_pct": 0.0,
+            "profit_factor": 0.0,
+            "expectancy_pct": 0.0,
+            "avg_hold_days": 0.0,
+            "gross_profit_pct_sum": 0.0,
+            "gross_loss_pct_sum_abs": 0.0,
+            "by_setup": [],
+            "by_month": [],
+            "top_symbols": [],
+            "bottom_symbols": [],
+        }
+
+    wins = [r for r in rows if r.get("outcome") == "TARGET HIT"]
+    losses = [r for r in rows if r.get("outcome") == "SL HIT"]
+    expired = [r for r in rows if r.get("outcome") == "EXPIRED"]
+    pnl_values = [float(r.get("pnl_pct") or 0.0) for r in rows]
+    gross_profit = round(sum(v for v in pnl_values if v > 0), 4)
+    gross_loss_abs = round(sum(-v for v in pnl_values if v < 0), 4)
+    resolved_win_rate = round(len(wins) / len(rows) * 100, 1) if rows else 0.0
+    wl_base = len(wins) + len(losses)
+    win_rate = round(len(wins) / wl_base * 100, 1) if wl_base else 0.0
+    avg_pnl = round(statistics.mean(pnl_values), 4) if pnl_values else 0.0
+    med_pnl = round(statistics.median(pnl_values), 4) if pnl_values else 0.0
+    pf = round(gross_profit / gross_loss_abs, 3) if gross_loss_abs > 0 else None
+    hold_days = [max(0.0, float(r.get("hold_minutes") or 0) / 1440.0) for r in rows]
+
+    def _bucket(key_fn):
+        buckets: dict[str, dict[str, float]] = {}
+        for row in rows:
+            key = key_fn(row)
+            bucket = buckets.setdefault(key, {"n": 0, "wins": 0, "sum_pnl": 0.0})
+            bucket["n"] += 1
+            if row.get("outcome") == "TARGET HIT":
+                bucket["wins"] += 1
+            bucket["sum_pnl"] += float(row.get("pnl_pct") or 0.0)
+        return buckets
+
+    def _setup_from_trigger(trigger: str) -> str:
+        txt = str(trigger or "")
+        if "Swing " in txt and " |" in txt:
+            try:
+                return txt.split("Swing ", 1)[1].split(" |", 1)[0].strip()
+            except Exception:
+                return "Unknown"
+        return "Unknown"
+
+    setup_buckets = _bucket(lambda r: _setup_from_trigger(r.get("trigger")))
+    month_buckets = _bucket(lambda r: str(r.get("trade_date") or "")[:7])
+    symbol_buckets = _bucket(lambda r: str(r.get("symbol") or ""))
+
+    def _rows_from_buckets(buckets: dict[str, dict[str, float]], *, min_n: int = 1) -> list[dict]:
+        out = []
+        for key, data in buckets.items():
+            n = int(data["n"])
+            if n < min_n:
+                continue
+            out.append({
+                "key": key,
+                "trades": n,
+                "win_rate_pct": round(data["wins"] / n * 100, 1) if n else 0.0,
+                "avg_pnl_pct": round(data["sum_pnl"] / n, 4) if n else 0.0,
+            })
+        return out
+
+    top_symbols = sorted(_rows_from_buckets(symbol_buckets, min_n=2), key=lambda x: (-x["avg_pnl_pct"], -x["trades"], x["key"]))[:5]
+    bottom_symbols = sorted(_rows_from_buckets(symbol_buckets, min_n=2), key=lambda x: (x["avg_pnl_pct"], -x["trades"], x["key"]))[:5]
+
+    return {
+        "total_trades": len(rows),
+        "resolved_trades": len(rows),
+        "target_hits": len(wins),
+        "sl_hits": len(losses),
+        "expired": len(expired),
+        "win_rate_pct": win_rate,
+        "resolved_win_rate_pct": resolved_win_rate,
+        "avg_pnl_pct": avg_pnl,
+        "median_pnl_pct": med_pnl,
+        "profit_factor": pf or 0.0,
+        "expectancy_pct": avg_pnl,
+        "avg_hold_days": round(statistics.mean(hold_days), 2) if hold_days else 0.0,
+        "gross_profit_pct_sum": gross_profit,
+        "gross_loss_pct_sum_abs": gross_loss_abs,
+        "by_setup": sorted(_rows_from_buckets(setup_buckets), key=lambda x: (-x["avg_pnl_pct"], -x["trades"], x["key"])),
+        "by_month": sorted(_rows_from_buckets(month_buckets), key=lambda x: x["key"]),
+        "top_symbols": top_symbols,
+        "bottom_symbols": bottom_symbols,
+    }
+
+
+def build_swing_backtest_report(from_date: str | None = None, to_date: str | None = None) -> dict:
+    init_db()
+    conn = get_conn()
+    conn.row_factory = None
+    where = ["signal_key LIKE 'BT-SWING|%'"]
+    params: list[str] = []
+    if from_date:
+        where.append("trade_date >= ?")
+        params.append(str(from_date)[:10])
+    if to_date:
+        where.append("trade_date <= ?")
+        params.append(str(to_date)[:10])
+
+    rows = conn.execute(
+        f"""
+        SELECT trade_date, symbol, signal_type, trigger, outcome, pnl_pct, hold_minutes
+        FROM live_signal_history
+        WHERE {' AND '.join(where)}
+        ORDER BY trade_date ASC, id ASC
+        """,
+        params,
+    ).fetchall()
+    conn.close()
+
+    data = [
+        {
+            "trade_date": r[0],
+            "symbol": r[1],
+            "signal_type": r[2],
+            "trigger": r[3],
+            "outcome": r[4],
+            "pnl_pct": float(r[5] or 0.0),
+            "hold_minutes": int(r[6] or 0),
+        }
+        for r in rows
+    ]
+    report = summarize_swing_backtest_rows(data)
+    report.update({
+        "from_date": str(from_date)[:10] if from_date else (data[0]["trade_date"] if data else None),
+        "to_date": str(to_date)[:10] if to_date else (data[-1]["trade_date"] if data else None),
+    })
+    return report
+
+
 def run_swing_radar_backtest(
     kite,
     from_date: str,
     to_date: str,
     max_forward_days: int = 12,
     max_calendar_span_days: int = 1095,
+    clear_existing: bool = False,
 ) -> dict:
     """
     Returns {inserted, skipped_days, errors, from_date, to_date, symbols_loaded}
@@ -94,6 +239,20 @@ def run_swing_radar_backtest(
     if (td - fd).days > max_calendar_span_days:
         conn.close()
         return {"error": f"Range exceeds {max_calendar_span_days} days (~3y cap)", "inserted": 0}
+
+    cleared_existing = 0
+    if clear_existing:
+        try:
+            cur = conn.execute(
+                """DELETE FROM live_signal_history
+                   WHERE signal_key LIKE 'BT-SWING|%'
+                     AND trade_date >= ? AND trade_date <= ?""",
+                (str(from_date)[:10], str(to_date)[:10]),
+            )
+            cleared_existing = int(cur.rowcount or 0)
+            conn.commit()
+        except Exception as e:
+            logger.warning("swing BT clear_existing failed: %s", e)
 
     context_from = fd - timedelta(days=120)
     ctx_from_s = context_from.isoformat()
@@ -311,7 +470,7 @@ def run_swing_radar_backtest(
                          entry_price, stop_loss, target_price, exit_price, exit_time, status, outcome,
                          pnl_pts, pnl_pct, hold_minutes, gate_pass_count, gate_snapshot, verdict, vix, pcr,
                          created_ts, updated_ts)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                         """,
                         (
                             signal_key,
@@ -351,6 +510,7 @@ def run_swing_radar_backtest(
     return {
         "ok": True,
         "inserted": inserted,
+        "cleared_existing": cleared_existing,
         "skipped_days": skipped,
         "errors": errors[:50],
         "error_count": len(errors),
@@ -358,4 +518,5 @@ def run_swing_radar_backtest(
         "to_date": to_s,
         "symbols_loaded": len(sym_series),
         "max_forward_days": max_forward_days,
+        "report": build_swing_backtest_report(str(from_date)[:10], to_s),
     }
