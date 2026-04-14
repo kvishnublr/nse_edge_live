@@ -1,5 +1,5 @@
-// NSE EDGE v5 — Service Worker
-const CACHE = 'nse-edge-v2';
+// STOCKR.IN — Service Worker
+const CACHE = 'stockr-v3';
 const STATIC = ['/', '/index.html'];
 
 self.addEventListener('install', e => {

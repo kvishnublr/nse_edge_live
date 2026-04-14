@@ -1,5 +1,5 @@
 """
-NSE EDGE v5 — Signal Engine
+STOCKR.IN — Signal Engine
 5-gate filter driven entirely by Kite Connect live data.
 """
 
@@ -1426,6 +1426,12 @@ def run_signal_engine(indices: dict, chain: dict, fii: dict,
         "position_size_rupees": position_size_rupees,
     })
 
+    try:
+        from modules.saas.routes import route_market_state_snapshot
+        route_market_state_snapshot(state)
+    except Exception as e:
+        logger.debug("saas market snapshot routing: %s", e)
+
     # ── Telegram alert on verdict change (optional — off when only SPIKE HUNT / ADV INDEX TG) ──
     global _last_telegram_verdict
     from config import TELEGRAM_NOTIFY_SIGNAL_ENGINE
@@ -1446,7 +1452,7 @@ def run_signal_engine(indices: dict, chain: dict, fii: dict,
             pos_lots = gates_dict.get(5, {}).get("position_size_lots", 0)
             pos_rs   = gates_dict.get(5, {}).get("position_size_rupees", 0)
             msg = (
-                f"🟢 <b>NSE EDGE — EXECUTE SIGNAL</b>\n"
+                f"🟢 <b>STOCKR.IN — EXECUTE SIGNAL</b>\n"
                 f"Nifty: <b>{nifty:.0f}</b>  |  VIX: {vix:.1f}  |  PCR: {pcr:.2f}\n"
                 f"Gates: {pass_cnt}/5 PASS  |  Confidence: {confidence}/10\n"
                 f"FII: ₹{fii_net:.0f} Cr\n"
@@ -1458,7 +1464,7 @@ def run_signal_engine(indices: dict, chain: dict, fii: dict,
             msg += "<b>All gates clear — trade now</b>"
             _send_telegram(msg)
         elif TELEGRAM_NOTIFY_SIGNAL_ENGINE and verdict == "NO TRADE" and prev_verdict == "EXECUTE":
-            _send_telegram("🔴 <b>NSE EDGE — EXECUTE cancelled</b>\nGate failed — stand down.")
+            _send_telegram("🔴 <b>STOCKR.IN — EXECUTE cancelled</b>\nGate failed — stand down.")
 
     # ── Log to DB for backtest analysis (non-blocking) ──
     try:

@@ -1,7 +1,7 @@
 """
-NSE EDGE v5 — Gate Weights & Confidence Scoring
+STOCKR.IN v5 â€” Gate Weights & Confidence Scoring
 Analyzes backtest + live signal history to determine which gates
-are most predictive. Generates a confidence score (0–10) for live signals.
+are most predictive. Generates a confidence score (0â€“10) for live signals.
 """
 
 import logging
@@ -12,7 +12,7 @@ GATE_NAMES = {1: "REGIME", 2: "SMART MONEY", 3: "STRUCTURE", 4: "TRIGGER", 5: "R
 DEFAULT_WEIGHTS = {1: 0.20, 2: 0.20, 3: 0.20, 4: 0.20, 5: 0.20}
 
 
-# ─── COMPUTE & SAVE WEIGHTS ───────────────────────────────────────────────────
+# â”€â”€â”€ COMPUTE & SAVE WEIGHTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def compute_and_save_weights() -> dict:
     """
     Load signal_log with known outcomes, measure each gate's predictive lift,
@@ -34,7 +34,7 @@ def compute_and_save_weights() -> dict:
         return DEFAULT_WEIGHTS
 
     if len(rows) < 10:
-        logger.info(f"Insufficient data ({len(rows)} EXECUTE rows) — using equal weights")
+        logger.info(f"Insufficient data ({len(rows)} EXECUTE rows) â€” using equal weights")
         return DEFAULT_WEIGHTS
 
     total_wins    = sum(1 for r in rows if r[5] == "WIN")
@@ -58,7 +58,7 @@ def compute_and_save_weights() -> dict:
             wr_go = wins_go[gi] / total_go[gi]
             lifts[gi] = max(0.01, wr_go / baseline_wr if baseline_wr > 0 else 1.0)
         else:
-            lifts[gi] = 1.0   # no data → neutral
+            lifts[gi] = 1.0   # no data â†’ neutral
 
     total_lift = sum(lifts.values())
     weights    = {gi: round(l / total_lift, 4) for gi, l in lifts.items()}
@@ -83,7 +83,7 @@ def compute_and_save_weights() -> dict:
     return weights
 
 
-# ─── LOAD WEIGHTS ─────────────────────────────────────────────────────────────
+# â”€â”€â”€ LOAD WEIGHTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def get_weights() -> dict:
     """Load from DB; fall back to equal weights."""
     try:
@@ -98,11 +98,11 @@ def get_weights() -> dict:
     return DEFAULT_WEIGHTS
 
 
-# ─── LIVE CONFIDENCE SCORE ────────────────────────────────────────────────────
+# â”€â”€â”€ LIVE CONFIDENCE SCORE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def compute_confidence(gates: dict) -> float:
     """
-    Confidence score 0–10 for a live signal.
-    = weighted sum of (gate_score/100 × state_multiplier) × 10
+    Confidence score 0â€“10 for a live signal.
+    = weighted sum of (gate_score/100 Ã— state_multiplier) Ã— 10
     """
     weights = get_weights()
     state_mult = {"go": 1.0, "am": 0.6, "wt": 0.4, "st": 0.0}
@@ -115,7 +115,7 @@ def compute_confidence(gates: dict) -> float:
     return round(total * 10, 1)
 
 
-# ─── FULL GATE ANALYSIS ───────────────────────────────────────────────────────
+# â”€â”€â”€ FULL GATE ANALYSIS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def get_gate_analysis() -> dict:
     """Return full per-gate analysis for frontend display."""
     try:

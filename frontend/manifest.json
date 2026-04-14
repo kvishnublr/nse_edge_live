@@ -1,6 +1,6 @@
 {
-  "name": "NSE EDGE — Intelligent Trading System",
-  "short_name": "NSE EDGE",
+  "name": "STOCKR.IN — Trading Intelligence Platform",
+  "short_name": "STOCKR.IN",
   "description": "5-gate signal engine for NSE F&O trading",
   "start_url": "/",
   "display": "standalone",

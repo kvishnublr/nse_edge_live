@@ -1,5 +1,5 @@
 """
-NSE EDGE v5 — FastAPI Backend (Zerodha Kite Connect only)
+STOCKR.IN — FastAPI Backend (Zerodha Kite Connect only)
 Start: python3 main.py
 """
 
@@ -24,6 +24,7 @@ import signals
 import scheduler as sched
 from feed import feed_manager, get_all_prices
 from live_picks import compute_live_picks
+from modules.saas.routes import router as _saas_router, init_saas_db
 from config import (
     HOST, PORT, KITE_API_KEY, KITE_ACCESS_TOKEN, is_market_open, is_market_session_day, get_market_status,
     apply_strategy_profile, get_strategy_profile_name, get_strategy_profiles,
@@ -82,7 +83,7 @@ async def _bcast_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("=" * 55)
-    logger.info("  NSE EDGE v5 — Zerodha Kite Connect")
+    logger.info("  STOCKR.IN — Zerodha Kite Connect")
     logger.info("=" * 55)
 
     # Validate config — if token missing, try auto-refresh before giving up
@@ -119,6 +120,8 @@ async def lifespan(app: FastAPI):
         import backtest_data as bd
         bd.init_db()
         logger.info("Backtest DB ready")
+        init_saas_db()
+        logger.info("SaaS DB ready")
     except Exception as e:
         logger.warning(f"Backtest DB init failed (non-critical): {e}")
 
@@ -329,7 +332,7 @@ async def lifespan(app: FastAPI):
     feed_manager.stop()
 
 
-app = FastAPI(title="NSE EDGE v5", version="5.0.0", lifespan=lifespan)
+app = FastAPI(title="STOCKR.IN", version="5.0.0", lifespan=lifespan)
 
 # ─── CORS CONFIGURATION ─────────────────────────────────────────────────────────
 _extra_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
@@ -369,7 +372,7 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_origin_regex=_ALLOW_LAN_ORIGIN_REGEX,
     allow_credentials=False,  # Disabled for better security
-    allow_methods=["GET", "POST"],  # Only GET and POST
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
 
@@ -383,9 +386,17 @@ try:
 except Exception as _pb_exc:
     logger.exception("FATAL: playbook_routes failed to mount: %s", _pb_exc)
 
+try:
+    app.include_router(_saas_router)
+    logger.info("Mounted SaaS platform API (%d paths)", len(_saas_router.routes))
+except Exception as _saas_exc:
+    logger.exception("FATAL: saas platform failed to mount: %s", _saas_exc)
+
 
 # ─── FRONTEND ─────────────────────────────────────────────────────────────────
-_FRONTEND = os.path.join(os.path.dirname(__file__), "..", "frontend", "index.html")
+FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
+_FRONTEND = os.path.join(FRONTEND_DIR, "index.html")
+app.mount("/frontend-static", StaticFiles(directory=os.path.abspath(FRONTEND_DIR)), name="frontend-static")
 
 @app.get("/")
 async def serve_frontend():
@@ -466,7 +477,7 @@ async def _send_initial(ws: WebSocket):
             await ws.send_text(json.dumps({"type": "fii", "timestamp": now, "data": signals.state["last_fii"]}))
         await ws.send_text(json.dumps({"type": "spikes", "timestamp": now, "data": signals.state.get("spikes", [])}))
         await ws.send_text(json.dumps({"type": "ticker", "timestamp": now, "data": signals.state.get("ticker", [])}))
-        await ws.send_text(json.dumps({"type": "ready", "timestamp": now, "msg": "NSE EDGE v5 Live"}))
+        await ws.send_text(json.dumps({"type": "ready", "timestamp": now, "msg": "STOCKR.IN Live"}))
     except Exception as e:
         logger.error(f"Initial state send: {e.__class__.__name__}: {e}")
 
@@ -4396,7 +4407,7 @@ async def telegram_test():
         )
 
     msg = (
-        "✅ <b>NSE EDGE — Telegram test</b>\n"
+        "✅ <b>STOCKR.IN — Telegram test</b>\n"
         "Bot is connected. SPIKE HUNT + ADV INDEX alerts go to this chat.\n"
         f"Server verdict: <b>{signals.state['verdict']}</b>  "
         f"Gates: {signals.state['pass_count']}/5"
@@ -4464,7 +4475,7 @@ async def whatsapp_test():
         )
 
     msg = (
-        f"NSE EDGE — WhatsApp test\n"
+        f"STOCKR.IN — WhatsApp test\n"
         f"Bot connected. Alerts active.\n"
         f"Verdict: {signals.state['verdict']}  Gates: {signals.state['pass_count']}/5"
     )

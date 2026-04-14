@@ -1,5 +1,5 @@
 """
-NSE EDGE v5 — Scheduler (Kite Connect only)
+STOCKR.IN v5 â€” Scheduler (Kite Connect only)
 All jobs call Kite APIs or read from the Kite price cache.
 """
 
@@ -139,21 +139,27 @@ def _notify_index_radar_new(sig: dict) -> None:
         tm = sig.get("time", "")
         chg = float(sig.get("chg_pct") or 0)
         h15 = sig.get("hunt_15m_pct")
-        line2 = f"<i>{tm} IST</i> · 5m move <b>{chg:+.2f}%</b>"
+        line2 = f"<i>{tm} IST</i> Â· 5m move <b>{chg:+.2f}%</b>"
         if h15 is not None:
-            line2 += f" · 15m <b>{float(h15):+.2f}%</b>"
+            line2 += f" Â· 15m <b>{float(h15):+.2f}%</b>"
         line2 += "\n"
         msg = (
-            f"📡 <b>INDEX HUNT — {sym} {strike} {typ}</b>\n"
+            f"ðŸ“¡ <b>INDEX HUNT â€” {sym} {strike} {typ}</b>\n"
             + line2
-            + f"Premium entry <b>₹{float(sig.get('entry') or 0):.2f}</b> · SL ₹{float(sig.get('sl') or 0):.2f} · "
-            f"T1 ₹{float(sig.get('t1') or 0):.2f} · R:R {sig.get('rr', '—')}\n"
-            f"VIX {float(sig.get('vix') or 0):.1f} · PCR {float(sig.get('pcr') or 0):.2f} · "
-            f"Q {int(sig.get('quality') or 0)} · {sig.get('strength', 'md')}"
+            + f"Premium entry <b>â‚¹{float(sig.get('entry') or 0):.2f}</b> Â· SL â‚¹{float(sig.get('sl') or 0):.2f} Â· "
+            f"T1 â‚¹{float(sig.get('t1') or 0):.2f} Â· R:R {sig.get('rr', 'â€”')}\n"
+            f"VIX {float(sig.get('vix') or 0):.1f} Â· PCR {float(sig.get('pcr') or 0):.2f} Â· "
+            f"Q {int(sig.get('quality') or 0)} Â· {sig.get('strength', 'md')}"
         )
         send_telegram_message(msg)
     except Exception as e:
         logger.debug("index radar telegram: %s", e)
+
+    try:
+        from modules.saas.routes import route_index_signal
+        route_index_signal(sig)
+    except Exception as e:
+        logger.debug("saas index routing: %s", e)
 
 
 def _ix_db_upsert(sig):
@@ -204,11 +210,11 @@ _ws      = None
 _cache   = {"indices": None, "chain": None, "bn_chain": None, "fii": None,
             "stocks": [], "mode": "intraday",
             "ix_px_hist": [],   # [(ts, nifty_px, bn_px), ...] for index spike detection
-            "prev_chain_totals": None,  # for confluence ΔOI (confluence_engine)
+            "prev_chain_totals": None,  # for confluence Î”OI (confluence_engine)
             "ix_sess_open": None,   # {"date", "nifty", "bn"} for session_open_lock (precision_v2)
             "ix_daily_pick": None}  # per-day caps for daily_pick_enabled
 
-# ─── CIRCUIT BREAKER (prevent cascading failures) ──────────────────────────────
+# â”€â”€â”€ CIRCUIT BREAKER (prevent cascading failures) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 _job_errors = {}  # Track consecutive errors per job
 MAX_CONSECUTIVE_ERRORS = 10
 
@@ -299,9 +305,9 @@ def refresh_confluence_broadcast(persist: bool = True) -> None:
         logger.debug("refresh_confluence_broadcast: %s", e)
 
 
-# ─── JOB: BROADCAST PRICES (every 1 second) ───────────────────────────────────
+# â”€â”€â”€ JOB: BROADCAST PRICES (every 1 second) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def job_prices():
-    """Broadcast latest prices from Kite cache — KiteTicker keeps them fresh."""
+    """Broadcast latest prices from Kite cache â€” KiteTicker keeps them fresh."""
     global _job_prices_rest_ts
     try:
         from feed import get_all_prices, fetch_quotes_rest, get_kite, feed_manager
@@ -326,7 +332,7 @@ def job_prices():
         logger.warning(f"job_prices: {e}")
 
 
-# ─── JOB: FETCH OPTION CHAIN + RUN GATES (every 30 seconds) ──────────────────
+# â”€â”€â”€ JOB: FETCH OPTION CHAIN + RUN GATES (every 30 seconds) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def job_chain():
     """Fetch option chain and run signal engine (market hours only)."""
     if not _check_circuit("job_chain"):
@@ -431,7 +437,7 @@ def job_chain():
                 mode    = _cache["mode"],
             )
 
-        # ── Index Spike Radar ──────────────────────────────────────────────
+        # â”€â”€ Index Spike Radar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if chain and indices:
             today_str = datetime.now(IST).strftime("%Y-%m-%d")
             existing_ix = _signals.state.get("index_signals", [])
@@ -492,7 +498,7 @@ def job_chain():
             ix_sigs = _signals.state.get("index_signals", [])
             _ws({"type": "index_spikes", "data": ix_sigs, "ts": time.time()})
 
-            # ADV INDEX (NIFTY 50 weighted OI + cash — throttle ~75s)
+            # ADV INDEX (NIFTY 50 weighted OI + cash â€” throttle ~75s)
             try:
                 if _kite and time.time() - float(_cache.get("adv_ix_ts", 0) or 0) > 75:
                     import adv_index_engine as _aix
@@ -522,7 +528,7 @@ def job_chain():
             except Exception as _aix_e:
                 logger.debug("adv_index: %s", _aix_e)
 
-            # INTRA INDEX (NIFTY 1m ORB + VWAP + heavy breadth — throttle ~55s)
+            # INTRA INDEX (NIFTY 1m ORB + VWAP + heavy breadth â€” throttle ~55s)
             try:
                 if _kite and time.time() - float(_cache.get("intra_ix_ts", 0) or 0) > 55:
                     import intra_index_engine as _ixi
@@ -535,7 +541,7 @@ def job_chain():
             except Exception as _ixi_e:
                 logger.debug("intra_index: %s", _ixi_e)
 
-            # ADV-IDX-OPTIONS (IV proxy, expiry, max pain / OI skew — throttle ~90s)
+            # ADV-IDX-OPTIONS (IV proxy, expiry, max pain / OI skew â€” throttle ~90s)
             try:
                 if _kite and time.time() - float(_cache.get("adv_io_ts", 0) or 0) > 90:
                     import adv_idx_options as _adio
@@ -564,7 +570,7 @@ def job_confluence_idle():
     refresh_confluence_broadcast(persist=True)
 
 
-# ─── JOB: F&O STOCKS (every 30 seconds) ──────────────────────────────────────
+# â”€â”€â”€ JOB: F&O STOCKS (every 30 seconds) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def job_stocks():
     """Fetch F&O stock OI."""
     if not _check_circuit("job_stocks"):
@@ -629,7 +635,7 @@ def job_stocks():
         _record_error("job_stocks")
 
 
-# ─── JOB: FII/DII from NSE (every 5 minutes) ─────────────────────────────────
+# â”€â”€â”€ JOB: FII/DII from NSE (every 5 minutes) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def job_fii():
     """Fetch FII/DII data."""
     if not _check_circuit("job_fii"):
@@ -647,7 +653,7 @@ def job_fii():
         _record_error("job_fii")
 
 
-# ─── INDEX SPIKE DETECTION ────────────────────────────────────────────────────
+# â”€â”€â”€ INDEX SPIKE DETECTION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _ix_baseline(hist, now_ts, px_idx, window_sec):
     """Newest sample at or before (now - window_sec). None if none qualifies."""
     cutoff = now_ts - window_sec
@@ -1098,7 +1104,7 @@ def _update_index_outcomes(signals, indices):
                 sig["outcome_ltp"] = round(ltp, 2)
                 continue
 
-        # Optional fallback: index move threshold (can mark T1/SL without premium touch — off by default).
+        # Optional fallback: index move threshold (can mark T1/SL without premium touch â€” off by default).
         if _IXR.get("outcome_use_index_fallback"):
             entry_idx = float(sig.get("entry_index_px", 0) or 0)
             cur       = nifty if sig.get("symbol") == "NIFTY" else bn
@@ -1120,7 +1126,7 @@ def _update_index_outcomes(signals, indices):
             sig["outcome_time"] = _otm
 
 
-# ─── JOB: SPIKES + TICKER (every 10 seconds) ─────────────────────────────────
+# â”€â”€â”€ JOB: SPIKES + TICKER (every 10 seconds) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def job_spikes():
     try:
         if _signals and _ws:
@@ -1130,7 +1136,7 @@ def job_spikes():
         logger.warning(f"job_spikes: {e}")
 
 
-# ─── JOB: DAILY KITE TOKEN REFRESH (7:55 AM IST, Mon–Fri) ─────────────────────
+# â”€â”€â”€ JOB: DAILY KITE TOKEN REFRESH (7:55 AM IST, Monâ€“Fri) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def job_token_refresh():
     """
     Refresh Kite access token every trading morning at 7:55 AM IST (Asia/Kolkata)
@@ -1141,7 +1147,7 @@ def job_token_refresh():
     KITE_API_SECRET (environment or backend/.env). The process must be running
     at that time (always-on host or an external wake/ping if the service sleeps).
     """
-    logger.info("=== Daily token refresh starting (scheduled Mon–Fri 07:55 IST) ===")
+    logger.info("=== Daily token refresh starting (scheduled Monâ€“Fri 07:55 IST) ===")
     try:
         from auto_token import refresh_token
         ok = refresh_token()
@@ -1150,7 +1156,7 @@ def job_token_refresh():
         ok = False
 
     if not ok:
-        logger.error("Daily token refresh FAILED — will retry in 5 minutes")
+        logger.error("Daily token refresh FAILED â€” will retry in 5 minutes")
         # Schedule a one-off retry
         import threading, time as _t
         def _retry():
@@ -1162,7 +1168,7 @@ def job_token_refresh():
                     _apply_new_token()
                     logger.info("Token refresh retry SUCCESS")
                 else:
-                    logger.error("Token refresh retry also FAILED — manual intervention needed")
+                    logger.error("Token refresh retry also FAILED â€” manual intervention needed")
             except Exception as e2:
                 logger.error(f"Token refresh retry error: {e2}")
         threading.Thread(target=_retry, daemon=True).start()
@@ -1191,13 +1197,13 @@ def _apply_new_token():
         kite = get_kite()
         global _kite
         _kite = kite
-        logger.info(f"=== Token applied live — last 6: ...{new_token[-6:]} ===")
+        logger.info(f"=== Token applied live â€” last 6: ...{new_token[-6:]} ===")
     except Exception as e:
         logger.error(f"_apply_new_token error: {e}")
 
 
 def job_morning_briefing():
-    """9:00 IST Mon–Fri: global/India context, movement checklist, watchlist → Telegram."""
+    """9:00 IST Monâ€“Fri: global/India context, movement checklist, watchlist â†’ Telegram."""
     try:
         from config import MORNING_TELEGRAM_BRIEF, TELEGRAM_BOT_TOKEN, get_telegram_chat_ids
 
@@ -1216,13 +1222,13 @@ def job_morning_briefing():
         err = desk.get("error")
 
         lines: list[str] = [
-            "🌅 <b>Pre-open desk — 9:00 IST</b>",
-            "<i>Context only — not a trade signal.</i>",
+            "ðŸŒ… <b>Pre-open desk â€” 9:00 IST</b>",
+            "<i>Context only â€” not a trade signal.</i>",
         ]
         if err:
-            lines.append("⚠ " + html_mod.escape(str(err)))
+            lines.append("âš  " + html_mod.escape(str(err)))
         for line in brief[:14]:
-            lines.append("· " + html_mod.escape(line))
+            lines.append("Â· " + html_mod.escape(line))
         pick_syms = [p.get("sym") or p.get("symbol", "") for p in picks[:12]]
         pick_syms = [x for x in pick_syms if x]
         if pick_syms:
@@ -1246,7 +1252,7 @@ def job_morning_briefing():
             lines.append("<b>Global headlines:</b>")
             for it in ng[:4]:
                 t = (it.get("title") or "")[:160]
-                lines.append("• " + html_mod.escape(t))
+                lines.append("â€¢ " + html_mod.escape(t))
 
         signals.send_telegram_message("\n".join(lines))
         logger.info("Morning Telegram briefing sent (9:00 IST)")
@@ -1254,7 +1260,24 @@ def job_morning_briefing():
         logger.error("job_morning_briefing failed: %s", e)
 
 
-# ─── BUILD SCHEDULER ─────────────────────────────────────────────────────────
+def job_saas_token_validation_reminders():
+    """Weekday morning reminder for SaaS users to validate broker tokens before the pre-open window."""
+    try:
+        if not is_market_session_day():
+            return
+        from modules.saas.routes import send_token_validation_reminders
+
+        result = send_token_validation_reminders()
+        logger.info(
+            "SaaS token validation reminders processed: sent=%s skipped=%s",
+            result.get("sent", 0),
+            result.get("skipped", 0),
+        )
+    except Exception as e:
+        logger.error("job_saas_token_validation_reminders failed: %s", e)
+
+
+# â”€â”€â”€ BUILD SCHEDULER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def build_scheduler() -> BackgroundScheduler:
     sched = BackgroundScheduler(
         timezone="Asia/Kolkata",
@@ -1267,7 +1290,7 @@ def build_scheduler() -> BackgroundScheduler:
     sched.add_job(job_fii,           "interval", seconds=300, id="fii")
     sched.add_job(job_spikes,        "interval", seconds=10,  id="spikes")
     sched.add_job(job_confluence_idle, "interval", seconds=45, id="confluence_idle")
-    # Daily token refresh Mon–Fri 7:55 IST — before cash market open (9:15).
+    # Daily token refresh Monâ€“Fri 7:55 IST â€” before cash market open (9:15).
     # Large misfire_grace_time: if the host wakes late (e.g. cloud cold start),
     # the job still runs instead of being dropped.
     sched.add_job(
@@ -1277,6 +1300,17 @@ def build_scheduler() -> BackgroundScheduler:
         minute=55,
         day_of_week="mon-fri",
         id="token_refresh",
+        misfire_grace_time=28800,
+        coalesce=True,
+        max_instances=1,
+    )
+    sched.add_job(
+        job_saas_token_validation_reminders,
+        "cron",
+        hour=7,
+        minute=45,
+        day_of_week="mon-fri",
+        id="saas_token_validation_reminders",
         misfire_grace_time=28800,
         coalesce=True,
         max_instances=1,

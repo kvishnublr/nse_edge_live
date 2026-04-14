@@ -1,4 +1,4 @@
-# NSE EDGE — redeploy backend (Fly.io). GitHub Pages UI targets https://nse-edge-backend.fly.dev
+# STOCKR.IN â€” redeploy backend (Fly.io). GitHub Pages UI targets https://nse-edge-backend.fly.dev
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
@@ -33,4 +33,4 @@ if ($LASTEXITCODE -ne 0) {
   exit $LASTEXITCODE
 }
 
-Write-Host "OK — open https://$app.fly.dev/api/intra-index/health"
+Write-Host "OK â€” open https://$app.fly.dev/api/intra-index/health"

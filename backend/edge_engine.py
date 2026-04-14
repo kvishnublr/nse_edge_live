@@ -1,9 +1,9 @@
 """
-NSE EDGE v5 — Production Edge Engine
+STOCKR.IN v5 â€” Production Edge Engine
 4-Layer multiplicative signal model with GEX, IV Rank, LTQ, ADX, regime gate.
-Exposes:  compute_edge_snapshot()  →  full snapshot dict
-          compute_gex(chain)       →  GEX per strike
-          run_edge_backtest(days)  →  historical trade log
+Exposes:  compute_edge_snapshot()  â†’  full snapshot dict
+          compute_gex(chain)       â†’  GEX per strike
+          run_edge_backtest(days)  â†’  historical trade log
 """
 
 import time
@@ -21,9 +21,9 @@ _IST = pytz.timezone("Asia/Kolkata")
 
 DB_PATH = Path(__file__).parent / "data" / "backtest.db"
 
-# ─── SIGNAL BUS (3-min TTL window) ────────────────────────────────────────────
+# â”€â”€â”€ SIGNAL BUS (3-min TTL window) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 _signal_bus: dict = {}          # {signal_key: {score:0-1, ts:float, label:str}}
-_bus_ttl = 180                  # seconds — stale signals weight → 0
+_bus_ttl = 180                  # seconds â€” stale signals weight â†’ 0
 
 def post_signal(key: str, score: float, label: str = ""):
     _signal_bus[key] = {"score": max(0.0, min(1.0, score)), "ts": time.time(), "label": label}
@@ -35,7 +35,7 @@ def _fresh(entry: dict) -> float:
         return 0.0
     return 1.0 - (age / _bus_ttl) * 0.35   # linear decay to 0.65 at TTL
 
-# ─── LTQ TRACKER ──────────────────────────────────────────────────────────────
+# â”€â”€â”€ LTQ TRACKER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 _ltq_history: deque = deque(maxlen=50)    # rolling 50 ticks
 _ltq_last_signal: float = 0
 
@@ -63,7 +63,7 @@ def update_ltq(ltq: float, side: str, ltp: float, vwap: float):
         elif side == "sell" and not above_vwap:
             post_signal("ltq_sell", min(z / 4, 1.0), f"LTQ spike z={z:.1f} SELL below VWAP")
 
-# ─── VWAP σ BANDS ─────────────────────────────────────────────────────────────
+# â”€â”€â”€ VWAP Ïƒ BANDS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def calc_vwap_bands(price_hist: list) -> dict:
     """price_hist = [(ts, price, vol), ...]"""
     if len(price_hist) < 5:
@@ -80,7 +80,7 @@ def calc_vwap_bands(price_hist: list) -> dict:
     except Exception:
         return {"vwap": 0, "sd": 0, "band1": 0, "band2": 0}
 
-# ─── ADX CALCULATION ──────────────────────────────────────────────────────────
+# â”€â”€â”€ ADX CALCULATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def calc_adx(closes: list, period: int = 14) -> float:
     """Returns ADX from list of close prices (proxy using close-to-close)."""
     if len(closes) < period + 2:
@@ -102,32 +102,32 @@ def calc_adx(closes: list, period: int = 14) -> float:
     except Exception:
         return 20.0
 
-# ─── IV RANK ──────────────────────────────────────────────────────────────────
+# â”€â”€â”€ IV RANK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def calc_iv_rank(current_iv: float, vix_hist: list) -> dict:
     """
     vix_hist: list of daily VIX values (52 weeks).
     Returns iv_rank (0-100), iv_percentile (0-100), recommendation.
     """
     if not vix_hist or not current_iv:
-        return {"iv_rank": 50, "iv_pct": 50, "action": "neutral", "label": "—"}
+        return {"iv_rank": 50, "iv_pct": 50, "action": "neutral", "label": "â€”"}
     try:
         lo, hi = min(vix_hist), max(vix_hist)
         rank   = round((current_iv - lo) / (hi - lo + 0.001) * 100, 1)
         pct    = round(sum(1 for v in vix_hist if v <= current_iv) / len(vix_hist) * 100, 1)
         if pct < 30:
-            action, label = "BUY_OPTIONS",  f"IV cheap (pct {pct:.0f}%) — buy options"
+            action, label = "BUY_OPTIONS",  f"IV cheap (pct {pct:.0f}%) â€” buy options"
         elif pct > 70:
-            action, label = "SELL_OPTIONS", f"IV expensive (pct {pct:.0f}%) — sell/spread"
+            action, label = "SELL_OPTIONS", f"IV expensive (pct {pct:.0f}%) â€” sell/spread"
         else:
             action, label = "NEUTRAL",      f"IV normal (pct {pct:.0f}%)"
         return {"iv_rank": rank, "iv_pct": pct, "action": action, "label": label}
     except Exception:
-        return {"iv_rank": 50, "iv_pct": 50, "action": "neutral", "label": "—"}
+        return {"iv_rank": 50, "iv_pct": 50, "action": "neutral", "label": "â€”"}
 
-# ─── GEX COMPUTATION ──────────────────────────────────────────────────────────
+# â”€â”€â”€ GEX COMPUTATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def compute_gex(chain: dict) -> dict:
     """
-    chain: dict from fetcher.fetch_option_chain() → {strikes:[{strike, ce_oi, pe_oi, ce_iv, pe_iv}]}
+    chain: dict from fetcher.fetch_option_chain() â†’ {strikes:[{strike, ce_oi, pe_oi, ce_iv, pe_iv}]}
     Returns per-strike GEX, gravity strike, and explosion strikes.
     """
     if not chain or not isinstance(chain, dict):
@@ -158,7 +158,7 @@ def compute_gex(chain: dict) -> dict:
             # Gamma proxy: peaked at ATM, decays with distance
             ce_g   = max(0, 0.04 * (1 - abs(dist) * 0.15))
             pe_g   = max(0, 0.04 * (1 - abs(dist) * 0.15))
-            # GEX = OI × Gamma × LotSize (positive = dealer long gamma, pins price)
+            # GEX = OI Ã— Gamma Ã— LotSize (positive = dealer long gamma, pins price)
             gex    = round((ce_oi * ce_g - pe_oi * pe_g) * lot_size / 1e6, 3)
             results.append({
                 "strike": k, "ce_oi": int(ce_oi), "pe_oi": int(pe_oi),
@@ -198,7 +198,7 @@ def compute_gex(chain: dict) -> dict:
         "ul_price":     ul_price,
     }
 
-# ─── PCR SIGNAL ───────────────────────────────────────────────────────────────
+# â”€â”€â”€ PCR SIGNAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def pcr_signal(pcr: float, pcr_hist: list) -> dict:
     """
     pcr_hist: list of last N PCR values.
@@ -221,10 +221,10 @@ def pcr_signal(pcr: float, pcr_hist: list) -> dict:
             trend, score = "CALL_HEAVY", 0.38        # mild bearish
         else:
             trend, score = "NEUTRAL", 0.50
-    label = f"PCR {pcr:.2f} → {trend}" if trend else f"PCR {pcr:.2f}"
+    label = f"PCR {pcr:.2f} â†’ {trend}" if trend else f"PCR {pcr:.2f}"
     return {"signal": trend, "score": score, "label": label}
 
-# ─── OI DELTA VELOCITY ────────────────────────────────────────────────────────
+# â”€â”€â”€ OI DELTA VELOCITY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 _oi_history: deque = deque(maxlen=12)   # (ts, oi_ce, oi_pe)
 
 def update_oi(ce_oi: float, pe_oi: float):
@@ -242,16 +242,16 @@ def calc_oi_velocity() -> dict:
         ce_vel  = (now_ce - old_ce) / (old_ce + 1)
         pe_vel  = (now_pe - old_pe) / (old_pe + 1)
         if pe_vel > ce_vel and pe_vel > 0.01:
-            sig = "PE_BUILD"    # puts building → protect / bearish hedge
+            sig = "PE_BUILD"    # puts building â†’ protect / bearish hedge
         elif ce_vel > pe_vel and ce_vel > 0.01:
-            sig = "CE_BUILD"    # calls building → bullish positioning
+            sig = "CE_BUILD"    # calls building â†’ bullish positioning
         else:
             sig = "NEUTRAL"
         return {"ce_vel": round(ce_vel * 100, 2), "pe_vel": round(pe_vel * 100, 2), "signal": sig}
     except Exception:
         return {"ce_vel": 0, "pe_vel": 0, "signal": "neutral"}
 
-# ─── SESSION TIME GATE ─────────────────────────────────────────────────────────
+# â”€â”€â”€ SESSION TIME GATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def session_gate() -> dict:
     """Returns current session window status."""
     now_ist = datetime.now(_IST)
@@ -260,17 +260,17 @@ def session_gate() -> dict:
 
     windows = [
         (0,   555,  "PRE_OPEN",   0.0,  "Before market"),
-        (555, 560,  "OPEN_NOISE", 0.0,  "9:15–9:20 pure noise — skip"),
-        (560, 675,  "PRIME_A",    1.0,  "9:20–11:15 ✓ Prime window A"),
-        (675, 780,  "CHOP",       0.0,  "11:15–13:00 chop — skip"),
-        (780, 870,  "PRIME_B",    1.0,  "13:00–14:30 ✓ Prime window B"),
-        (870, 900,  "THETA_BURN", 0.0,  "14:30–15:00 theta decay — no new"),
-        (900, 930,  "NO_TRADE",   0.0,  "15:00–15:30 illiquid — never"),
+        (555, 560,  "OPEN_NOISE", 0.0,  "9:15â€“9:20 pure noise â€” skip"),
+        (560, 675,  "PRIME_A",    1.0,  "9:20â€“11:15 âœ“ Prime window A"),
+        (675, 780,  "CHOP",       0.0,  "11:15â€“13:00 chop â€” skip"),
+        (780, 870,  "PRIME_B",    1.0,  "13:00â€“14:30 âœ“ Prime window B"),
+        (870, 900,  "THETA_BURN", 0.0,  "14:30â€“15:00 theta decay â€” no new"),
+        (900, 930,  "NO_TRADE",   0.0,  "15:00â€“15:30 illiquid â€” never"),
         (930, 9999, "CLOSED",     0.0,  "Post-close"),
     ]
     day = now_ist.weekday()
     if day >= 5:   # Saturday / Sunday
-        return {"window": "CLOSED", "gate": 0.0, "label": "Weekend — market closed", "mins": mins}
+        return {"window": "CLOSED", "gate": 0.0, "label": "Weekend â€” market closed", "mins": mins}
 
     for lo, hi, name, gate, label in windows:
         if lo <= mins < hi:
@@ -278,7 +278,7 @@ def session_gate() -> dict:
 
     return {"window": "CLOSED", "gate": 0.0, "label": "Closed", "mins": mins}
 
-# ─── REGIME CLASSIFIER ────────────────────────────────────────────────────────
+# â”€â”€â”€ REGIME CLASSIFIER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def classify_regime(vix: float, adx: float, nifty_chg_pct: float, pcr: float) -> dict:
     """
     Returns regime dict: {regime, confidence, size_multiplier, strategy, label}
@@ -291,25 +291,25 @@ def classify_regime(vix: float, adx: float, nifty_chg_pct: float, pcr: float) ->
 
     # VIX buckets
     if vix < 13:
-        notes.append(f"VIX {vix:.1f} → low-vol, breakouts clean")
+        notes.append(f"VIX {vix:.1f} â†’ low-vol, breakouts clean")
         regime = "LOW_VOL"
         conf   = 0.75
         size   = 1.0
         strat  = "BREAKOUT"
     elif vix <= 18:
-        notes.append(f"VIX {vix:.1f} → normal, both strategies work")
+        notes.append(f"VIX {vix:.1f} â†’ normal, both strategies work")
         regime = "NORMAL"
         conf   = 0.70
         size   = 1.0
         strat  = "BREAKOUT + MEAN_REV"
     elif vix <= 22:
-        notes.append(f"VIX {vix:.1f} → elevated, trade with institutional flow only, size ↓50%")
+        notes.append(f"VIX {vix:.1f} â†’ elevated, trade with institutional flow only, size â†“50%")
         regime = "ELEVATED"
         conf   = 0.55
         size   = 0.5
         strat  = "WITH_FLOW_ONLY"
     else:
-        notes.append(f"VIX {vix:.1f} → DANGER — fake moves dominate, use straddles not directional")
+        notes.append(f"VIX {vix:.1f} â†’ DANGER â€” fake moves dominate, use straddles not directional")
         regime = "HIGH_VOL"
         conf   = 0.35
         size   = 0.0   # gate = 0, no directional
@@ -317,16 +317,16 @@ def classify_regime(vix: float, adx: float, nifty_chg_pct: float, pcr: float) ->
 
     # ADX overlay
     if adx > 22:
-        notes.append(f"ADX {adx:.1f} → trending, prefer breakout signals")
+        notes.append(f"ADX {adx:.1f} â†’ trending, prefer breakout signals")
         if regime in ("LOW_VOL", "NORMAL"):
             strat = "BREAKOUT"
             conf  = min(conf + 0.08, 0.95)
     elif adx < 18:
-        notes.append(f"ADX {adx:.1f} → ranging, prefer mean reversion")
+        notes.append(f"ADX {adx:.1f} â†’ ranging, prefer mean reversion")
         if regime in ("LOW_VOL", "NORMAL"):
             strat = "MEAN_REVERSION"
     else:
-        notes.append(f"ADX {adx:.1f} → ambiguous, require L1+L2 alignment")
+        notes.append(f"ADX {adx:.1f} â†’ ambiguous, require L1+L2 alignment")
         conf  = max(conf - 0.08, 0.20)
 
     gate = 0 if regime == "HIGH_VOL" else 1
@@ -342,12 +342,12 @@ def classify_regime(vix: float, adx: float, nifty_chg_pct: float, pcr: float) ->
         "label":     f"{regime} | {strat} | {int(size*100)}% size"
     }
 
-# ─── COMPOSITE SCORE (MULTIPLICATIVE) ─────────────────────────────────────────
+# â”€â”€â”€ COMPOSITE SCORE (MULTIPLICATIVE) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 COMPOSITE_THRESHOLD = 0.72
 
 def compute_composite(l1: float, l2: float, l3: float, regime_gate: int) -> dict:
     """
-    final = regime_gate × (L1×0.50 + L2×0.30 + L3×0.20)
+    final = regime_gate Ã— (L1Ã—0.50 + L2Ã—0.30 + L3Ã—0.20)
     """
     weighted = l1 * 0.50 + l2 * 0.30 + l3 * 0.20
     final    = regime_gate * weighted
@@ -363,7 +363,7 @@ def compute_composite(l1: float, l2: float, l3: float, regime_gate: int) -> dict
         "pct":      round(final * 100, 1),
     }
 
-# ─── RISK ENGINE ──────────────────────────────────────────────────────────────
+# â”€â”€â”€ RISK ENGINE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def compute_position_size(account: float, entry: float, sl: float,
                           delta: float = 0.50, lot_size: int = 50) -> dict:
     """
@@ -384,10 +384,10 @@ def compute_position_size(account: float, entry: float, sl: float,
         "risk_cash":  round(actual_risk, 0),
         "risk_pct":   pct,
         "risk_pts":   round(risk_pts, 1),
-        "note":       f"{lots} lots × ₹{int(risk_per_lot)}/lot risk"
+        "note":       f"{lots} lots Ã— â‚¹{int(risk_per_lot)}/lot risk"
     }
 
-# ─── ADVANCE-DECLINE BREADTH ──────────────────────────────────────────────────
+# â”€â”€â”€ ADVANCE-DECLINE BREADTH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 NIFTY_HEAVYWEIGHTS = [
     "HDFCBANK","RELIANCE","ICICIBANK","INFY","TCS",
     "KOTAKBANK","LT","AXISBANK","SBIN","ITC",
@@ -424,10 +424,10 @@ def calc_breadth(prices: dict, vwap_ref: dict = None) -> dict:
         "score": round(score, 2),
         "signal": signal,
         "detail": detail,
-        "label": f"{above}/{total} heavyweights above VWAP → {signal}"
+        "label": f"{above}/{total} heavyweights above VWAP â†’ {signal}"
     }
 
-# ─── FULL EDGE SNAPSHOT ───────────────────────────────────────────────────────
+# â”€â”€â”€ FULL EDGE SNAPSHOT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def compute_edge_snapshot(state: dict = None, prices: dict = None, chain: dict = None) -> dict:
     """
     Main entry. Reads live signals state, prices, and chain.
@@ -439,7 +439,7 @@ def compute_edge_snapshot(state: dict = None, prices: dict = None, chain: dict =
     state  = state  or sig_mod.state
     prices = prices or {}
 
-    # ── Extract live data from state ────────────────────────────────────────
+    # â”€â”€ Extract live data from state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     indices   = (state.get("last_macro") or {})
     chain_d   = chain or state.get("last_chain") or {}
     fii       = state.get("last_fii") or {}
@@ -450,12 +450,12 @@ def compute_edge_snapshot(state: dict = None, prices: dict = None, chain: dict =
     nifty     = float(indices.get("nifty", 0) or 0)
     nifty_chg = float(indices.get("nifty_chg", 0) or 0)
 
-    # ── ADX from NIFTY close history ────────────────────────────────────────
+    # â”€â”€ ADX from NIFTY close history â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     nifty_hist = list(price_history.get("NIFTY", []))
     closes     = [h[1] for h in nifty_hist[-50:]] if nifty_hist else []
     adx        = calc_adx(closes) if len(closes) >= 16 else 20.0
 
-    # ── VWAP bands for Nifty ────────────────────────────────────────────────
+    # â”€â”€ VWAP bands for Nifty â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     vwap_data  = calc_vwap_bands(nifty_hist[-200:]) if len(nifty_hist) >= 10 else {}
     vwap       = vwap_data.get("vwap", 0)
 
@@ -471,14 +471,14 @@ def compute_edge_snapshot(state: dict = None, prices: dict = None, chain: dict =
             vwap_signal = "AT_VWAP"
             vwap_score  = 0.55
 
-    # ── Layer 0 — Regime ────────────────────────────────────────────────────
+    # â”€â”€ Layer 0 â€” Regime â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     session  = session_gate()
     regime_d = classify_regime(vix, adx, nifty_chg, pcr)
     session_gate_val = session["gate"]
     regime_gate_val  = regime_d["gate"]
     l0_gate  = 1 if (session_gate_val == 1 and regime_gate_val == 1) else 0
 
-    # ── Layer 1 — Order Flow ────────────────────────────────────────────────
+    # â”€â”€ Layer 1 â€” Order Flow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     oi_vel   = calc_oi_velocity()
     # LTQ signals from bus
     ltq_buy  = _signal_bus.get("ltq_buy",  {"score": 0, "ts": 0})
@@ -491,17 +491,17 @@ def compute_edge_snapshot(state: dict = None, prices: dict = None, chain: dict =
     l1_score = round(min(l1_raw, 1.0), 3)
 
     l1_signals = [
-        {"k": "LTQ Spike",    "v": f"z-score signal" if ltq_score > 0.4 else "—",
+        {"k": "LTQ Spike",    "v": f"z-score signal" if ltq_score > 0.4 else "â€”",
          "score": round(ltq_score, 2), "c": "cg" if ltq_score > 0.5 else "cm"},
         {"k": "OI Velocity",  "v": oi_vel["signal"], "score": round(oi_score, 2),
          "c": "cg" if oi_vel["signal"] != "NEUTRAL" else "cm"},
-        {"k": "VWAP Dev",     "v": vwap_signal if vwap else "—",
+        {"k": "VWAP Dev",     "v": vwap_signal if vwap else "â€”",
          "score": round(vwap_score, 2), "c": "cg" if vwap_score > 0.55 else "cm"},
     ]
     if vwap:
         l1_signals.append({"k": "VWAP", "v": f"{vwap:.0f}", "score": 0, "c": "cb"})
 
-    # ── Layer 2 — Options Surface ───────────────────────────────────────────
+    # â”€â”€ Layer 2 â€” Options Surface â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # IV Rank from VIX 52-week history in DB
     vix_52w     = _get_vix_history(252)
     iv_rank_d   = calc_iv_rank(vix, vix_52w)
@@ -512,7 +512,7 @@ def compute_edge_snapshot(state: dict = None, prices: dict = None, chain: dict =
     gex_score = 0.5
     if gex_d.get("gravity") and nifty:
         dist = abs(gex_d["gravity"] - nifty) / (nifty * 0.01 + 1)
-        gex_score = max(0.3, 0.85 - dist * 0.04)  # closer to gravity → higher pin probability
+        gex_score = max(0.3, 0.85 - dist * 0.04)  # closer to gravity â†’ higher pin probability
 
     # PCR signal (need history)
     pcr_hist  = _get_pcr_history(10)
@@ -521,21 +521,21 @@ def compute_edge_snapshot(state: dict = None, prices: dict = None, chain: dict =
     if gex_d.get("avg_skew") is not None:
         sk = gex_d["avg_skew"]
         if sk > 4:
-            skew_score = 0.70   # fear premium — protect short delta
+            skew_score = 0.70   # fear premium â€” protect short delta
         elif sk < 0:
-            skew_score = 0.65   # unusual — greed premium
+            skew_score = 0.65   # unusual â€” greed premium
 
     l2_score = round(iv_score * 0.35 + gex_score * 0.35 + pcr_d["score"] * 0.30, 3)
     l2_signals = [
         {"k": "IV Rank",  "v": iv_rank_d["label"],  "score": round(iv_score, 2),
          "c": "cg" if iv_rank_d["action"] != "SELL_OPTIONS" else "cr"},
-        {"k": "GEX",      "v": f"Gravity {gex_d.get('gravity','—')} | Skew {gex_d.get('avg_skew','—')}",
+        {"k": "GEX",      "v": f"Gravity {gex_d.get('gravity','â€”')} | Skew {gex_d.get('avg_skew','â€”')}",
          "score": round(gex_score, 2), "c": "cg" if gex_score > 0.55 else "cm"},
         {"k": "PCR",      "v": pcr_d["label"],       "score": round(pcr_d["score"], 2),
          "c": "cg" if pcr_d["score"] > 0.6 else "cr" if pcr_d["score"] < 0.4 else "cm"},
     ]
 
-    # ── Layer 3 — Structure ─────────────────────────────────────────────────
+    # â”€â”€ Layer 3 â€” Structure â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     breadth_d = calc_breadth(stocks_p)
     b_score   = breadth_d["score"]
     # Gate scores from existing signal engine (1-5)
@@ -553,17 +553,17 @@ def compute_edge_snapshot(state: dict = None, prices: dict = None, chain: dict =
          "score": round(str_score, 2), "c": "cg" if str_score > 0.6 else "cm"},
     ]
 
-    # ── Composite ───────────────────────────────────────────────────────────
+    # â”€â”€ Composite â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     composite = compute_composite(l1_score, l2_score, l3_score, l0_gate)
 
-    # ── Risk defaults (account placeholder) ─────────────────────────────────
-    account   = 500000   # ₹5L default — user can override in UI
+    # â”€â”€ Risk defaults (account placeholder) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    account   = 500000   # â‚¹5L default â€” user can override in UI
     risk_info = {}
     if nifty > 0:
         sl_pts  = max(adx * 1.5, 30)   # ADX-based SL
         sl      = nifty - sl_pts if composite.get("action") == "EXECUTE" else nifty + sl_pts
         # ATM option price proxy
-        entry_opt = round(vix / 100 * nifty * 0.04, 0)   # rough IV × spot × sqrt(t)
+        entry_opt = round(vix / 100 * nifty * 0.04, 0)   # rough IV Ã— spot Ã— sqrt(t)
         risk_info = compute_position_size(account, max(entry_opt, 50), max(entry_opt * 0.5, 20),
                                           delta=0.50, lot_size=50)
         risk_info["sl_pts"] = round(sl_pts, 0)
@@ -584,7 +584,7 @@ def compute_edge_snapshot(state: dict = None, prices: dict = None, chain: dict =
         "meta":      {"vix": vix, "adx": adx, "pcr": pcr, "nifty": nifty},
     }
 
-# ─── DB HELPERS ───────────────────────────────────────────────────────────────
+# â”€â”€â”€ DB HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _get_vix_history(days: int = 252) -> list:
     try:
         conn = sqlite3.connect(str(DB_PATH))
@@ -619,7 +619,7 @@ def _get_ohlcv_history(days: int = 60) -> list:
     except Exception:
         return []
 
-# ─── BACKTEST ENGINE ──────────────────────────────────────────────────────────
+# â”€â”€â”€ BACKTEST ENGINE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def run_edge_backtest(days: int = 90) -> dict:
     """
     Replay the composite model on historical DB data.
@@ -645,7 +645,7 @@ def run_edge_backtest(days: int = 90) -> dict:
 
     if not rows:
         return {"error": "no_data", "trades": [], "stats": {},
-                "hint": "Download historical data first via Settings → Download Historical Data"}
+                "hint": "Download historical data first via Settings â†’ Download Historical Data"}
 
     rows = list(reversed(rows))   # chronological order
     trades = []
@@ -676,7 +676,7 @@ def run_edge_backtest(days: int = 90) -> dict:
         regime_d  = classify_regime(vix, adx, chg_pct, pcr)
         l0_gate   = regime_d["gate"]
 
-        # Layer 1 proxy (no tick data in backtest — use price action)
+        # Layer 1 proxy (no tick data in backtest â€” use price action)
         hi_prev   = rows[i-1][2] if i > 0 else hi
         lo_prev   = rows[i-1][3] if i > 0 else lo
         cl_prev   = rows[i-1][4] if i > 0 else cl
@@ -685,7 +685,7 @@ def run_edge_backtest(days: int = 90) -> dict:
         vwap_d    = nifty    # use close as proxy for daily context
         ltq_proxy = 0.65 if (breakout or breakdown) else 0.40
         oi_vel_p  = 0.6 if pcr > 1.3 or pcr < 0.75 else 0.45
-        dev_score = 0.60   # neutral — no intraday tick data
+        dev_score = 0.60   # neutral â€” no intraday tick data
         l1_score  = ltq_proxy * 0.50 + oi_vel_p * 0.30 + dev_score * 0.20
 
         # Layer 2 proxy
@@ -720,7 +720,7 @@ def run_edge_backtest(days: int = 90) -> dict:
         exit_p   = next_r[4]   # next day close
         direction = "BUY" if above_prev and adx > 18 else "SELL"
         pts      = (exit_p - entry_p) if direction == "BUY" else (entry_p - exit_p)
-        # Assume 1 lot ATM option trade (approx 50 delta × lot 50 × points)
+        # Assume 1 lot ATM option trade (approx 50 delta Ã— lot 50 Ã— points)
         pnl      = round(pts * 0.50 * 50, 0)
         # Deduct slippage (0.4 pts per side = 0.8 total)
         pnl     -= round(0.8 * 0.50 * 50, 0)

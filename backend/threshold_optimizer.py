@@ -1,5 +1,5 @@
 """
-NSE EDGE v5 — Gate Threshold Optimizer
+STOCKR.IN v5 â€” Gate Threshold Optimizer
 Grid-searches GATE config values against 3-year backtest data
 to maximise profit factor. Returns best config + full results table.
 """
@@ -10,7 +10,7 @@ from itertools import product
 
 logger = logging.getLogger("optimizer")
 
-# ─── SEARCH SPACE ─────────────────────────────────────────────────────────────
+# â”€â”€â”€ SEARCH SPACE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 SEARCH_SPACE = {
     "vix_low":        [10.0, 12.0, 14.0],
     "vix_medium":     [15.0, 16.0, 18.0],
@@ -120,7 +120,7 @@ def _score_config(rows, th, atr_map):
         s2 = _g2(pcr, call_oi, put_oi, th)
         s3 = _g3(c, h, l)
         s4 = _g4(c, prev_close, vol, avg_vol, th)
-        # g5 uses ATR — keep same logic regardless of config
+        # g5 uses ATR â€” keep same logic regardless of config
         s5 = "go" if atr_v > 0 else "wt"
 
         verdict = _verdict([s1, s2, s3, s4, s5])

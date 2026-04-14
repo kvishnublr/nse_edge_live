@@ -1,5 +1,5 @@
 """
-NSE EDGE v5 — Cloud Pusher
+STOCKR.IN v5 â€” Cloud Pusher
 Run this on your local PC alongside main.py.
 It reads live state from localhost:8000 and pushes it to stokr.in every 30s.
 
@@ -19,7 +19,7 @@ INTERVAL = 30  # seconds
 headers = {"X-Push-Secret": SECRET, "Content-Type": "application/json"}
 
 print("=" * 55)
-print("  NSE EDGE — Cloud Pusher")
+print("  STOCKR.IN â€” Cloud Pusher")
 print(f"  Local  : {LOCAL}")
 print(f"  Cloud  : {CLOUD}")
 print(f"  Interval: every {INTERVAL}s")
@@ -56,7 +56,7 @@ def push():
     try:
         r = requests.post(f"{CLOUD}/api/push-state", json=payload, headers=headers, timeout=10)
         if r.ok:
-            print(f"  [{time.strftime('%H:%M:%S')}] Pushed OK — verdict={state.get('gates',{}).get('verdict','?')}")
+            print(f"  [{time.strftime('%H:%M:%S')}] Pushed OK â€” verdict={state.get('gates',{}).get('verdict','?')}")
         else:
             print(f"  [{time.strftime('%H:%M:%S')}] Push failed: {r.status_code} {r.text[:80]}")
     except Exception as e:

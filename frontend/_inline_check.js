@@ -993,7 +993,7 @@ function notify(msg){
 // INIT
 // ═══════════════════════════════════════════════
 setMode('intraday');
-setTimeout(()=>notify('NSE EDGE v5 ready · Connecting to live data...'),400);
+setTimeout(()=>notify('STOCKR.IN ready · Connecting to live data...'),400);
 
 // ═══════════════════════════════════════════════
 // LIVE DATA — WEBSOCKET CLIENT
@@ -3228,7 +3228,7 @@ function exportCSV(){
   const activeTab = document.querySelector('.tp.on');
   if(!activeTab){ notify('No active tab'); return; }
   const id = activeTab.id;
-  let rows = [], filename = 'nse_edge_export.csv';
+  let rows = [], filename = 'stockr_export.csv';
 
   if(id === 'tp-stocks'){
     filename = 'stock_oi.csv';

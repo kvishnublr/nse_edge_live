@@ -1,10 +1,10 @@
-# NSE EDGE v5 - Windows launcher (UI at 127.0.0.1:8000 when PORT=8000)
+# STOCKR.IN v5 - Windows launcher (UI at 127.0.0.1:8000 when PORT=8000)
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 Set-Location backend
 if (-not $env:PORT) { $env:PORT = "8000" }
 Write-Host ""
-Write-Host ('  Stockr / NSE EDGE - starting backend (PORT=' + $env:PORT + ')')
+Write-Host ('  STOCKR.IN - starting backend (PORT=' + $env:PORT + ')')
 Write-Host ('  Open in browser:  http://127.0.0.1:' + $env:PORT + '/')
 Write-Host ""
 Write-Host "  Tip: After pulling new code, stop this window (Ctrl+C) and run start.ps1 again."

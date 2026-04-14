@@ -1,5 +1,5 @@
 """
-NSE EDGE v5 — Zerodha Kite Connect Price Feed
+STOCKR.IN v5 â€” Zerodha Kite Connect Price Feed
 Real-time ticks via KiteTicker WebSocket.
 REST quote fallback if ticker drops.
 
@@ -23,6 +23,7 @@ logger = logging.getLogger("feed")
 _token_refresh_lock = threading.Lock()
 _last_auto_token_attempt_ts = 0.0
 _AUTO_TOKEN_COOLDOWN_SEC = 180.0
+_AUTO_RECOVER_POLL_SEC = 180.0
 
 
 def maybe_refresh_kite_token(reason: str = "auth_error") -> None:
@@ -53,7 +54,7 @@ def maybe_refresh_kite_token(reason: str = "auth_error") -> None:
 
     threading.Thread(target=_bg, daemon=True).start()
 
-# ─── PRICE CACHE ──────────────────────────────────────────────────────────────
+# â”€â”€â”€ PRICE CACHE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # {symbol: {price, chg_pct, chg_pts, prev, high, low, volume, oi, ts, source}}
 price_cache: Dict[str, dict] = {}
 _lock = threading.Lock()
@@ -91,7 +92,7 @@ def get_all_prices() -> dict:
         return dict(price_cache)
 
 
-# ─── KITE CONNECT CLIENT ──────────────────────────────────────────────────────
+# â”€â”€â”€ KITE CONNECT CLIENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 _kite: Optional[KiteConnect] = None
 _kite_bound_token: Optional[str] = None
 _ticker: Optional[KiteTicker] = None
@@ -114,7 +115,7 @@ def get_kite() -> KiteConnect:
     return _kite
 
 
-# ─── REST QUOTE FALLBACK ──────────────────────────────────────────────────────
+# â”€â”€â”€ REST QUOTE FALLBACK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def fetch_quotes_rest():
     """
     Fetch quotes for all tracked symbols via kite.quote().
@@ -183,7 +184,7 @@ def fetch_quotes_rest():
         })
 
 
-# ─── KITE TICKER (REAL-TIME WEBSOCKET) ────────────────────────────────────────
+# â”€â”€â”€ KITE TICKER (REAL-TIME WEBSOCKET) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _on_ticks(ws, ticks: list):
     """Called by KiteTicker on every tick. Updates price_cache instantly."""
     global _ticker_connected
@@ -219,7 +220,7 @@ def _on_connect(ws, response):
     with _reconnect_lock:
         _reconnect_count = 0
     tokens = list(KITE_TOKENS.values())
-    logger.info(f"KiteTicker connected — subscribing {len(tokens)} instruments")
+    logger.info(f"KiteTicker connected â€” subscribing {len(tokens)} instruments")
     ws.subscribe(tokens)
     # FULL mode = price + depth + OI + volume
     ws.set_mode(ws.MODE_FULL, tokens)
@@ -247,7 +248,7 @@ def _on_noreconnect(ws):
     global _ticker_connected
     with _ticker_lock:
         _ticker_connected = False
-    logger.error("KiteTicker gave up reconnecting — falling back to REST quotes")
+    logger.error("KiteTicker gave up reconnecting â€” falling back to REST quotes")
     # Start REST polling fallback
     threading.Thread(target=_rest_fallback_loop, daemon=True).start()
 
@@ -261,47 +262,125 @@ def _rest_fallback_loop():
     while iteration < max_iterations:
         with _ticker_lock:
             if _ticker_connected:
-                logger.info("Ticker reconnected — stopping REST fallback")
+                logger.info("Ticker reconnected â€” stopping REST fallback")
                 return
 
         fetch_quotes_rest()
         time.sleep(2)
         iteration += 1
 
-    logger.error(f"REST fallback timeout after {max_iterations * 2}s — ticker not recovered")
+    logger.error(f"REST fallback timeout after {max_iterations * 2}s â€” ticker not recovered")
     logger.warning("System will continue with stale data. Please check Kite API status and restart.")
 
 
-# ─── FEED MANAGER ─────────────────────────────────────────────────────────────
+# â”€â”€â”€ FEED MANAGER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class FeedManager:
     def __init__(self):
         self._running = False
+        self._demo_mode = False
+        self._recover_thread_started = False
+
+    def _start_auto_recover_loop(self):
+        """Keep trying headless token refresh until Kite auth succeeds."""
+        if self._recover_thread_started:
+            return
+        self._recover_thread_started = True
+
+        def _loop():
+            logger.info("Kite auto-recover loop started (headless mode)")
+            while self._running:
+                try:
+                    try:
+                        get_kite().profile()
+                        if self._demo_mode:
+                            self._demo_mode = False
+                        logger.info("Kite session recovered; stopping auto-recover loop")
+                        return
+                    except Exception:
+                        pass
+
+                    from auto_token import refresh_token
+
+                    if refresh_token():
+                        from scheduler import _apply_new_token
+                        _apply_new_token()
+                        try:
+                            get_kite().profile()
+                            self._demo_mode = False
+                            logger.info("Kite auto-recover SUCCESS; live feed restored")
+                            return
+                        except Exception as _e:
+                            logger.warning("Kite auto-recover applied token but auth still failed: %s", _e)
+                    else:
+                        logger.warning("Kite auto-recover refresh attempt failed")
+                except Exception as e:
+                    logger.warning("Kite auto-recover loop error: %s", e)
+
+                for _ in range(int(_AUTO_RECOVER_POLL_SEC)):
+                    if not self._running:
+                        return
+                    time.sleep(1)
+
+        threading.Thread(target=_loop, daemon=True).start()
 
     def start(self):
         """Start KiteTicker real-time feed."""
         self._running = True
 
-        if not config.KITE_API_KEY or not config.KITE_ACCESS_TOKEN:
-            raise RuntimeError(
-                "\n\n  KITE_API_KEY and KITE_ACCESS_TOKEN must be set in backend/.env\n"
-                "  Run: python3 generate_token.py to get today's access token.\n"
-            )
+        if not config.KITE_API_KEY:
+            raise RuntimeError("\n\n  KITE_API_KEY must be set in backend/.env\n")
+        if not config.KITE_ACCESS_TOKEN:
+            logger.warning("KITE_ACCESS_TOKEN missing — attempting immediate headless refresh")
+            try:
+                from auto_token import refresh_token
+                if refresh_token():
+                    from scheduler import _apply_new_token
+                    _apply_new_token()
+                else:
+                    raise RuntimeError("headless refresh returned false")
+            except Exception as e:
+                raise RuntimeError(
+                    "\n\n  KITE_ACCESS_TOKEN missing and auto-refresh failed.\n"
+                    "  Ensure KITE_USER_ID, KITE_PASSWORD, KITE_TOTP_SECRET, KITE_API_KEY, "
+                    f"KITE_API_SECRET are valid in backend/.env.\n  Error: {e}\n"
+                )
 
         # Verify credentials work before starting ticker
         try:
             kite = get_kite()
             profile = kite.profile()
-            logger.info(f"Kite auth OK — logged in as: {profile.get('user_name', 'unknown')}")
+            logger.info(f"Kite auth OK â€” logged in as: {profile.get('user_name', 'unknown')}")
         except Exception as e:
             logger.warning(f"Kite auth failed: {e}")
-            # Token refresh is handled by main.py background thread after startup.
-            # Kite-only: no alternate price feed — cache stays empty until session is valid.
-            logger.warning(
-                "Kite session pending — price cache empty until token is valid; "
-                "auto-refresh will call restart_ticker_with_new_token() when ready."
-            )
-            self._demo_mode = True
-            return
+            # Immediate non-interactive refresh attempt (no manual browser/code flow).
+            recovered = False
+            try:
+                from auto_token import refresh_token
+                if refresh_token():
+                    from scheduler import _apply_new_token
+                    _apply_new_token()
+                    kite = get_kite()
+                    profile = kite.profile()
+                    logger.info(f"Kite auth recovered â€” logged in as: {profile.get('user_name', 'unknown')}")
+                    recovered = True
+                else:
+                    raise RuntimeError("headless refresh returned false")
+            except Exception as _re:
+                logger.warning(f"Immediate headless token refresh failed: {_re}")
+            if recovered:
+                # Continue normal startup path below (REST warmup + ticker start).
+                pass
+            else:
+                # Kite-only: no alternate price feed â€” cache stays empty until session is valid.
+                logger.warning(
+                    "Kite session pending â€” price cache empty until token is valid; "
+                    "auto-refresh will call restart_ticker_with_new_token() when ready."
+                )
+                self._demo_mode = True
+                self._start_auto_recover_loop()
+                return
+
+        self._demo_mode = False
 
         # Do one REST fetch immediately so cache is populated on startup
         logger.info("Initial REST quote fetch...")
@@ -322,10 +401,11 @@ class FeedManager:
         # threaded=True runs the ticker in a background thread
         # reconnect_max_tries=50 handles network drops
         _ticker.connect(threaded=True)
-        logger.info("KiteTicker started — waiting for ticks")
+        logger.info("KiteTicker started â€” waiting for ticks")
 
     def stop(self):
         self._running = False
+        self._recover_thread_started = False
         global _ticker
         if _ticker:
             try:
@@ -361,7 +441,7 @@ def restart_ticker_with_new_token() -> None:
         return
     if getattr(feed_manager, "_demo_mode", False):
         feed_manager._demo_mode = False
-        logger.info("Kite session active — live ticker starting")
+        logger.info("Kite session active â€” live ticker starting")
     _ticker = KiteTicker(api_key, token)
     _ticker.on_ticks = _on_ticks
     _ticker.on_connect = _on_connect

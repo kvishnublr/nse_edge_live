@@ -1,5 +1,5 @@
 """
-NSE EDGE v5 — Backtest Data Layer
+STOCKR.IN v5 â€” Backtest Data Layer
 Downloads and stores 3-year historical data:
   - NIFTY OHLCV + VIX daily  (Kite historical_data API)
   - Option chain PCR daily    (NSE FO bhavcopy CSV)
@@ -25,7 +25,7 @@ IST = pytz.timezone("Asia/Kolkata")
 DB_PATH = Path(__file__).parent / "data" / "backtest.db"
 
 
-# ─── DB INIT ──────────────────────────────────────────────────────────────────
+# â”€â”€â”€ DB INIT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def init_db():
     DB_PATH.parent.mkdir(exist_ok=True)
     conn = get_conn()
@@ -130,7 +130,7 @@ def get_conn():
     return sqlite3.connect(str(DB_PATH), timeout=10)
 
 
-# ─── KITE HISTORICAL OHLCV ────────────────────────────────────────────────────
+# â”€â”€â”€ KITE HISTORICAL OHLCV â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def download_kite_history(kite, days: int = 1095):
     """Download NIFTY OHLCV and VIX daily data via Kite historical API."""
     from config import KITE_TOKENS
@@ -141,7 +141,7 @@ def download_kite_history(kite, days: int = 1095):
 
     # NIFTY OHLCV
     try:
-        logger.info(f"Downloading NIFTY OHLCV {from_dt} → {to_dt} ...")
+        logger.info(f"Downloading NIFTY OHLCV {from_dt} â†’ {to_dt} ...")
         data = kite.historical_data(KITE_TOKENS["NIFTY"], from_dt, to_dt, "day")
         rows = []
         for d in data:
@@ -155,7 +155,7 @@ def download_kite_history(kite, days: int = 1095):
 
     # VIX
     try:
-        logger.info(f"Downloading VIX {from_dt} → {to_dt} ...")
+        logger.info(f"Downloading VIX {from_dt} â†’ {to_dt} ...")
         data   = kite.historical_data(KITE_TOKENS["INDIAVIX"], from_dt, to_dt, "day")
         sorted_data = sorted(data, key=lambda d: d["date"])
         rows   = []
@@ -175,7 +175,7 @@ def download_kite_history(kite, days: int = 1095):
     conn.close()
 
 
-# ─── NSE BHAVCOPY PCR ─────────────────────────────────────────────────────────
+# â”€â”€â”€ NSE BHAVCOPY PCR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 _NSE = requests.Session()
 _NSE.headers.update({
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
@@ -192,7 +192,7 @@ def _nse_cookie():
 
 
 def download_chain_history(days: int = 1095):
-    """Download NSE FO bhavcopy for each trading day → compute NIFTY PCR."""
+    """Download NSE FO bhavcopy for each trading day â†’ compute NIFTY PCR."""
     to_dt   = datetime.now(IST).date()
     from_dt = to_dt - timedelta(days=days)
 
@@ -316,14 +316,14 @@ def _parse_pcr(csv_text: str, ref_date=None):
         return None
 
 
-# ─── NSE PARTICIPANT OI — FII + PCR (works for all dates) ────────────────────
+# â”€â”€â”€ NSE PARTICIPANT OI â€” FII + PCR (works for all dates) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def download_participant_oi(days: int = 1095):
     """
     Download NSE participant-wise OI CSV for each trading day.
     URL: archives.nseindia.com/content/nsccl/fao_participant_oi_DDMMYYYY.csv
     Extracts:
-      - FII net index futures position → stored in fii_daily
-      - Total NIFTY index option Put/Call OI → PCR stored in chain_daily
+      - FII net index futures position â†’ stored in fii_daily
+      - Total NIFTY index option Put/Call OI â†’ PCR stored in chain_daily
     Works for all dates including post-Jul 2024.
     """
     to_dt   = datetime.now(IST).date()
@@ -387,7 +387,7 @@ def download_participant_oi(days: int = 1095):
 
 
 def _parse_participant_oi(csv_text: str) -> dict:
-    """Parse participant OI CSV → extract FII net futures + total index option OI."""
+    """Parse participant OI CSV â†’ extract FII net futures + total index option OI."""
     try:
         lines  = [l.strip() for l in csv_text.splitlines() if l.strip()]
         header = None
@@ -434,11 +434,11 @@ def _parse_participant_oi(csv_text: str) -> dict:
 
 
 def download_fii_history(days: int = 1095):
-    """Alias — use participant OI which gives both FII and PCR."""
+    """Alias â€” use participant OI which gives both FII and PCR."""
     return download_participant_oi(days)
 
 
-# ─── DATA SUMMARY ─────────────────────────────────────────────────────────────
+# â”€â”€â”€ DATA SUMMARY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def get_data_summary() -> dict:
     conn = get_conn()
     def _cr(table, col="date"):
@@ -455,7 +455,7 @@ def get_data_summary() -> dict:
     return s
 
 
-# ─── LIVE SIGNAL LOGGING ──────────────────────────────────────────────────────
+# â”€â”€â”€ LIVE SIGNAL LOGGING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def log_signal(gates: dict, verdict: str, pass_count: int,
                indices: dict, chain, fii):
     """Append every live signal verdict to the DB for future analysis."""
@@ -794,7 +794,7 @@ def log_swing_radar_triggers(
         for p in picks:
             signal_key = f"SWING|{trade_date}|{p['sym']}|{p['setup']}|{bucket_2h}"
             trig = (
-                f"Swing {p['setup']} | {p['sig_lbl']} | {p['chg']:+.2f}% | Vol×{p['vol_r']:.1f} | "
+                f"Swing {p['setup']} | {p['sig_lbl']} | {p['chg']:+.2f}% | VolÃ—{p['vol_r']:.1f} | "
                 f"{p['pc']}/5 gates | score {p['score']}"
             )
             if p.get("rank_score", p["score"]) < p["score"]:
@@ -1010,7 +1010,7 @@ def _clean_signal_text(val):
     if val is None:
         return val
     s = str(val)
-    for bad in ("A�", "Â·", "·", "•", "�"):
+    for bad in ("Aï¿½", "Ã‚Â·", "Â·", "â€¢", "ï¿½"):
         s = s.replace(bad, " | ")
     while "  " in s:
         s = s.replace("  ", " ")
@@ -1191,7 +1191,7 @@ def import_historical_spike_results(results: list):
                 """,
                 (
                     signal_key, trade_date, symbol, signal_type,
-                    f"Price {float(r.get('chg_pct', 0) or 0):+.2f}% · Vol {float(r.get('vol_mult', 0) or 0):.1f}x",
+                    f"Price {float(r.get('chg_pct', 0) or 0):+.2f}% Â· Vol {float(r.get('vol_mult', 0) or 0):.1f}x",
                     "hi" if result == "HIT_T2" or float(r.get("score", 0) or 0) >= 70 else "md" if float(r.get("score", 0) or 0) >= 55 else "lo",
                     signal_time, entry, sl, t2 or t1, exit_price,
                     signal_time if exit_price is not None else None,

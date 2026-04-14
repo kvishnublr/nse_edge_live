@@ -1,5 +1,5 @@
 """
-NSE EDGE — Session playbook design layer.
+STOCKR.IN â€” Session playbook design layer.
 
 - Pre-build checklist (risk / signal definition / discipline) persisted in SQLite.
 - One primary intraday playbook per session from regime tags (anti-sprawl).
@@ -25,7 +25,7 @@ logger = logging.getLogger("playbook_design")
 IST = pytz.timezone("Asia/Kolkata")
 DB_PATH = Path(__file__).parent / "data" / "backtest.db"
 
-# ─── Catalogue ───────────────────────────────────────────────────────────────
+# â”€â”€â”€ Catalogue â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 PLAYBOOKS: dict[str, dict[str, str]] = {
     "GAMMA_EXPIRY_SCALP": {
@@ -35,7 +35,7 @@ PLAYBOOKS: dict[str, dict[str, str]] = {
     },
     "MAX_PAIN_FADE": {
         "title": "Max pain gravity",
-        "focus": "Fade large spot vs max-pain gaps into Tue–Wed of expiry week; spreads, defined risk.",
+        "focus": "Fade large spot vs max-pain gaps into Tueâ€“Wed of expiry week; spreads, defined risk.",
         "gates_hint": "Mean-reversion bias; confirm with chain OI shifts.",
     },
     "STOP_HUNT_REVERSAL": {
@@ -50,7 +50,7 @@ PLAYBOOKS: dict[str, dict[str, str]] = {
     },
     "ORB_FII_FILTER": {
         "title": "ORB + flow filter",
-        "focus": "9:15–9:30 range; breakout only if FII/PCR context aligns (your Gate 3/4 stack).",
+        "focus": "9:15â€“9:30 range; breakout only if FII/PCR context aligns (your Gate 3/4 stack).",
         "gates_hint": "Default intraday workhorse when regime is calm.",
     },
     "DEFAULT_STRUCTURE": {
@@ -65,7 +65,7 @@ CHECKLIST_ITEMS: list[dict[str, Any]] = [
     {"item_key": "unit_instrument", "label": "Instrument chosen (future / option structure / spread)", "sort_order": 20},
     {"item_key": "unit_hold", "label": "Holding horizon defined (scalp vs day vs swing)", "sort_order": 30},
     {"item_key": "unit_invalidate", "label": "Invalidation / stop rule defined before entry", "sort_order": 40},
-    {"item_key": "sig_vs_trade", "label": "Signal vs trade separated (context filter ≠ entry trigger)", "sort_order": 50},
+    {"item_key": "sig_vs_trade", "label": "Signal vs trade separated (context filter â‰  entry trigger)", "sort_order": 50},
     {"item_key": "risk_max_loss", "label": "Max loss per trade & session cap documented", "sort_order": 60},
     {"item_key": "risk_gap", "label": "Gap / event tail risk reviewed (results, RBI, global)", "sort_order": 70},
     {"item_key": "risk_liquidity", "label": "Strikes liquid enough; bid-ask acceptable for size", "sort_order": 80},
@@ -228,12 +228,12 @@ def select_primary_playbook(reg: dict[str, Any]) -> dict[str, Any]:
     primary = "DEFAULT_STRUCTURE"
     reasons: list[str] = []
 
-    # 1) Expiry Thursday — gamma dominates if vol is tradable
+    # 1) Expiry Thursday â€” gamma dominates if vol is tradable
     if "EXPIRY_DAY" in tags and vix >= 11.5:
         primary = "GAMMA_EXPIRY_SCALP"
-        reasons.append("Expiry session with VIX ≥ 11.5 → gamma scalping is master playbook.")
+        reasons.append("Expiry session with VIX â‰¥ 11.5 â†’ gamma scalping is master playbook.")
 
-    # 2) Tue–Wed before Thursday, elevated vol / pain gap
+    # 2) Tueâ€“Wed before Thursday, elevated vol / pain gap
     elif (
         wd in (1, 2)
         and d2e in (1, 2)
@@ -242,29 +242,29 @@ def select_primary_playbook(reg: dict[str, Any]) -> dict[str, Any]:
         and "FAR_FROM_MAX_PAIN" in tags
     ):
         primary = "MAX_PAIN_FADE"
-        reasons.append("Expiry-week Tue/Wed, spot materially off max pain → mean-reversion toward pain.")
+        reasons.append("Expiry-week Tue/Wed, spot materially off max pain â†’ mean-reversion toward pain.")
 
-    # 3) Stress / shock → stop-hunt / reversal microstructure
+    # 3) Stress / shock â†’ stop-hunt / reversal microstructure
     elif "VIX_STRESS" in tags or (vix >= 17.5 and "VIX_SHOCK_UP" in tags):
         primary = "STOP_HUNT_REVERSAL"
-        reasons.append("High VIX or sharp VIX spike → prioritize stop-run / absorption logic.")
+        reasons.append("High VIX or sharp VIX spike â†’ prioritize stop-run / absorption logic.")
 
-    # 4) Extreme or fast-shifting PCR → positioning playbook as context-first
+    # 4) Extreme or fast-shifting PCR â†’ positioning playbook as context-first
     elif ("PCR_FAST_SHIFT" in tags and ("PCR_HIGH" in tags or "PCR_LOW" in tags)) or pcr > 1.45 or pcr < 0.58:
         primary = "OI_UNWIND_REVERSAL"
-        reasons.append("Extreme or rapidly shifting PCR → OI/positioning as master context.")
+        reasons.append("Extreme or rapidly shifting PCR â†’ OI/positioning as master context.")
 
     # 5) Default intraday
     else:
         primary = "ORB_FII_FILTER"
-        reasons.append("Calm/mixed regime → ORB + flow filter as default playbook.")
+        reasons.append("Calm/mixed regime â†’ ORB + flow filter as default playbook.")
 
     suppressed = [c for c in candidates if c != primary]
     notes: list[str] = []
     if "FII_HEAVY_SELL" in tags and primary == "ORB_FII_FILTER":
         notes.append("FII heavy sell: require stronger Gate 4 confirmation on long breakouts.")
     if "VIX_COMPLACENT" in tags and primary == "ORB_FII_FILTER":
-        notes.append("Low VIX: ORB breaks may be shallow — tighten targets.")
+        notes.append("Low VIX: ORB breaks may be shallow â€” tighten targets.")
 
     return {
         "primary": primary,

@@ -4,13 +4,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<meta name="description" content="NSE EDGE SYSTEM v5 — Live trading terminal: Zerodha Kite, 5-gate engine, spikes, and F&O context.">
+<meta name="description" content="STOCKR.IN — Live trading terminal: Zerodha Kite, 5-gate engine, spikes, and F&O context.">
 <meta name="keywords" content="NSE, intraday signals, F&O, spike detector, zerodha, kite connect, EDGE">
-<meta property="og:site_name" content="NSE EDGE">
-<meta property="og:title" content="NSE EDGE SYSTEM v5">
+<meta property="og:site_name" content="STOCKR.IN">
+<meta property="og:title" content="STOCKR.IN">
 <meta property="og:description" content="AI-Powered Intraday Trading Signals with 70% Win Rate">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' stroke='%2300ff88' stroke-width='2' fill='none' opacity='0.3'/><path d='M8 12h8M12 8v8M9 10l3-4 3 4' stroke='%2300ff88' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' fill='none'/></svg>">
-<title>Stockr — Advanced Trading Edge</title>
+<title>STOCKR.IN - Advanced Trading Edge</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0d1520">
 <!-- When the UI is on a different host than the FastAPI server, set this to the API origin (no trailing slash). Example: https://nse-edge-backend.fly.dev -->
@@ -88,7 +88,7 @@ html,body,#tb,.pn,#center,.tp,.gate,.rpk,.je,.stc,.msc,.acard,.mi,
 .theme-tog::after{content:'';position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:var(--t2);transition:all .2s}
 .light .theme-tog{background:#e2e8f0;border-color:#cbd5e1}
 .light .theme-tog::after{left:18px;background:var(--bl)}
-/* App shell: 90% viewport — centered “near fullscreen” */
+/* App shell: 90% viewport — centered "near fullscreen" */
 html{
   min-height:100%;
   min-width:100%;
@@ -139,7 +139,7 @@ body{
 #tv-container{flex:1;min-height:0}
 .tv-link{cursor:pointer;transition:color .12s}
 .tv-link:hover{color:var(--go)!important;text-decoration:underline;text-underline-offset:2px}
-/* TOPBAR — NSE EDGE SYSTEM v5 (clean strip) */
+/* TOPBAR — STOCKR.IN (clean strip) */
 #tb{
   height:36px;display:flex;align-items:center;justify-content:space-between;
   padding:0 12px 0 14px;background:var(--s1);border-bottom:1px solid var(--b1);flex-shrink:0;
@@ -1214,7 +1214,7 @@ button{font-weight:700}
 .cepe-card.cepe-wait{border-color:rgba(56,190,255,.2);background:linear-gradient(180deg,var(--s3),var(--s2))}
 .cepe-card.cepe-wait::before{background:linear-gradient(90deg,transparent,rgba(56,190,255,.45),transparent)!important;display:block!important;height:3px!important}
 .cepe-card.cepe-wait::after{display:none!important}
-/* K-Zones: non-primary direction — same numbers for context, not a parallel “BUY” */
+/* K-Zones: non-primary direction — same numbers for context, not a parallel "BUY" */
 .cepe-card.cepe-side-secondary{opacity:.78;border-style:dashed}
 .cepe-card.cepe-side-secondary .cepe-sigfill{opacity:.45}
 .cepe-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px}
@@ -1485,7 +1485,7 @@ button{font-weight:700}
 .ttcr:last-child{border:none}
 .ttci{font-size:9px;color:var(--t1)}.ttct{font-size:9px;font-weight:600}.ttcl{font-size:8px;color:var(--t2)}
 
-/* CONFLUENCE — premium “lab” panel */
+/* CONFLUENCE — premium "lab" panel */
 #tp-confluence{padding:0!important;overflow-y:auto!important;background:radial-gradient(ellipse 80% 50% at 50% -20%,rgba(167,139,250,.12),transparent 55%),radial-gradient(ellipse 60% 40% at 100% 0%,rgba(56,190,255,.08),transparent 45%),var(--bg)}
 .cf-wrap{max-width:980px;margin:0 auto;padding:20px 18px 32px;display:flex;flex-direction:column;gap:20px}
 .cf-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:14px;padding-bottom:4px;border-bottom:1px solid rgba(255,255,255,.06)}
@@ -1623,7 +1623,7 @@ button{font-weight:700}
 .cf-news-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
 @media (max-width:1100px){.cf-news-grid{grid-template-columns:1fr 1fr}}
 @media (max-width:720px){.cf-news-grid{grid-template-columns:1fr}}
-/* Confluence — today’s movement panel */
+/* Confluence — today's movement panel */
 .cf-glance{
   position:relative;border-radius:16px;padding:20px 18px 18px;margin-bottom:16px;
   background:linear-gradient(165deg,rgba(25,35,55,.55),rgba(12,18,30,.42));
@@ -2226,7 +2226,7 @@ button{font-weight:700}
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   NSE EDGE v5 — GLOBAL VISUAL POLISH (readability & clarity pass)
+   STOCKR.IN — GLOBAL VISUAL POLISH (readability & clarity pass)
    Injected last so it wins over all earlier rules.
    ═══════════════════════════════════════════════════════════════ */
 
@@ -2550,7 +2550,7 @@ textarea[style*="font-size"] { font-size:12px!important; }
 .btpre { font-size:9px!important; }
 
 /* ══════════════════════════════════════════════════════════════════
-   NSE EDGE — FULL-WINDOW + CONTRAST AUDIT PASS
+   STOCKR.IN — FULL-WINDOW + CONTRAST AUDIT PASS
    ══════════════════════════════════════════════════════════════════ */
 
 /* ── A. TRUE FULL-WINDOW — remove floating-card look ─────────────── */
@@ -3118,6 +3118,7 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
 
 
 </style>
+  <link rel="stylesheet" href="/frontend-static/saas_nexus.css?v=12">
 </head>
 <body>
 
@@ -3169,7 +3170,7 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
       <div id="vk-from"><span id="vk-from-txt">A Thought From..</span></div>
       <div id="vk-div"></div>
       <div id="vk-name"></div>
-      <div id="vk-sub">NSE EDGE &nbsp;·&nbsp; Intraday Intelligence</div>
+      <div id="vk-sub">STOCKR.IN &nbsp;·&nbsp; Intraday Intelligence</div>
       <div id="vk-text-sparkles" aria-hidden="true"></div>
     </div>
   </div>
@@ -3521,7 +3522,7 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
   display:flex;flex-direction:column;align-items:center;
 }
 
-/* One glass card: warning line + divider + gradient “earn” line */
+/* One glass card: warning line + divider + gradient "earn" line */
 .vk-rally-panel{
   position:relative;
   width:max-content;
@@ -3736,10 +3737,10 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
           <circle cx="12" cy="12" r="10" stroke="url(#logoGrad)" stroke-width="2" fill="none" opacity="0.35"/>
           <path d="M8 12h8M12 8v8M9 10l3-4 3 4" stroke="url(#logoGrad)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
         </svg>
-        <span class="logo-nse" aria-label="NSE">NSE</span>
+        <span class="logo-nse" aria-label="STOCKR.IN">STOCKR.IN</span>
       </div>
       <div class="logo-text">
-        <span class="logo-sub">EDGE SYSTEM <span class="logo-ver">v5</span></span>
+        <span class="logo-sub">TRADING OS <span class="logo-ver">v5</span></span>
       </div>
     </div>
     <div class="sep"></div>
@@ -3765,6 +3766,7 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
     <button class="sound-btn on" id="sound-tog" onclick="toggleSound()" title="Sound alerts (EXECUTE signal)"></button>
     <button class="tbbtn" id="strategy-prof-btn" onclick="toggleStrategyProfile()" title="Switch strategy profile">🧪 BALANCED V2</button>
     <button class="tbbtn primary" onclick="openDayPerf()" title="Full-day performance (all alerts)">DAY</button>
+    <button class="tbbtn nx-launch-btn" id="nx-launch-btn" onclick="openNexusModal()" title="Open Login Nexus portal">LOGIN HUB</button>
     <button type="button" class="tb-util" onclick="exportCSV()" title="Export CSV">CSV</button>
     <button type="button" class="tb-util" onclick="testTelegram()" title="Telegram test">TG</button>
     <button type="button" class="tb-util" onclick="testWhatsapp()" title="WhatsApp test">WA</button>
@@ -4016,6 +4018,12 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
           <span class="tab-txt">PLAYBOOK</span>
         </div>
 
+        <div class="tab tab-nexus" style="--tc:#67e8f9;--tg:rgba(103,232,249,.14);--ts:rgba(103,232,249,.5)"
+             onclick="sw('nexus',this)" title="LOGIN HUB: user/admin access, wallets, strategy entitlements, and admin controls">
+          <span class="tab-glyph" aria-hidden="true">N</span>
+          <span class="tab-txt">LOGIN HUB</span>
+        </div>
+
         <!-- ═══ GROUP 3 · CONTEXT ═════════════════════════════════════════ -->
         <div class="tab-group-sep" aria-hidden="true"><span>CONTEXT</span></div>
 
@@ -4056,7 +4064,7 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
         <div class="tab tab-overflow" data-overflow onclick="sw('journal',this)"><span class="tab-glyph">📝</span><span class="tab-txt">TRADE LOG</span></div>
         <div class="tab tab-overflow" data-overflow onclick="sw('stats',this)"><span class="tab-glyph">📊</span><span class="tab-txt">STATS</span></div>
         <div class="tab tab-overflow tab-pol" data-overflow onclick="sw('policy',this)"><span class="tab-glyph">◆</span><span class="tab-txt">POLICY</span></div>
-        <div class="tab tab-overflow tab-btg" data-overflow onclick="sw('learnbt',this)"><span class="tab-glyph">ℹ</span><span class="tab-txt">BT GUIDE</span></div>
+<div class="tab tab-overflow tab-btg" data-overflow onclick="sw('learnbt',this)"><span class="tab-glyph">ℹ</span><span class="tab-txt">BT GUIDE</span></div>
       </div>
     </div>
     <!-- ⊞ MORE -->
@@ -4094,12 +4102,22 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
         <button class="tmm-item" onclick="tabsMoreSw('stats')"><span>📊</span>STATS</button>
         <button class="tmm-item" onclick="tabsMoreSw('playbook')"><span>📓</span>PLAYBOOK</button>
         <button class="tmm-item" onclick="tabsMoreSw('policy')"><span>◆</span>POLICY</button>
-        <button class="tmm-item" onclick="tabsMoreSw('learnbt')"><span>ℹ</span>BT GUIDE</button>
+                <button class="tmm-item" onclick="tabsMoreSw('nexus')"><span>N</span>LOGIN HUB</button>
+<button class="tmm-item" onclick="tabsMoreSw('learnbt')"><span>ℹ</span>BT GUIDE</button>
       </div>
     </div>
   </div>
 
   <div id="ta">
+  <div class="tp" id="tp-nexus" style="padding:0;gap:0;overflow-y:auto;flex-direction:column">
+    <div class="nx-inline-launch">
+      <div class="nx-inline-card">
+        <div class="nx-inline-title">Login Nexus Portal</div>
+        <div class="nx-inline-sub">Open the full-screen login and access workspace for users/admins, wallets, strategy routing, payments, and control functions.</div>
+        <button class="nx-btn nx-btn-primary" type="button" onclick="openNexusModal()">Open Login Portal</button>
+      </div>
+    </div>
+  </div>
 
   <!-- TAB: CONFLUENCE (MORE menu / overflow tab — backend/confluence_engine.py) -->
   <div class="tp" id="tp-confluence" style="flex-direction:column;overflow-y:auto">
@@ -5353,8 +5371,8 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
       </div>
       <div style="background:var(--s2);border:1px solid rgba(251,191,36,.35);border-radius:6px;padding:8px 10px">
         <div style="font-size:7px;font-weight:800;letter-spacing:1px;color:#fbbf24;margin-bottom:6px">CONTEXT BACKTEST + REPORT</div>
-        <p style="font-size:8px;color:var(--t2);line-height:1.5;margin:0 0 6px"><b>1)</b> <b>⬇ Download</b> — <b>DL days</b> = how far back to pull daily NIFTY+VIX into <code style="font-size:8px">adv_idx_options_daily</code> (separate from <code style="font-size:8px">ohlcv</code>). <b>2)</b> <b>▶ Report</b> — <b>Report days</b> = length of the summary window (ending today). <b>Min score</b> (0–100) = cutoff on <i>options_context_score</i> (IV proxy from VIX + weekday gamma; higher ⇒ fewer “execute” days). <b>Verdict</b> = either ignore gates or blend the last <code style="font-size:8px">signal_log</code> verdict that day. If the table is empty, the report falls back to <code style="font-size:8px">ohlcv∩vix_daily</code>.</p>
-        <p style="font-size:8px;color:var(--t3);line-height:1.5;margin:0 0 8px"><b>Not option trades:</b> “Paper trades” here means <i>session days</i> where the context score ≥ min score. No strikes, expiries, or option premiums are chosen or filled. <b>Next session</b> is NIFTY daily close → next row’s close only. For dates, scores, and NIFTY close per day use <b>↓ JSON</b> → <code style="font-size:8px">daily_tail</code> / <code style="font-size:8px">executed_days_recent</code>.</p>
+        <p style="font-size:8px;color:var(--t2);line-height:1.5;margin:0 0 6px"><b>1)</b> <b>⬇ Download</b> — <b>DL days</b> = how far back to pull daily NIFTY+VIX into <code style="font-size:8px">adv_idx_options_daily</code> (separate from <code style="font-size:8px">ohlcv</code>). <b>2)</b> <b>▶ Report</b> — <b>Report days</b> = length of the summary window (ending today). <b>Min score</b> (0–100) = cutoff on <i>options_context_score</i> (IV proxy from VIX + weekday gamma; higher ⇒ fewer "execute" days). <b>Verdict</b> = either ignore gates or blend the last <code style="font-size:8px">signal_log</code> verdict that day. If the table is empty, the report falls back to <code style="font-size:8px">ohlcv∩vix_daily</code>.</p>
+        <p style="font-size:8px;color:var(--t3);line-height:1.5;margin:0 0 8px"><b>Not option trades:</b> "Paper trades" here means <i>session days</i> where the context score ≥ min score. No strikes, expiries, or option premiums are chosen or filled. <b>Next session</b> is NIFTY daily close → next row's close only. For dates, scores, and NIFTY close per day use <b>↓ JSON</b> → <code style="font-size:8px">daily_tail</code> / <code style="font-size:8px">executed_days_recent</code>.</p>
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
           <label style="font-size:8px;color:var(--t2)">DL days <input type="number" class="advio-nb" id="advio-dl-days" value="730" min="30" max="3650" placeholder="730" style="width:52px;padding:4px 6px;font-size:10px" title="Kite history depth for dedicated table"></label>
           <button type="button" class="btpre" onclick="advioDownloadDaily()" style="font-size:9px;padding:4px 10px;border-color:#38bdf8;color:#38bdf8;font-weight:800">⬇ DOWNLOAD → DB</button>
@@ -5530,7 +5548,7 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
         <div id="pbk-api-strip" class="pol-sub" style="display:none;margin-top:4px;padding:10px 12px;border-radius:10px;background:var(--st-d);border:1px solid var(--st-b);color:var(--t0);font-size:10px;line-height:1.55;max-width:900px"></div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
           <button type="button" class="pol-btn" onclick="refreshPlaybookDesign()">Refresh live</button>
-          <button type="button" class="pol-btn" onclick="pbRecordSession()" title="Store today’s regime + playbook in playbook_daily">Record session</button>
+          <button type="button" class="pol-btn" onclick="pbRecordSession()" title="Store today's regime + playbook in playbook_daily">Record session</button>
           <span class="bd bb" id="pbk-compact">Checklist —</span>
         </div>
       </div>
@@ -5548,7 +5566,7 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
         <pre id="pbk-bt-out" class="pol-mono" style="max-height:220px;overflow:auto">—</pre>
       </div>
       <div class="pol-card"><div class="pol-k">Recorded sessions</div>
-        <p class="pol-sub" style="margin:0 0 8px;font-size:9px">Today’s row updates automatically whenever you open this tab or tap <b>Refresh live</b> (same data as the live panel). Use <b>Record session</b> to force-save the current snapshot.</p>
+        <p class="pol-sub" style="margin:0 0 8px;font-size:9px">Today's row updates automatically whenever you open this tab or tap <b>Refresh live</b> (same data as the live panel). Use <b>Record session</b> to force-save the current snapshot.</p>
         <button type="button" class="pol-btn" onclick="pbLoadHistory()" style="margin-bottom:6px">Reload history</button>
         <div style="overflow:auto;max-height:200px"><table class="perf-table" style="width:100%;font-size:11px"><thead><tr><th>Date</th><th>Playbook</th><th>VIX</th><th>PCR</th></tr></thead><tbody id="pbk-hist-body"><tr><td colspan="4" style="text-align:center;color:var(--t2)">—</td></tr></tbody></table></div>
       </div>
@@ -6022,7 +6040,7 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
     <!-- Hero banner -->
     <div style="background:linear-gradient(135deg,#0f0a1e 0%,#13192e 60%,#0d2240 100%);border:1px solid rgba(167,139,250,.2);border-radius:8px;padding:18px 22px;margin-bottom:16px;position:relative;overflow:hidden">
       <div style="position:absolute;top:-20px;right:-20px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,rgba(167,139,250,.12),transparent 70%);pointer-events:none"></div>
-      <div style="font-size:7px;font-weight:700;letter-spacing:3px;color:rgba(167,139,250,.6);margin-bottom:6px">NSE EDGE </div>
+      <div style="font-size:7px;font-weight:700;letter-spacing:3px;color:rgba(167,139,250,.6);margin-bottom:6px">STOCKR.IN </div>
       <div style="font-family:var(--fh);font-size:17px;font-weight:900;letter-spacing:2px;color:#c4b5fd;margin-bottom:6px;line-height:1.1">OPTIONS BACKTEST<br>GUIDE</div>
       <div style="font-size:8.5px;color:var(--t1);line-height:1.6">Build, test, and validate intraday options strategies using Python and real 1-min data. Use the system's live backtest engine as the benchmark.</div>
     </div>
@@ -6313,7 +6331,7 @@ entry_time    strike  type  entry  max   exit  return%
   <!-- TAB: EDGE ENGINE -->
   <div class="tp" id="tp-edge" style="gap:0;padding:0;overflow-y:auto;flex-direction:column;background:var(--bg)">
 
-    <!-- ① HERO: 3-column top cards -->
+    <!-- â'  HERO: 3-column top cards -->
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:10px 12px 0">
 
       <!-- Composite Score -->
@@ -6363,7 +6381,7 @@ entry_time    strike  type  entry  max   exit  return%
       </div>
     </div>
 
-    <!-- ② LIVE TICKER STRIP -->
+    <!-- â'¡ LIVE TICKER STRIP -->
     <div id="eg-ticker" style="display:flex;align-items:center;gap:14px;padding:6px 14px;background:var(--s1);border-top:1px solid var(--b2);border-bottom:1px solid var(--b2);font-size:10px;font-weight:700;flex-wrap:wrap;margin-top:8px">
       <span style="font-size:8px;color:var(--t2);letter-spacing:.1em;font-weight:800">LIVE EDGE</span>
       <span>Score <span id="eg-tick-score" style="color:var(--am);font-weight:900">—</span></span>
@@ -6379,7 +6397,7 @@ entry_time    strike  type  entry  max   exit  return%
       <span style="margin-left:auto;font-size:8px;color:var(--t2)">Updated: <span id="eg-tick-ts">—</span></span>
     </div>
 
-    <!-- ③ MAIN 2-COL BODY -->
+    <!-- â'¢ MAIN 2-COL BODY -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 12px 14px;align-items:start">
 
       <!-- ═══ LEFT COLUMN ═══ -->
@@ -7588,6 +7606,27 @@ entry_time    strike  type  entry  max   exit  return%
 <!-- CHART MODAL (replaced by TradingView modal — kept for DOM compatibility) -->
 <div id="chart-modal" style="display:none"><span id="chart-sym"></span><span id="chart-date"></span><div id="chart-container"></div></div>
 
+
+<div id="nx-modal">
+  <div class="nx-modal-ov" onclick="closeNexusModal()"></div>
+  <div class="nx-modal-panel">
+    <div class="nx-modal-bar">
+      <div class="nx-modal-title">
+        <div class="nx-modal-kicker">STOCKR.IN CONTROL DECK</div>
+        <div class="nx-modal-head">Nexus</div>
+        <div class="nx-modal-sub">Full-screen SaaS, user, wallet, payment, strategy, and admin workspace</div>
+      </div>
+      <div class="nx-modal-actions">
+        <button class="nx-btn nx-btn-ghost" type="button" onclick="nxRefresh()">Refresh</button>
+        <button class="nx-btn nx-btn-gold" type="button" onclick="closeNexusModal()">Close</button>
+      </div>
+    </div>
+    <div class="nx-shell nx-shell-modal">
+      <div id="nx-root"><div style="padding:24px;color:#e5eefc;font-family:Aptos,Segoe UI,sans-serif">Loading Nexus control hub...</div></div>
+    </div>
+  </div>
+</div>
+
 <script>
 'use strict';
 
@@ -8164,6 +8203,9 @@ function sw(name,btn){
   if(name==='swing'){
     setTimeout(loadSwingTriggerHistory, 100);
     setTimeout(function(){ try{ _swingRefreshWeakSyms(); }catch(e){} }, 50);
+  }
+  if(name==='nexus'){
+    setTimeout(function(){ try{ if(typeof window.nxEnter === 'function') window.nxEnter(); }catch(e){} }, 40);
   }
   // Update MORE button active state
   (function(){
@@ -9916,7 +9958,7 @@ async function refreshStatsTab(){
     const peBias   = pcr <= 0.9 ? 'STRONG' : pcr <= 1.1 ? 'MODERATE' : 'WEAK';
     const peReason = `PCR ${pcr.toFixed(2)} · ${nifty < maxPain ? 'Below' : 'Above'} Max Pain ${maxPain.toLocaleString?.('en-IN')||maxPain} · VIX ${vix.toFixed(1)}`;
 
-    // One primary playbook from PCR skew — the other card stays for levels/context only (not a parallel “BUY”).
+    // One primary playbook from PCR skew — the other card stays for levels/context only (not a parallel "BUY").
     const primarySide = isAvoid ? 'avoid' : (pcr > 1.02 ? 'ce' : pcr < 0.98 ? 'pe' : 'neutral');
     let ceTitle, peTitle, ceBadgeCls, peBadgeCls, ceBadgeTxt, peBadgeTxt, ceMeter, peMeter;
     if(isAvoid) {
@@ -12359,7 +12401,7 @@ function ixFmtSignalTime(s) {
             +' · <span style="color:var(--t3)">'+active.length+' signals (q≥64)</span>'
             +(blocked.length?' · <span style="color:var(--am)">'+blocked.length+' VIX-blocked</span>':'');
           if(!active.length){
-            if(lbody) lbody.innerHTML='<div style="text-align:center;padding:30px;color:var(--t2);font-size:9px"><div style="font-size:22px;opacity:.3;margin-bottom:10px">◈</div>No qualifying signals today (Prime-style: quality≥64, FULL≥80=2 lots)<br><span style="font-size:7.5px;color:var(--t3)">Pulled from today’s INDEX HUNT history · VIX≥17 marks day blocked</span></div>';
+            if(lbody) lbody.innerHTML='<div style="text-align:center;padding:30px;color:var(--t2);font-size:9px"><div style="font-size:22px;opacity:.3;margin-bottom:10px">◈</div>No qualifying signals today (Prime-style: quality≥64, FULL≥80=2 lots)<br><span style="font-size:7.5px;color:var(--t3)">Pulled from today&#39;s INDEX HUNT history · VIX≥17 marks day blocked</span></div>';
             return;
           }
           var rows=active.map(function(s,idx){
@@ -12617,7 +12659,7 @@ function ixFmtSignalTime(s) {
   }
   window.irFilter = irFilter;
 
-  /** Radar-style “why this signal” chips from INDEX_RADAR engine fields */
+  /** Radar-style "why this signal" chips from INDEX_RADAR engine fields */
   function ixBuildWhyTags(s) {
     const tags = [];
     const win = String(s.chg_window || '5min').replace(/min/gi, 'm').toUpperCase();
@@ -13742,7 +13784,7 @@ async function cfLoadHistory(){
 // INIT
 // ═══════════════════════════════════════════════
 setMode('intraday');
-setTimeout(()=>notify('Stockr / NSE EDGE ready — connecting to live data…'),400);
+setTimeout(()=>notify('STOCKR.IN ready - connecting to live data...'),400);
 
 (function stockrWelcomeVoice(){
   var spoken = false;
@@ -13754,7 +13796,7 @@ setTimeout(()=>notify('Stockr / NSE EDGE ready — connecting to live data…'),
     try{
       if(!window.speechSynthesis) return;
       if(sessionStorage.getItem('nse_stockr_welcome_sess') === '1'){ spoken = true; return; }
-      var u = new SpeechSynthesisUtterance('Welcome to Stockr — an advanced trading edge.');
+      var u = new SpeechSynthesisUtterance('Welcome to STOCKR.IN, your advanced trading OS.');
       u.lang = 'en-IN';
       u.rate = 0.9;
       u.pitch = 1;
@@ -18201,7 +18243,7 @@ function notifyExecuteDesktop(d){
   const pc = d.pass_count != null ? d.pass_count : '—';
   const body = sub + ' · ' + pc + '/5 gates';
   const go = function(){
-    try{ new Notification('NSE EDGE — EXECUTE', { body: body, tag: 'nse-exec-edge' }); }catch(e){}
+    try{ new Notification('STOCKR.IN — EXECUTE', { body: body, tag: 'stockrin-exec-edge' }); }catch(e){}
   };
   if(Notification.permission === 'granted') go();
   else if(Notification.permission !== 'denied') Notification.requestPermission().then(function(p){ if(p === 'granted') go(); });
@@ -18214,7 +18256,7 @@ function exportCSV(){
   const activeTab = document.querySelector('.tp.on');
   if(!activeTab){ notify('No active tab'); return; }
   const id = activeTab.id;
-  let rows = [], filename = 'nse_edge_export.csv';
+  let rows = [], filename = 'stockr_export.csv';
 
   if(id === 'tp-stocks'){
     filename = 'stock_oi.csv';
@@ -20109,7 +20151,7 @@ function _renderSESCards() {
 
 <!-- PWA Install Banner -->
 <div id="pwa-banner" style="display:none;position:fixed;bottom:12px;right:12px;z-index:9997;background:var(--s1);border:1px solid var(--go-b);border-radius:6px;padding:10px 14px;align-items:center;gap:12px;box-shadow:0 4px 20px rgba(0,0,0,.4)">
-  <span style="font-size:9px;color:var(--t0)">📱 Install NSE EDGE as app</span>
+  <span style="font-size:9px;color:var(--t0)">📱 Install STOCKR.IN as app</span>
   <button id="pwa-install-btn" style="padding:3px 10px;font-family:var(--fn);font-size:8px;font-weight:700;border:1px solid var(--go-b);border-radius:3px;cursor:pointer;color:var(--go);background:var(--go-d)">INSTALL</button>
   <button onclick="document.getElementById('pwa-banner').style.display='none'" style="background:none;border:none;cursor:pointer;color:var(--t2);font-size:12px">✕</button>
 </div>
@@ -20130,6 +20172,7 @@ function _renderSESCards() {
     <button id="tv-close" onclick="closeTVChart()">✕ CLOSE</button>
   </div>
   <div id="tv-container"></div>
+
 </div>
 
 <script>
@@ -20299,7 +20342,7 @@ function egRenderGexFromSnap(gex){
     var rowBg = isAtm ? 'background:rgba(250,204,21,.06);' : '';
     var rowBorder = isAtm ? 'border-left:2px solid var(--am);' : '';
     html += '<tr style="'+rowBg+rowBorder+'">';
-    html += '<td style="padding:2px 6px;font-weight:'+(isAtm?'900':'700')+';color:'+(isAtm?'var(--am)':'var(--t1)')+';text-align:right">'+s.strike+(isAtm?' ◂':'')+'</td>';
+    html += '<td style="padding:2px 6px;font-weight:'+(isAtm?'900':'700')+';color:'+(isAtm?'var(--am)':'var(--t1)')+';text-align:right">'+s.strike+(isAtm?' (ATM)':'')+'</td>';
     html += '<td style="padding:2px 4px;color:var(--go)">'+(s.ce_oi>=1000?(s.ce_oi/1000).toFixed(0)+'K':s.ce_oi||0)+'</td>';
     html += '<td style="padding:2px 4px;color:var(--st)">'+(s.pe_oi>=1000?(s.pe_oi/1000).toFixed(0)+'K':s.pe_oi||0)+'</td>';
     html += '<td style="padding:2px 6px">'+gexBar+'</td>';
@@ -20637,7 +20680,7 @@ function egRenderGex(gex){
     var rowStyle=isAtm?'background:rgba(250,204,21,.07);border-left:2px solid var(--am)':'';
     var strikeStyle='color:'+(isAtm?'var(--am)':'var(--t1)')+';font-weight:'+(isAtm?900:700);
     html+='<tr style="border-bottom:1px solid rgba(255,255,255,.03);'+rowStyle+'">';
-    html+='<td style="padding:3px 8px;text-align:right;'+strikeStyle+'">'+s.strike+(isAtm?' ◂':'')+'</td>';
+    html+='<td style="padding:3px 8px;text-align:right;'+strikeStyle+'">'+s.strike+(isAtm?' (ATM)':'')+'</td>';
     html+='<td style="padding:3px 4px;text-align:right;color:var(--go)">'+fmtOI(s.ce_oi)+'</td>';
     html+='<td style="padding:3px 4px;text-align:center"><div style="display:flex;align-items:center;justify-content:center;gap:1px">'+
       '<div style="width:'+ceW+'px;height:8px;background:#10b981;border-radius:2px 0 0 2px;opacity:.75"></div>'+
@@ -20709,7 +20752,7 @@ function egRenderSetup(d){
   if(gex.explosion_dn) rows.push(['GEX Exp Dn','<span style="color:var(--st)">'+gex.explosion_dn+'</span> (momentum zone if breaks)']);
 
   var html=reg.gate===0
-    ?'<div style="padding:12px;text-align:center;color:var(--st);font-weight:800;font-size:11px">⛔ REGIME GATE CLOSED<br><span style="font-size:8px;color:var(--t2);font-weight:600">VIX too high or session blocked</span></div>'
+    ?'<div style="padding:12px;text-align:center;color:var(--st);font-weight:800;font-size:11px">â›" REGIME GATE CLOSED<br><span style="font-size:8px;color:var(--t2);font-weight:600">VIX too high or session blocked</span></div>'
     :rows.map(function(r){return '<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:5px 12px;border-bottom:1px solid rgba(255,255,255,.04)"><span style="font-size:9px;color:var(--t2);font-weight:700;min-width:90px">'+r[0]+'</span><span style="font-size:9px;font-weight:700;text-align:right">'+r[1]+'</span></div>';}).join('');
   egHtml('eg-setup-body',html);
 }
@@ -21003,7 +21046,7 @@ function hpRenderCalendar(days){
         tooltip = ds+': W'+rd.wins+' L'+rd.losses+' WR'+wr+'% '+hpFmtInr(rd.pnl_inr);
       }
       if(ds===today) cls+=' hp-today';
-      var clickHandler = rd ? 'onclick="hpDrillDay(''+ds+'')" title="'+tooltip+'"' : '';
+      var clickHandler = rd ? 'onclick="hpDrillDay(\''+ds+'\')" title="'+tooltip+'"' : '';
       html += '<div class="'+cls+'" style="width:'+CELL+'px;height:'+CELL+'px;'+bg+'" '+clickHandler+'></div>';
     }
     html += '</div></div>';
@@ -21050,7 +21093,7 @@ function hpDrillDay(date){
     return '<div class="hp-row"><span style="color:var(--t2)">'+r[0]+'</span><span>'+r[1]+'</span></div>';
   }).join('');
 
-  html += '<button onclick="hpOpenInDayView(''+date+'')" style="margin-top:12px;width:100%;padding:8px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);color:#818cf8;border-radius:6px;font-size:9px;font-weight:800;cursor:pointer;letter-spacing:.5px">OPEN IN DAY VIEW →</button>';
+  html += '<button onclick="hpOpenInDayView(\''+date+'\')" style="margin-top:12px;width:100%;padding:8px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);color:#818cf8;border-radius:6px;font-size:9px;font-weight:800;cursor:pointer;letter-spacing:.5px">OPEN IN DAY VIEW →</button>';
 
   hpHtml('hp-day-body', html);
 }
@@ -21100,7 +21143,7 @@ function hpRenderTopWorst(days){
   var worst5 = sorted.slice(-5).reverse();
   var makeRow = function(d, isTop){
     var clr=isTop?'var(--go)':'var(--st)';
-    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px;border-bottom:1px solid rgba(255,255,255,.04);cursor:pointer" onclick="hpDrillDay(''+d.date+'')">' +
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px;border-bottom:1px solid rgba(255,255,255,.04);cursor:pointer" onclick="hpDrillDay(\''+d.date+'\')">' +
       '<div><div style="font-size:10px;font-weight:800;color:var(--t0)">'+d.date+'</div><div style="font-size:8px;color:var(--t2)">'+d.wins+'W '+d.losses+'L · '+d.win_rate+'%</div></div>' +
       '<div style="text-align:right"><div style="font-size:11px;font-weight:900;color:'+clr+'">'+(d.pts>=0?'+':'')+d.pts+'pts</div><div style="font-size:8px;color:'+clr+'">'+hpFmtInr(d.pnl_inr)+'</div></div>' +
       '</div>';
@@ -21176,6 +21219,12 @@ function hpRenderWrCanvas(days){
 (function(){
   var splash=document.getElementById('vk-splash');
   if(!splash) return;
+  // TEMPORARY SWITCH: disable intro splash on load.
+  var DISABLE_VK_SPLASH = true;
+  if(DISABLE_VK_SPLASH){
+    splash.style.display='none';
+    return;
+  }
 
   var raf=null;
 
@@ -21305,10 +21354,9 @@ function hpRenderWrCanvas(days){
 })();
 </script>
 
+<script src="/frontend-static/saas_nexus.js?v=13"></script>
 </body>
 </html>
-
-
 
 
 

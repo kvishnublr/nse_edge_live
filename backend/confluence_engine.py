@@ -1,8 +1,8 @@
 """
-NSE EDGE — Intraday confluence model (experimental, removable).
+STOCKR.IN â€” Intraday confluence model (experimental, removable).
 
 Combines only data we already have: gates, PCR/OI totals, VIX, spot vs max pain,
-coarse ΔOI between chain snapshots, and F&O stock breadth. No order-flow / DOM.
+coarse Î”OI between chain snapshots, and F&O stock breadth. No order-flow / DOM.
 
 Not predictive of guaranteed moves; use for context and journaling only.
 """
@@ -101,61 +101,61 @@ def compute_confluence(
     reasons: list[str] = []
     parts: dict[str, dict[str, float]] = {}
 
-    # 1) Gates (0–30)
+    # 1) Gates (0â€“30)
     g_pts = pc * 6.0
     parts["gates"] = {"pts": round(g_pts, 1), "max": 30, "pass": float(pc)}
     if pc >= 5:
-        reasons.append("All 5 gates green — engine allows risk-on sizing.")
+        reasons.append("All 5 gates green â€” engine allows risk-on sizing.")
     elif pc >= 3:
-        reasons.append(f"{pc}/5 gates pass — moderate alignment.")
+        reasons.append(f"{pc}/5 gates pass â€” moderate alignment.")
     else:
-        reasons.append("Gates weak — most confluence reads are low reliability.")
+        reasons.append("Gates weak â€” most confluence reads are low reliability.")
 
-    # 2) PCR skew (0–18)
+    # 2) PCR skew (0â€“18)
     dev = abs(pcr - 1.0)
     pcr_pts = _clamp((dev / 0.35) * 6.0, 0, 18)
     parts["pcr_skew"] = {"pts": round(pcr_pts, 1), "max": 18, "pcr": pcr}
     if pcr >= 1.12:
-        reasons.append(f"PCR {pcr:.2f} — put-heavy OI (bullish skew for index).")
+        reasons.append(f"PCR {pcr:.2f} â€” put-heavy OI (bullish skew for index).")
     elif pcr <= 0.88:
-        reasons.append(f"PCR {pcr:.2f} — call-heavy OI (bearish skew).")
+        reasons.append(f"PCR {pcr:.2f} â€” call-heavy OI (bearish skew).")
     else:
-        reasons.append(f"PCR {pcr:.2f} — near balanced.")
+        reasons.append(f"PCR {pcr:.2f} â€” near balanced.")
 
-    # 3) VIX regime (0–15)
+    # 3) VIX regime (0â€“15)
     if vix <= 0:
         vix_pts = 7.0
-        reasons.append("VIX missing — volatility score neutral.")
+        reasons.append("VIX missing â€” volatility score neutral.")
     elif vix < 14:
         vix_pts = 15.0
-        reasons.append(f"VIX {vix:.1f} — complacency / range-friendly.")
+        reasons.append(f"VIX {vix:.1f} â€” complacency / range-friendly.")
     elif vix <= 18:
         vix_pts = 11.0
-        reasons.append(f"VIX {vix:.1f} — normal intraday regime.")
+        reasons.append(f"VIX {vix:.1f} â€” normal intraday regime.")
     elif vix <= 22:
         vix_pts = 6.0
-        reasons.append(f"VIX {vix:.1f} — elevated; cut size.")
+        reasons.append(f"VIX {vix:.1f} â€” elevated; cut size.")
     else:
         vix_pts = 2.0
-        reasons.append(f"VIX {vix:.1f} — high fear; avoid fresh option buys.")
+        reasons.append(f"VIX {vix:.1f} â€” high fear; avoid fresh option buys.")
     parts["vix"] = {"pts": round(vix_pts, 1), "max": 15, "vix": vix}
 
-    # 4) Spot vs max pain (0–12)
+    # 4) Spot vs max pain (0â€“12)
     mp_pts = 0.0
     if nifty > 0 and mp > 0:
         dist_pct = abs(nifty - mp) / nifty * 100.0
         mp_pts = _clamp(12.0 - dist_pct * 1.2, 0, 12)
         if dist_pct < 0.35:
-            reasons.append(f"Spot near Max Pain {mp:,.0f} — pinning risk.")
+            reasons.append(f"Spot near Max Pain {mp:,.0f} â€” pinning risk.")
         elif nifty > mp:
-            reasons.append(f"Spot above Max Pain {mp:,.0f} — call writers under pressure.")
+            reasons.append(f"Spot above Max Pain {mp:,.0f} â€” call writers under pressure.")
         else:
-            reasons.append(f"Spot below Max Pain {mp:,.0f} — put writers under pressure.")
+            reasons.append(f"Spot below Max Pain {mp:,.0f} â€” put writers under pressure.")
     else:
         reasons.append("Max pain / spot incomplete.")
     parts["max_pain"] = {"pts": round(mp_pts, 1), "max": 12}
 
-    # 5) ΔOI aggregate vs previous snapshot (0–12)
+    # 5) Î”OI aggregate vs previous snapshot (0â€“12)
     d_oi_pts = 5.0
     if prev_chain_totals and tc > 0 and tp > 0:
         ptc = int(prev_chain_totals.get("total_call_oi") or 0)
@@ -173,7 +173,7 @@ def compute_confluence(
                 reasons.append("Call/Put OI changes balanced vs last snapshot.")
     parts["oi_delta"] = {"pts": round(d_oi_pts, 1), "max": 12}
 
-    # 6) Stock breadth (0–13)
+    # 6) Stock breadth (0â€“13)
     ex_n = sum(1 for s in stocks if str(s.get("verdict", "")).upper() == "EXECUTE")
     hi_n = sum(
         1
@@ -184,14 +184,14 @@ def compute_confluence(
     br_pts = _clamp(ex_n * 3.5 + min(hi_n, 4) * 1.5, 0, 13)
     parts["breadth"] = {"pts": round(br_pts, 1), "max": 13, "execute_n": float(ex_n), "hi_score_n": float(hi_n)}
     if ex_n:
-        reasons.append(f"{ex_n} F&O name(s) on EXECUTE — directional participation.")
+        reasons.append(f"{ex_n} F&O name(s) on EXECUTE â€” directional participation.")
     elif hi_n:
-        reasons.append(f"{hi_n} high-score watchlist names — wait for gate confirmation.")
+        reasons.append(f"{hi_n} high-score watchlist names â€” wait for gate confirmation.")
 
     raw = g_pts + pcr_pts + vix_pts + mp_pts + d_oi_pts + br_pts
     if vdx == "NO TRADE":
         raw *= 0.55
-        reasons.append("Verdict NO TRADE — confluence capped (stand down).")
+        reasons.append("Verdict NO TRADE â€” confluence capped (stand down).")
 
     score = int(round(_clamp(raw, 0, 100)))
 
@@ -228,7 +228,7 @@ def compute_confluence(
         "max_pain": int(mp) if mp else 0,
         "components": parts,
         "reasons": reasons[:12],
-        "disclaimer": "Confluence blends gates, OI, VIX, max pain & breadth only — no order-flow. "
+        "disclaimer": "Confluence blends gates, OI, VIX, max pain & breadth only â€” no order-flow. "
         "Not investment advice; for research and journaling.",
         "ts": time.time(),
     }

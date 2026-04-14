@@ -1,5 +1,5 @@
 """
-NSE EDGE v5 — Daily Token Generator
+STOCKR.IN v5 â€” Daily Token Generator
 Run every morning before trading: python generate_token.py
 
 Reads KITE_API_KEY and KITE_API_SECRET from backend/.env,
@@ -14,7 +14,7 @@ import webbrowser
 from urllib.parse import urlparse, parse_qs
 from pathlib import Path
 
-# ── locate backend/.env relative to this script ───────────────────────────────
+# â”€â”€ locate backend/.env relative to this script â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 SCRIPT_DIR = Path(__file__).resolve().parent
 ENV_PATH   = SCRIPT_DIR / "backend" / ".env"
 
@@ -43,7 +43,7 @@ def write_access_token(path: Path, new_token: str):
     if pattern.search(text):
         updated = pattern.sub(new_line, text)
     else:
-        # Token line not present yet — append it
+        # Token line not present yet â€” append it
         updated = text.rstrip("\n") + f"\n{new_line}\n"
 
     path.write_text(updated, encoding="utf-8")
@@ -51,10 +51,10 @@ def write_access_token(path: Path, new_token: str):
 
 def main():
     print("=" * 55)
-    print("  NSE EDGE v5 — Kite Connect Daily Token Generator")
+    print("  STOCKR.IN v5 â€” Kite Connect Daily Token Generator")
     print("=" * 55)
 
-    # ── 1. Load credentials ────────────────────────────────────────────────────
+    # â”€â”€ 1. Load credentials â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if not ENV_PATH.exists():
         print(f"\nERROR: {ENV_PATH} not found.")
         print("Copy backend/.env.example to backend/.env and fill in your API key/secret.")
@@ -71,7 +71,7 @@ def main():
         print("\nERROR: KITE_API_SECRET is missing or not set in backend/.env")
         sys.exit(1)
 
-    # ── 2. Import kiteconnect ──────────────────────────────────────────────────
+    # â”€â”€ 2. Import kiteconnect â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     try:
         from kiteconnect import KiteConnect
     except ImportError:
@@ -81,13 +81,13 @@ def main():
 
     kite = KiteConnect(api_key=api_key)
 
-    # ── 3. Open login URL in browser ───────────────────────────────────────────
+    # â”€â”€ 3. Open login URL in browser â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     login_url = f"https://kite.zerodha.com/connect/login?v=3&api_key={api_key}"
     print(f"\nOpening Kite login in your browser...")
     print(f"  URL: {login_url}\n")
     webbrowser.open(login_url)
 
-    # ── 4. Ask for the redirect URL ────────────────────────────────────────────
+    # â”€â”€ 4. Ask for the redirect URL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     print("After logging in, Zerodha will redirect your browser to a URL like:")
     print("  https://127.0.0.1/?request_token=XXXX&action=login&status=success\n")
     print("Paste that FULL redirect URL here and press Enter:")
@@ -97,7 +97,7 @@ def main():
         print("\nERROR: No URL entered. Aborting.")
         sys.exit(1)
 
-    # ── 5. Parse request_token ─────────────────────────────────────────────────
+    # â”€â”€ 5. Parse request_token â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     try:
         parsed = urlparse(redirect_url)
         params = parse_qs(parsed.query)
@@ -116,7 +116,7 @@ def main():
 
     print(f"\nParsed request_token: {request_token[:8]}...{request_token[-4:]}")
 
-    # ── 6. Generate access token ───────────────────────────────────────────────
+    # â”€â”€ 6. Generate access token â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     print("Generating access token from Kite API...")
     try:
         session = kite.generate_session(request_token, api_secret=api_secret)
@@ -129,12 +129,12 @@ def main():
         print("  - Kite app redirect URL not configured to http://127.0.0.1/")
         sys.exit(1)
 
-    # ── 7. Write to backend/.env ───────────────────────────────────────────────
+    # â”€â”€ 7. Write to backend/.env â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     write_access_token(ENV_PATH, access_token)
 
     print(f"\nAccess token written to {ENV_PATH}")
     print(f"  Token: {access_token[:8]}...{access_token[-4:]}")
-    print("\nNSE EDGE is ready to start. Run:")
+    print("\nSTOCKR.IN is ready to start. Run:")
     print("  cd backend && python main.py")
     print("=" * 55)
 

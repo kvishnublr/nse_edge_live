@@ -1,5 +1,5 @@
 """
-NSE EDGE v5 — Zerodha Kite Connect Daily Token Generator
+STOCKR.IN v5 â€” Zerodha Kite Connect Daily Token Generator
 Run this script ONCE every morning before starting the system.
 
 Usage:
@@ -76,7 +76,7 @@ def main():
     print("\n" + "=" * 60)
     print("  STEP 1: Login to Kite (with TOTP)")
     print("=" * 60)
-    print("\n  In the browser: User ID → Password → 6-digit TOTP from your authenticator app.")
+    print("\n  In the browser: User ID â†’ Password â†’ 6-digit TOTP from your authenticator app.")
     print("  Kite app redirect must match (e.g. https://127.0.0.1/ in developer settings).\n")
     print(f"Opening: {login_url}\n")
     webbrowser.open(login_url)

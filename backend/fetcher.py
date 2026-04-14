@@ -1,5 +1,5 @@
 """
-NSE EDGE v5 — Data Fetcher (Zerodha Kite Connect)
+STOCKR.IN v5 â€” Data Fetcher (Zerodha Kite Connect)
 
 All market data from Kite:
   - Option chain OI via kite.quote on NFO instruments
@@ -42,7 +42,7 @@ def _kite_or_none(kite, context: str):
         )
     return False
 
-# ─── NSE SESSION (for FII/DII only) ──────────────────────────────────────────
+# â”€â”€â”€ NSE SESSION (for FII/DII only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 _nse_session = requests.Session()
 _nse_session.headers.update(NSE_HEADERS)
 _nse_cookie_ts = 0
@@ -135,7 +135,7 @@ def _nse_get(url: str, max_retries: int = 3) -> Optional[dict]:
                 ct = resp.headers.get("Content-Type", "")
                 if "json" not in ct:
                     # NSE returned HTML (bot detection / Cloudflare challenge)
-                    logger.warning(f"NSE returned non-JSON ({ct[:40]}) — bot detection, retrying with cookie refresh")
+                    logger.warning(f"NSE returned non-JSON ({ct[:40]}) â€” bot detection, retrying with cookie refresh")
                     _nse_refresh_cookie()
                     time.sleep(1)
                     continue
@@ -172,13 +172,13 @@ def _nse_get(url: str, max_retries: int = 3) -> Optional[dict]:
     return None
 
 
-# ─── OPTION CHAIN (via Kite NFO instruments) ──────────────────────────────────
+# â”€â”€â”€ OPTION CHAIN (via Kite NFO instruments) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def fetch_option_chain(kite, symbol: str = "NIFTY") -> Optional[dict]:
     """
     Build option chain using kite.quote() on NFO option instruments.
 
     Flow:
-      1. Get all NFO instruments via kite.instruments("NFO") — cached per session
+      1. Get all NFO instruments via kite.instruments("NFO") â€” cached per session
       2. Filter to weekly/nearest expiry for NIFTY or BANKNIFTY options
       3. Select 6 ITM + ATM + 6 OTM strikes
       4. Call kite.quote() on those ~13 CE+PE instruments (26 keys max)
@@ -218,7 +218,7 @@ def fetch_option_chain(kite, symbol: str = "NIFTY") -> Optional[dict]:
         selected = all_strikes
 
         # Build Kite quote keys: NFO:NIFTY24MAR25000CE etc.
-        inst_map = {}  # (strike, type) → instrument
+        inst_map = {}  # (strike, type) â†’ instrument
         for i in exp_insts:
             key = (int(i["strike"]), i["instrument_type"])  # CE or PE
             inst_map[key] = i
@@ -233,7 +233,7 @@ def fetch_option_chain(kite, symbol: str = "NIFTY") -> Optional[dict]:
         if not kite_keys:
             return None
 
-        # Fetch quotes — max 500 per call, we have ~26
+        # Fetch quotes â€” max 500 per call, we have ~26
         data = kite.quote(kite_keys)
 
         # Parse
@@ -348,7 +348,7 @@ def _get_nfo_instruments(kite, symbol: str) -> List[dict]:
 
 
 def _calc_max_pain(strikes: List[dict]) -> int:
-    """Max pain strike — where total option buyer loss is maximised."""
+    """Max pain strike â€” where total option buyer loss is maximised."""
     try:
         strike_vals = [s["strike"] for s in strikes]
         if not strike_vals:
@@ -370,7 +370,7 @@ def _calc_max_pain(strikes: List[dict]) -> int:
 
 
 def _calc_iv_proxy(ltp: float, spot: float, strike: int, expiry, opt_type: str) -> float:
-    """Rough IV proxy — real IV needs Black-Scholes; this is for display only."""
+    """Rough IV proxy â€” real IV needs Black-Scholes; this is for display only."""
     try:
         if not ltp or not spot:
             return 0.0
@@ -386,7 +386,7 @@ def _calc_iv_proxy(ltp: float, spot: float, strike: int, expiry, opt_type: str) 
         return 0.0
 
 
-# ─── INDICES — from price cache (KiteTicker feeds them live) ─────────────────
+# â”€â”€â”€ INDICES â€” from price cache (KiteTicker feeds them live) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def fetch_indices() -> Optional[dict]:
     """
     Read Nifty, BankNifty, VIX from the live price cache.
@@ -415,7 +415,7 @@ def fetch_indices() -> Optional[dict]:
     return out
 
 
-# ─── F&O STOCK OI (via kite.quote on NFO futures) ─────────────────────────────
+# â”€â”€â”€ F&O STOCK OI (via kite.quote on NFO futures) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def fetch_fno_stocks(kite) -> List[dict]:
     """
     Fetch F&O stock data: price, OI, OI change, volume.
@@ -544,12 +544,12 @@ def _get_nfo_futures(kite) -> List[dict]:
         all_inst = kite.instruments("NFO")
         today    = datetime.now(IST).date()
         # Some symbols have different 'name' field in Zerodha NFO instruments.
-        # Build an alias map: canonical symbol → list of possible name fields.
+        # Build an alias map: canonical symbol â†’ list of possible name fields.
         _name_aliases: dict = {
             "BANKNIFTY": ["BANKNIFTY", "NIFTY BANK"],
             "INDUSINDBK": ["INDUSINDBK", "INDUSINDBANK", "INDUSINDB"],
         }
-        # Reverse alias lookup: any NFO name → canonical FNO_SYMBOLS name
+        # Reverse alias lookup: any NFO name â†’ canonical FNO_SYMBOLS name
         _alias_reverse: dict = {}
         for canon, aliases in _name_aliases.items():
             for alias in aliases:
@@ -582,7 +582,7 @@ def _get_nfo_futures(kite) -> List[dict]:
         missing = [s for s in FNO_SYMBOLS if s not in found]
         logger.info(f"Near-month futures loaded: {len(_nfo_fut_cache)} / {len(FNO_SYMBOLS)} symbols")
         if missing:
-            logger.warning(f"Missing NFO futures for: {missing} — these will be skipped in F&O stocks")
+            logger.warning(f"Missing NFO futures for: {missing} â€” these will be skipped in F&O stocks")
         return _nfo_fut_cache
     except Exception as e:
         logger.error(f"NFO futures instruments error: {e}")
@@ -644,7 +644,7 @@ def get_nifty200_kite_tokens(kite) -> Dict[str, int]:
     return _nifty200_token_cache
 
 
-# ─── NIFTY 50 (constituents + weights for ADV INDEX) ───────────────────────────
+# â”€â”€â”€ NIFTY 50 (constituents + weights for ADV INDEX) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 _nifty50_weights_cache: Dict[str, float] = {}
 _nifty50_weights_ts: float = 0.0
 _nifty50_fut_by_name: Dict[str, dict] = {}
@@ -722,7 +722,7 @@ def get_nifty50_weights() -> Dict[str, float]:
         logger.warning(f"NIFTY 50 weight parse failed: {e}")
 
     if not out:
-        logger.warning("NIFTY 50 API empty — using fallback core basket")
+        logger.warning("NIFTY 50 API empty â€” using fallback core basket")
         out = dict(_FALLBACK_NIFTY50_WEIGHTS)
         s = sum(out.values())
         out = {k: round(v / s * 100, 4) for k, v in out.items()}
@@ -800,7 +800,7 @@ def fetch_nifty50_futures_quotes(kite) -> Tuple[Dict[str, dict], Dict[str, float
     return out, weights
 
 
-# ─── FII / DII (from NSE — Kite does not provide this) ────────────────────────
+# â”€â”€â”€ FII / DII (from NSE â€” Kite does not provide this) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def fetch_fii_dii() -> Optional[dict]:
     """Fetch FII and DII net cash flow from NSE participant data."""
     raw = _nse_get(f"{NSE_BASE}/api/fiidiiTradeReact")

@@ -1,5 +1,5 @@
 """
-NSE EDGE v5 — Backtest Engine
+STOCKR.IN v5 â€” Backtest Engine
 Replays the 5-gate signal logic on 1-year OHLCV + VIX + PCR data.
 Outcome = next day's close vs today's close (LONG simulation).
 """
@@ -13,7 +13,7 @@ from config import GATE as TH
 logger = logging.getLogger("backtest")
 
 
-# ─── HISTORICAL GATE RECONSTRUCTION ───────────────────────────────────────────
+# â”€â”€â”€ HISTORICAL GATE RECONSTRUCTION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _g1(vix: float, vix_chg: float, fii_net: float) -> dict:
     score = 100
     # VERY STRICT - only trade in VERY low VIX
@@ -220,7 +220,7 @@ def aggregate_backtest_window(trades: list) -> dict:
     return {"metrics": metrics, "gate_stats": gate_stats}
 
 
-# ─── MAIN BACKTEST ────────────────────────────────────────────────────────────
+# â”€â”€â”€ MAIN BACKTEST â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def run_backtest(
     from_date: str,
     to_date: str,
@@ -325,7 +325,7 @@ def run_backtest(
             elif nxt_low <= stop:                 # stop hit
                 exit_price  = stop
                 outcome     = "LOSS"
-            else:                                 # neither — closed between
+            else:                                 # neither â€” closed between
                 exit_price  = nxt_close
                 threshold   = max(20, round(atr_v * 0.4))
                 diff        = nxt_close - entry
@@ -413,7 +413,7 @@ def run_backtest(
     }
 
     logger.info(
-        f"Backtest {from_date}→{to_date}: {len(trades)} days, "
+        f"Backtest {from_date}â†’{to_date}: {len(trades)} days, "
         f"{len(execute)} EXECUTE, WR={win_rate}%, PF={pf}"
     )
 

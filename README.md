@@ -1,4 +1,4 @@
-# NSE EDGE v5 — Live Trading System (Zerodha Kite Connect)
+# STOCKR.IN v5 â€” Live Trading System (Zerodha Kite Connect)
 
 Real-time NSE trading terminal powered entirely by Zerodha Kite Connect.
 KiteTicker WebSocket for live ticks. kite.quote for option chain OI.
@@ -8,8 +8,8 @@ NSE API only for FII/DII (Kite doesn't provide it).
 
 ## What you need
 
-1. **Zerodha trading account** — zerodha.com
-2. **Kite Connect developer subscription** — kite.trade (~₹2000/month)
+1. **Zerodha trading account** â€” zerodha.com
+2. **Kite Connect developer subscription** â€” kite.trade (~â‚¹2000/month)
    - Gives you: real-time ticks, option chain OI, instrument data
 3. **Python 3.9+** on your machine
 
@@ -30,7 +30,7 @@ pip install -r backend/requirements.txt
 
 # 4. Add your API keys
 cp backend/.env.example backend/.env
-# Edit backend/.env — add KITE_API_KEY and KITE_API_SECRET
+# Edit backend/.env â€” add KITE_API_KEY and KITE_API_SECRET
 ```
 
 ---
@@ -43,7 +43,7 @@ python3 generate_token.py
 ```
 
 This opens your browser, logs you into Kite, and saves today's access token to `.env` automatically.
-Takes 30 seconds. Token expires at midnight — do this every trading day.
+Takes 30 seconds. Token expires at midnight â€” do this every trading day.
 
 Then start the system:
 
@@ -60,25 +60,25 @@ Browser opens with the terminal. All data live from Kite.
 
 ```
 Zerodha Kite Connect
-        │
-        ├── KiteTicker WebSocket ──→ feed.py ──→ price_cache
-        │   (real-time ticks)        (every tick, 15+ instruments)
-        │
-        ├── kite.quote (NFO) ─────→ fetcher.py ──→ option chain
-        │   (every 30 seconds)       (PCR, OI, Max Pain, strikes)
-        │
-        ├── kite.quote (NFO FUT) ──→ fetcher.py ──→ stock OI scanner
-        │   (every 30 seconds)       (OI, OI change, volume)
-        │
-        └── kite.instruments ──────→ fetcher.py ──→ NFO instrument list
+        â”‚
+        â”œâ”€â”€ KiteTicker WebSocket â”€â”€â†’ feed.py â”€â”€â†’ price_cache
+        â”‚   (real-time ticks)        (every tick, 15+ instruments)
+        â”‚
+        â”œâ”€â”€ kite.quote (NFO) â”€â”€â”€â”€â”€â†’ fetcher.py â”€â”€â†’ option chain
+        â”‚   (every 30 seconds)       (PCR, OI, Max Pain, strikes)
+        â”‚
+        â”œâ”€â”€ kite.quote (NFO FUT) â”€â”€â†’ fetcher.py â”€â”€â†’ stock OI scanner
+        â”‚   (every 30 seconds)       (OI, OI change, volume)
+        â”‚
+        â””â”€â”€ kite.instruments â”€â”€â”€â”€â”€â”€â†’ fetcher.py â”€â”€â†’ NFO instrument list
             (cached, once per day)    (for building option chain)
 
-NSE Website (FII/DII only — Kite doesn't have it)
-        └── /api/fiidiiTradeReact ──→ fetcher.py ──→ FII/DII flow
+NSE Website (FII/DII only â€” Kite doesn't have it)
+        â””â”€â”€ /api/fiidiiTradeReact â”€â”€â†’ fetcher.py â”€â”€â†’ FII/DII flow
 
-signals.py ← reads all of the above → 5-gate engine → verdict
-scheduler.py ← runs all jobs → broadcasts via WebSocket
-main.py ← FastAPI WebSocket hub → frontend/index.html
+signals.py â† reads all of the above â†’ 5-gate engine â†’ verdict
+scheduler.py â† runs all jobs â†’ broadcasts via WebSocket
+main.py â† FastAPI WebSocket hub â†’ frontend/index.html
 ```
 
 ---
@@ -118,32 +118,32 @@ GET /api/fii             FII/DII cash flow
 | G1   | VIX medium     | 16.0    |
 | G2   | PCR bullish    | 1.20    |
 | G2   | PCR bearish    | 0.80    |
-| G4   | Volume surge   | 1.5×    |
+| G4   | Volume surge   | 1.5Ã—    |
 | G4   | OI build       | 5,000   |
 | G5   | R:R intraday   | 1:2.0   |
 | G5   | R:R positional | 1:3.0   |
-| G5   | ATR multiplier | 1.5×    |
+| G5   | ATR multiplier | 1.5Ã—    |
 
 ---
 
 ## Troubleshooting
 
 **"KITE_ACCESS_TOKEN missing"**
-→ Run `python3 generate_token.py` and restart
+â†’ Run `python3 generate_token.py` and restart
 
 **Token invalid / expired**
-→ Access tokens expire at midnight. Run `generate_token.py` every morning.
+â†’ Access tokens expire at midnight. Run `generate_token.py` every morning.
 
 **KiteTicker not connecting**
-→ Check `curl http://localhost:8765/api/health` for `kite_ticker: false`
-→ Verify your internet connection and Kite subscription status
+â†’ Check `curl http://localhost:8765/api/health` for `kite_ticker: false`
+â†’ Verify your internet connection and Kite subscription status
 
 **Option chain shows no data**
-→ Ensure market hours (9:15–15:30 IST)
-→ NFO instruments download on first run — takes ~10 seconds
+â†’ Ensure market hours (9:15â€“15:30 IST)
+â†’ NFO instruments download on first run â€” takes ~10 seconds
 
 **Port 8765 in use**
-→ `./stop.sh` or `lsof -ti:8765 | xargs kill -9`
+â†’ `./stop.sh` or `lsof -ti:8765 | xargs kill -9`
 
 ---
 

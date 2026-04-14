@@ -1,13 +1,13 @@
 """
-NSE EDGE v5 — Automatic Kite Access Token Refresher
+STOCKR.IN v5 â€” Automatic Kite Access Token Refresher
 Headless browser login via Playwright + pyotp (bypasses Cloudflare bot detection).
 
 Requires in backend/.env:
     KITE_API_KEY=xxx
     KITE_API_SECRET=xxx
-    KITE_USER_ID=ZAxxxx          ← your Zerodha login ID
-    KITE_PASSWORD=yourpassword   ← your Zerodha password
-    KITE_TOTP_SECRET=BASE32xxx   ← TOTP secret from Zerodha 2FA setup
+    KITE_USER_ID=ZAxxxx          â† your Zerodha login ID
+    KITE_PASSWORD=yourpassword   â† your Zerodha password
+    KITE_TOTP_SECRET=BASE32xxx   â† TOTP secret from Zerodha 2FA setup
 
 Usage (manual):
     python auto_token.py
@@ -38,13 +38,13 @@ def refresh_token(env_file: str = _ENV_FILE) -> bool:
     import asyncio
     try:
         asyncio.get_running_loop()
-        # Inside asyncio — must run Playwright sync API in a separate thread
+        # Inside asyncio â€” must run Playwright sync API in a separate thread
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(_do_refresh, env_file)
             return future.result(timeout=300)
     except RuntimeError:
-        # No event loop running — call directly (CLI / APScheduler thread)
+        # No event loop running â€” call directly (CLI / APScheduler thread)
         return _do_refresh(env_file)
 
 
@@ -76,7 +76,7 @@ def _do_refresh(env_file: str = _ENV_FILE) -> bool:
     except ImportError:
         logger.error(
             "auto_token: pyotp is not installed. "
-            "Run: pip install pyotp  (included in backend/requirements.txt — reinstall or redeploy the image)."
+            "Run: pip install pyotp  (included in backend/requirements.txt â€” reinstall or redeploy the image)."
         )
         return False
 
@@ -107,6 +107,8 @@ def _do_refresh(env_file: str = _ENV_FILE) -> bool:
     totp_secret = "".join(totp_secret.split()).upper()
 
     try:
+        # Keep refresh strictly non-interactive by default (no visible browser/manual code flow).
+        # Set PLAYWRIGHT_KITE_HEADLESS=0 only for explicit local debugging.
         headless = os.getenv("PLAYWRIGHT_KITE_HEADLESS", "true").strip().lower() not in (
             "0", "false", "no",
         )
@@ -155,11 +157,11 @@ def _do_refresh(env_file: str = _ENV_FILE) -> bool:
             ):
                 context.route(rx, _route_local)
 
-            # ── Step 1: Navigate to Kite Connect login ────────────────────────
+            # â”€â”€ Step 1: Navigate to Kite Connect login â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             logger.info("auto_token: opening Kite login page...")
             page.goto(connect_url, wait_until="domcontentloaded", timeout=45000)
 
-            # ── Step 2: Enter user ID and password ────────────────────────────
+            # â”€â”€ Step 2: Enter user ID and password â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             user_sel = (
                 'input#userid, input[name="user_id"], input[type="text"]'
             )
@@ -169,7 +171,7 @@ def _do_refresh(env_file: str = _ENV_FILE) -> bool:
             page.click('button[type="submit"]')
             logger.info("auto_token: password submitted")
 
-            # ── Step 3: Wait for TOTP / 2FA field (avoid filling wrong text input) ─
+            # â”€â”€ Step 3: Wait for TOTP / 2FA field (avoid filling wrong text input) â”€
             totp_value = pyotp.TOTP(totp_secret).now()
             totp_loc = page.locator(
                 "input#totp, input[name='twofa'], input[name='twoFA'], "
@@ -198,7 +200,7 @@ def _do_refresh(env_file: str = _ENV_FILE) -> bool:
                 except Exception:
                     pass
 
-            # ── Step 4: Wait for redirect URL (up to ~90s) ────────────────────
+            # â”€â”€ Step 4: Wait for redirect URL (up to ~90s) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
             def _url_has_token(u: str) -> bool:
@@ -207,7 +209,7 @@ def _do_refresh(env_file: str = _ENV_FILE) -> bool:
             try:
                 page.wait_for_url(_url_has_token, timeout=90_000)
             except PlaywrightTimeoutError:
-                logger.info("auto_token: wait_for_url timed out; polling page URL…")
+                logger.info("auto_token: wait_for_url timed out; polling page URLâ€¦")
 
             import time as _time
             for _ in range(180):
@@ -251,7 +253,7 @@ def _do_refresh(env_file: str = _ENV_FILE) -> bool:
 
     logger.info(f"auto_token: got request_token ({request_token[:8]}...)")
 
-    # ── Step 5: Exchange request_token for access_token ──────────────────────
+    # â”€â”€ Step 5: Exchange request_token for access_token â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     try:
         from kiteconnect import KiteConnect
         kite = KiteConnect(api_key=api_key)
@@ -262,18 +264,18 @@ def _do_refresh(env_file: str = _ENV_FILE) -> bool:
         logger.error(f"auto_token: generate_session failed: {e}")
         return False
 
-    # ── Step 6: Persist to .env + current process env (scheduler / live reload) ─
+    # â”€â”€ Step 6: Persist to .env + current process env (scheduler / live reload) â”€
     set_key(env_file, "KITE_ACCESS_TOKEN", access_token)
     os.environ["KITE_ACCESS_TOKEN"] = access_token
     root_env = os.path.normpath(os.path.join(os.path.dirname(env_file), "..", ".env"))
     if os.path.isfile(root_env):
         set_key(root_env, "KITE_ACCESS_TOKEN", access_token)
 
-    logger.info(f"auto_token: SUCCESS — {user_name} | token ...{access_token[-6:]}")
+    logger.info(f"auto_token: SUCCESS â€” {user_name} | token ...{access_token[-6:]}")
     return True
 
 
-# ─── CLI usage ────────────────────────────────────────────────────────────────
+# â”€â”€â”€ CLI usage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
@@ -282,7 +284,7 @@ if __name__ == "__main__":
     )
 
     print("\n" + "=" * 55)
-    print("  NSE EDGE v5 — Auto Token Refresh")
+    print("  STOCKR.IN v5 â€” Auto Token Refresh")
     print("=" * 55)
 
     ok = _do_refresh()
@@ -290,7 +292,7 @@ if __name__ == "__main__":
         print("\n  Token refreshed and saved to .env")
         print("  If the API server is already running, apply without restart:")
         print('    curl -X POST http://127.0.0.1:8000/api/token-reload-env')
-        print("  Or use the UI: token banner → LOAD .ENV (or restart the backend).")
+        print("  Or use the UI: token banner â†’ LOAD .ENV (or restart the backend).")
         print("=" * 55 + "\n")
         sys.exit(0)
     else:
