@@ -1863,7 +1863,24 @@ async def auth_login(request: Request) -> dict[str, Any]:
 
 @router.post("/api/admin/login")
 async def admin_login(request: Request) -> dict[str, Any]:
-    raise HTTPException(status_code=400, detail="Use OTP flow: /api/admin/login/request-otp then /api/admin/login/verify-otp")
+    init_saas_db()
+    body = await request.json()
+    email = _normalize_login_email(body.get("email") or "")
+    password = str(body.get("password") or "").strip()
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT * FROM saas_users WHERE email=?", (email,)).fetchone()
+        if row is None or str(row["role"] or "").upper() != "ADMIN":
+            raise HTTPException(status_code=401, detail="Invalid admin credentials")
+        if not _verify_password(password, row["password_hash"], row["password_salt"]):
+            raise HTTPException(status_code=401, detail="Invalid admin credentials")
+        now = _utc_iso()
+        conn.execute("UPDATE saas_users SET last_login_at=?, updated_at=? WHERE id=?", (now, now, int(row["id"])))
+        conn.commit()
+        token = _token_for(_auth_payload(row))
+        return {"ok": True, "token": token, "user": _public_user(conn, int(row["id"]))}
+    finally:
+        conn.close()
 
 
 @router.post("/api/admin/login/request-otp")

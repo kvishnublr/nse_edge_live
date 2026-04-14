@@ -254,9 +254,8 @@
     const loginBusy = NX.loadingAction === 'login';
     const signupBusy = NX.loadingAction === 'signup';
     const adminBusy = NX.loadingAction === 'admin-login';
-    const adminOtpBusy = NX.loadingAction === 'admin-otp-verify';
     const tabsHtml = NX_ADMIN_ONLY ? modeBtn('admin','Admin Login') : (modeBtn('login','User Login')+modeBtn('signup','Create User')+modeBtn('admin','Admin Login'));
-    const adminSub = NX.adminOtpPending ? 'Step 2/2: Enter OTP received on Gmail/Phone' : 'Step 1/2: Enter admin credentials to receive OTP on Gmail/Phone';
+    const adminSub = 'Admin login uses email + password only (OTP temporarily disabled).';
     return '<div class="nx-card nx-auth-card nx-auth-card-wide"><div class="nx-card-head"><div><div class="nx-card-title">Login Portal</div><div class="nx-card-sub">Choose your lane: User Desk, New Signup, or Admin Command Access</div></div><span class="nx-badge '+(gmailReady?'good':'warn')+'">'+(gmailReady?'Gmail Ready':'Gmail Setup Pending')+'</span></div><div class="nx-card-body">'
       + '<div class="nx-auth-wrap nx-auth-wrap-single"><div class="nx-auth-left"><div class="nx-tabs">'+tabsHtml+'</div>'+statusHtml
       + '<div class="nx-auth-mode '+(NX.authMode==='login'?'on':'')+'">'
@@ -272,9 +271,8 @@
       + '<div class="nx-actions" style="margin-top:12px"><button class="nx-btn nx-btn-primary nx-btn-wide" onclick="nxSignup()" '+(signupBusy?'disabled':'')+'>'+(signupBusy?'Creating...':'Create User Account')+'</button></div></div>'
       + '<div class="nx-auth-mode '+(NX.authMode==='admin'?'on':'')+'">'
       + '<div class="nx-form-grid"><label class="nx-form-label">Admin Email<input id="nx-admin-email" class="nx-input" placeholder="'+escapeHtml((boot.admin||{}).email || 'admin@stockr.in')+'"></label><label class="nx-form-label">Password<input id="nx-admin-password" type="password" class="nx-input" placeholder="admin password"></label></div>'
-      + '<div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">OTP Code<input id="nx-admin-otp" class="nx-input" placeholder="6-digit OTP"></label><div style="display:flex;align-items:flex-end"><button class="nx-btn nx-btn-ghost nx-btn-wide" onclick="nxAdminRequestOtp()" '+(adminBusy?'disabled':'')+'>'+(adminBusy?'Sending OTP...':'Send OTP')+'</button></div></div>'
       + '<div class="nx-inline-note" style="margin-top:10px">'+adminSub+'<br>Admin email: <b>'+escapeHtml(defaultAdminEmail())+'</b>.</div>'
-      + '<div class="nx-actions" style="margin-top:12px"><button class="nx-btn nx-btn-gold nx-btn-wide" onclick="nxAdminVerifyOtp()" '+((adminOtpBusy || !NX.adminOtpPending)?'disabled':'')+'>'+(adminOtpBusy?'Verifying...':'Verify OTP & Enter Admin Desk')+'</button></div></div></div></div></div></div>';
+      + '<div class="nx-actions" style="margin-top:12px"><button class="nx-btn nx-btn-gold nx-btn-wide" onclick="nxAdminLogin()" '+(adminBusy?'disabled':'')+'>'+(adminBusy?'Signing in...':'Enter Admin Desk')+'</button></div></div></div></div></div></div>';
   }
 
   function renderPublicSideCards(){
@@ -476,32 +474,12 @@
       });
     });
   };
-  window.nxAdminRequestOtp = function(){
+  window.nxAdminLogin = function(){
     const email = normalizeEmail((el('nx-admin-email')||{}).value || defaultAdminEmail());
     const password = String((el('nx-admin-password')||{}).value || '').trim();
     return runBusy('admin-login', function(){
-      return nxApi('/api/admin/login/request-otp', { method:'POST', body: JSON.stringify({ email: email, password: password }) }).then(function(){
-        NX.adminOtpPending = true;
-        NX.adminOtpEmail = email;
-        setNotice('success', 'OTP sent to admin Gmail. Enter it below to continue.');
-        safeRender();
-        setTimeout(function(){ var oe = el('nx-admin-otp'); if(oe) oe.focus(); }, 40);
-      }).catch(function(err){
-        const fallback = 'Admin OTP request failed. Use ' + defaultAdminEmail() + ' or check credentials.';
-        setNotice('error', err.message || fallback);
-        toast(err.message || fallback);
-      });
-    });
-  };
-  window.nxAdminVerifyOtp = function(){
-    const email = normalizeEmail((el('nx-admin-email')||{}).value || NX.adminOtpEmail || defaultAdminEmail());
-    const otp = String((el('nx-admin-otp')||{}).value || '').trim();
-    return runBusy('admin-otp-verify', function(){
-      return authFlow('/api/admin/login/verify-otp', { email: email, otp: otp }).then(function(){
-        NX.adminOtpPending = false;
-        NX.adminOtpEmail = '';
-      }).catch(function(err){
-        const fallback = 'Admin OTP verification failed. Request new OTP if needed.';
+      return authFlow('/api/admin/login', { email: email, password: password }).catch(function(err){
+        const fallback = 'Admin login failed. Use ' + defaultAdminEmail() + ' or check the password.';
         setNotice('error', err.message || fallback);
         toast(err.message || fallback);
       });
