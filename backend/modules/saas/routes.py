@@ -23,6 +23,7 @@ import requests
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
+from config import is_market_open, get_market_status
 
 logger = logging.getLogger("saas")
 router = APIRouter(tags=["saas-platform"])
@@ -34,7 +35,7 @@ DB_PATH = DATA_DIR / "saas.db"
 TOKEN_SECRET = (os.getenv("SAAS_JWT_SECRET", "stockr-saas-local-secret") or "stockr-saas-local-secret").strip()
 TOKEN_TTL_HOURS = int(os.getenv("SAAS_TOKEN_TTL_HOURS", "72") or 72)
 BRAND_NAME = (os.getenv("APP_BRAND_NAME", "STOCKR.IN") or "STOCKR.IN").strip()
-DEFAULT_ADMIN_EMAIL = (os.getenv("SAAS_ADMIN_EMAIL", "admin@stockr.in") or "admin@stockr.in").strip().lower()
+DEFAULT_ADMIN_EMAIL = (os.getenv("SAAS_ADMIN_EMAIL", "vishnualgo@gmail.com") or "vishnualgo@gmail.com").strip().lower()
 DEFAULT_ADMIN_PASSWORD = (os.getenv("SAAS_ADMIN_PASSWORD", "NseEdge@123") or "NseEdge@123").strip()
 WELCOME_CREDIT = float(os.getenv("SAAS_WELCOME_CREDIT", "500") or 500)
 COUPON_PROFIT_CAP = float(os.getenv("SAAS_COUPON_PROFIT_CAP", "2000") or 2000)
@@ -48,6 +49,10 @@ GMAIL_NOTIFY_ON_SIGNUP = str(os.getenv("GMAIL_NOTIFY_ON_SIGNUP", "1") or "1").st
 GMAIL_NOTIFY_ON_PAYMENT = str(os.getenv("GMAIL_NOTIFY_ON_PAYMENT", "1") or "1").strip().lower() not in {"0", "false", "off", "no"}
 GMAIL_NOTIFY_ON_SIGNAL = str(os.getenv("GMAIL_NOTIFY_ON_SIGNAL", "0") or "0").strip().lower() not in {"0", "false", "off", "no"}
 UPI_PAYEE = (os.getenv("UPI_PAYEE", "stockrin@upi") or "stockrin@upi").strip()
+ADMIN_OTP_TTL_MINUTES = max(2, int(os.getenv("SAAS_ADMIN_OTP_TTL_MINUTES", "5") or 5))
+ADMIN_OTP_MAX_ATTEMPTS = max(1, int(os.getenv("SAAS_ADMIN_OTP_MAX_ATTEMPTS", "5") or 5))
+ADMIN_OTP_PHONE = (os.getenv("SAAS_ADMIN_OTP_PHONE", "9986238877") or "9986238877").strip()
+ADMIN_OTP_WHATSAPP_APIKEY = (os.getenv("SAAS_ADMIN_OTP_WHATSAPP_APIKEY", "") or "").strip()
 
 DEFAULT_STRATEGIES = [
     {"code": "SPIKE", "name": "Spike Hunt", "strategy_type": "INTRADAY", "description": "High-momentum stock spikes from the live scanner.", "active": 1, "theme": "pulse", "accent": "#ff7a18", "default_confidence": 72, "default_max_trades": 6},
@@ -360,6 +365,37 @@ def _send_welcome_email(user_email: str, full_name: str) -> None:
     """
     text = f"Welcome to {BRAND_NAME}. Your account is ready and Nexus is available inside the app."
     _send_gmail_async(user_email, subject, html, text)
+
+
+def _admin_otp_generate() -> str:
+    return f"{secrets.randbelow(1000000):06d}"
+
+
+def _send_admin_otp_email(to_email: str, otp_code: str) -> bool:
+    subject = f"{BRAND_NAME} admin login OTP"
+    ttl = int(ADMIN_OTP_TTL_MINUTES)
+    html_body = f"""
+    <html><body style="font-family:Segoe UI,Arial,sans-serif;background:#07111d;color:#e5eefc;padding:24px">
+      <div style="max-width:640px;margin:auto;background:#0d1b31;border:1px solid #1f3657;border-radius:20px;padding:28px">
+        <div style="font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:#67e8f9">{html.escape(BRAND_NAME)}</div>
+        <h1 style="margin:14px 0 8px;font-size:26px;color:#f8fbff">Admin one-time code</h1>
+        <p style="line-height:1.7;color:#b8cae6">Use this OTP to finish admin sign-in. It expires in <b>{ttl} minutes</b>.</p>
+        <div style="font-size:36px;letter-spacing:.35em;font-weight:800;color:#7ee2ff;margin:18px 0">{html.escape(otp_code)}</div>
+        <p style="font-size:13px;color:#9db4d8">If you did not request this, ignore this email.</p>
+      </div>
+    </body></html>
+    """
+    text_body = f"{BRAND_NAME} admin OTP: {otp_code}. Valid for {ttl} minutes."
+    return _send_gmail(to_email, subject, html_body, text_body)
+
+
+def _send_admin_otp_phone(otp_code: str) -> bool:
+    phone = _normalize_whatsapp_phone(os.getenv("SAAS_ADMIN_OTP_PHONE", ADMIN_OTP_PHONE))
+    apikey = (os.getenv("SAAS_ADMIN_OTP_WHATSAPP_APIKEY", ADMIN_OTP_WHATSAPP_APIKEY) or "").strip()
+    if not phone or not apikey:
+        return False
+    text = f"{BRAND_NAME} admin OTP: {otp_code}. Valid for {int(ADMIN_OTP_TTL_MINUTES)} minutes."
+    return _send_whatsapp_to_phone(phone, apikey, text)
 
 
 def _send_payment_email(user_email: str, plan_name: str, amount: float, expires_at: str) -> None:
@@ -836,6 +872,19 @@ def init_saas_db() -> None:
                 value_json TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS saas_admin_otp (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                email TEXT NOT NULL,
+                otp_code TEXT NOT NULL,
+                purpose TEXT NOT NULL DEFAULT 'ADMIN_LOGIN',
+                expires_at TEXT NOT NULL,
+                used_at TEXT,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES saas_users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_admin_otp_email_created ON saas_admin_otp(email, created_at DESC);
             """
         )
         have = {str(r["name"] or "") for r in conn.execute("PRAGMA table_info(saas_users)").fetchall()}
@@ -878,7 +927,9 @@ def seed_defaults() -> None:
             for strat in DEFAULT_STRATEGIES:
                 conn.execute("INSERT INTO saas_user_strategies(user_id,strategy_code,enabled,min_confidence,max_trades_per_day,risk_level,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)", (uid, strat["code"], 1, strat["default_confidence"], strat["default_max_trades"], "HIGH", now, now))
         else:
-            if str(admin_row["email"] or "").strip().lower() == "admin@nseedge.local" and DEFAULT_ADMIN_EMAIL != "admin@nseedge.local":
+            current_admin_email = str(admin_row["email"] or "").strip().lower()
+            env_admin_email = str(os.getenv("SAAS_ADMIN_EMAIL", "") or "").strip().lower()
+            if current_admin_email in {"admin@nseedge.local", "admin@stockr.in"} or (env_admin_email and current_admin_email != DEFAULT_ADMIN_EMAIL):
                 conn.execute("UPDATE saas_users SET email=?, full_name=?, updated_at=? WHERE id=?", (DEFAULT_ADMIN_EMAIL, f"{BRAND_NAME} Admin", now, int(admin_row["id"])))
             _ensure_broker_row(conn, int(admin_row["id"]))
         conn.execute("INSERT OR REPLACE INTO saas_app_settings(key,value_json,updated_at) VALUES(?,?,?)", ("bootstrap_admin", _dumps({"email": DEFAULT_ADMIN_EMAIL, "password": DEFAULT_ADMIN_PASSWORD}), now))
@@ -1093,15 +1144,16 @@ def _zerodha_test_connection(api_key: str, access_token: str) -> dict[str, Any]:
     }
 
 
-def _zerodha_place_order(account: sqlite3.Row, spec: dict[str, Any], strategy_code: str) -> dict[str, Any]:
+def _zerodha_place_order(account: sqlite3.Row, spec: dict[str, Any], strategy_code: str, *, variety_override: Optional[str] = None) -> dict[str, Any]:
     from kiteconnect import KiteConnect
 
     api_key = str(account["api_key"] or "").strip()
     access_token = _unpack_secret(account["access_token_enc"])
     kite = KiteConnect(api_key=api_key)
     kite.set_access_token(access_token)
+    variety = str(variety_override or account["order_variety"] or "regular").strip().lower() or "regular"
     kwargs: dict[str, Any] = {
-        "variety": str(account["order_variety"] or "regular"),
+        "variety": variety,
         "exchange": spec["exchange"],
         "tradingsymbol": spec["tradingsymbol"],
         "transaction_type": spec["transaction_type"],
@@ -1133,14 +1185,14 @@ def _zerodha_order_snapshot(account: sqlite3.Row, order_id: str) -> dict[str, An
     return {}
 
 
-def _zerodha_cancel_order(account: sqlite3.Row, order_id: str) -> dict[str, Any]:
+def _zerodha_cancel_order(account: sqlite3.Row, order_id: str, *, variety_override: Optional[str] = None) -> dict[str, Any]:
     from kiteconnect import KiteConnect
 
     api_key = str(account["api_key"] or "").strip()
     access_token = _unpack_secret(account["access_token_enc"])
     kite = KiteConnect(api_key=api_key)
     kite.set_access_token(access_token)
-    variety = str(account["order_variety"] or "regular")
+    variety = str(variety_override or account["order_variety"] or "regular").strip().lower() or "regular"
     resp = kite.cancel_order(variety=variety, order_id=order_id)
     return {"order_id": order_id, "cancel_response": resp}
 
@@ -1811,6 +1863,11 @@ async def auth_login(request: Request) -> dict[str, Any]:
 
 @router.post("/api/admin/login")
 async def admin_login(request: Request) -> dict[str, Any]:
+    raise HTTPException(status_code=400, detail="Use OTP flow: /api/admin/login/request-otp then /api/admin/login/verify-otp")
+
+
+@router.post("/api/admin/login/request-otp")
+async def admin_login_request_otp(request: Request) -> dict[str, Any]:
     init_saas_db()
     body = await request.json()
     email = _normalize_login_email(body.get("email") or "")
@@ -1822,7 +1879,74 @@ async def admin_login(request: Request) -> dict[str, Any]:
             raise HTTPException(status_code=401, detail="Invalid admin credentials")
         if not _verify_password(password, row["password_hash"], row["password_salt"]):
             raise HTTPException(status_code=401, detail="Invalid admin credentials")
+        if not _gmail_ready():
+            raise HTTPException(status_code=503, detail="Gmail not configured for OTP delivery")
+        otp = _admin_otp_generate()
+        now_dt = _utc_now()
+        now = _utc_iso(now_dt)
+        expires_at = _utc_iso(now_dt + dt.timedelta(minutes=int(ADMIN_OTP_TTL_MINUTES)))
+        conn.execute(
+            "INSERT INTO saas_admin_otp(user_id,email,otp_code,purpose,expires_at,used_at,attempts,created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (int(row["id"]), email, otp, "ADMIN_LOGIN", expires_at, None, 0, now),
+        )
+        conn.commit()
+        mailed = _send_admin_otp_email(email, otp)
+        phone_sent = _send_admin_otp_phone(otp)
+        if not mailed and not phone_sent:
+            raise HTTPException(status_code=500, detail="Failed to deliver OTP (email/phone)")
+        return {
+            "ok": True,
+            "otp_sent": True,
+            "email": email,
+            "phone": _normalize_whatsapp_phone(os.getenv("SAAS_ADMIN_OTP_PHONE", ADMIN_OTP_PHONE)),
+            "channels": {"email": bool(mailed), "phone": bool(phone_sent)},
+            "ttl_minutes": int(ADMIN_OTP_TTL_MINUTES),
+        }
+    finally:
+        conn.close()
+
+
+@router.post("/api/admin/login/verify-otp")
+async def admin_login_verify_otp(request: Request) -> dict[str, Any]:
+    init_saas_db()
+    body = await request.json()
+    email = _normalize_login_email(body.get("email") or "")
+    otp = re.sub(r"\D+", "", str(body.get("otp") or ""))[:6]
+    if len(otp) != 6:
+        raise HTTPException(status_code=400, detail="Enter valid 6-digit OTP")
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT * FROM saas_users WHERE email=?", (email,)).fetchone()
+        if row is None or str(row["role"] or "").upper() != "ADMIN":
+            raise HTTPException(status_code=401, detail="Invalid admin credentials")
+        otp_row = conn.execute(
+            """
+            SELECT * FROM saas_admin_otp
+            WHERE email=? AND purpose='ADMIN_LOGIN'
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (email,),
+        ).fetchone()
+        if otp_row is None:
+            raise HTTPException(status_code=401, detail="OTP not requested")
+        if str(otp_row["used_at"] or "").strip():
+            raise HTTPException(status_code=401, detail="OTP already used")
+        try:
+            expires_dt = dt.datetime.fromisoformat(str(otp_row["expires_at"]))
+        except Exception:
+            expires_dt = _utc_now() - dt.timedelta(seconds=1)
+        if _utc_now() > expires_dt:
+            raise HTTPException(status_code=401, detail="OTP expired")
+        attempts = int(otp_row["attempts"] or 0)
+        if attempts >= int(ADMIN_OTP_MAX_ATTEMPTS):
+            raise HTTPException(status_code=429, detail="OTP attempts exceeded. Request a new OTP.")
+        if str(otp_row["otp_code"] or "") != otp:
+            conn.execute("UPDATE saas_admin_otp SET attempts=attempts+1 WHERE id=?", (int(otp_row["id"]),))
+            conn.commit()
+            raise HTTPException(status_code=401, detail="Invalid OTP")
         now = _utc_iso()
+        conn.execute("UPDATE saas_admin_otp SET used_at=?, attempts=attempts+1 WHERE id=?", (now, int(otp_row["id"])))
         conn.execute("UPDATE saas_users SET last_login_at=?, updated_at=? WHERE id=?", (now, now, int(row["id"])))
         conn.commit()
         token = _token_for(_auth_payload(row))
@@ -1966,37 +2090,78 @@ async def user_broker_sample_order(request: Request, authorization: Optional[str
             _upsert_broker_order_log(conn, user_id=int(user["id"]), broker_account_id=int(broker["id"]), strategy_code="SAMPLE", signal_key=signal_key, spec=spec, status=("SIMULATED_CANCELLED" if auto_cancel else "SIMULATED"), live_mode=False, broker_status=broker_status, broker_order_id=order_id, request_data=spec, response_data=response_data)
             conn.commit()
             return {"ok": True, "sample": {"mode": "paper", "order_id": order_id, "symbol": symbol, "quantity": qty, "status": final_status}, "broker": _public_broker(conn, int(user["id"]))}
-        placed = _zerodha_place_order(broker, spec, "SAMPLE")
-        order_id = str(placed.get("order_id") or "")
-        snapshot_before = _zerodha_order_snapshot(broker, order_id) if order_id else {}
-        snapshot_after = snapshot_before
-        cancelled = False
-        cancel_error = ""
-        if order_id and auto_cancel:
-            try:
-                _zerodha_cancel_order(broker, order_id)
-                cancelled = True
-                snapshot_after = _zerodha_order_snapshot(broker, order_id)
-            except Exception as exc:
-                cancel_error = str(exc)
-        final_state = str(snapshot_after.get("status") or snapshot_before.get("status") or ("CANCELLED" if cancelled else "OPEN")).upper()
-        _upsert_broker_order_log(
-            conn,
-            user_id=int(user["id"]),
-            broker_account_id=int(broker["id"]),
-            strategy_code="SAMPLE",
-            signal_key=signal_key,
-            spec=spec,
-            status=("CANCELLED" if "CANCEL" in final_state else "PLACED"),
-            live_mode=True,
-            broker_status=final_state,
-            broker_order_id=order_id,
-            error_text=cancel_error,
-            request_data=placed.get("request", {}),
-            response_data={"placed": placed, "order_before": snapshot_before, "order_after": snapshot_after, "cancelled": cancelled},
-        )
-        conn.commit()
-        return {"ok": True, "sample": {"mode": "live", "order_id": order_id, "symbol": symbol, "quantity": qty, "status": final_state, "cancelled": cancelled, "cancel_error": cancel_error}, "broker": _public_broker(conn, int(user["id"]))}
+        market_open_now = bool(is_market_open())
+        broker_variety = "regular" if market_open_now else "amo"
+        session_hint = "market-open" if market_open_now else get_market_status()
+        try:
+            placed = _zerodha_place_order(broker, spec, "SAMPLE", variety_override=broker_variety)
+            order_id = str(placed.get("order_id") or "")
+            snapshot_before = _zerodha_order_snapshot(broker, order_id) if order_id else {}
+            snapshot_after = snapshot_before
+            cancelled = False
+            cancel_error = ""
+            if order_id and auto_cancel:
+                try:
+                    _zerodha_cancel_order(broker, order_id, variety_override=broker_variety)
+                    cancelled = True
+                    snapshot_after = _zerodha_order_snapshot(broker, order_id)
+                except Exception as exc:
+                    cancel_error = str(exc)
+            final_state = str(snapshot_after.get("status") or snapshot_before.get("status") or ("CANCELLED" if cancelled else "OPEN")).upper()
+            _upsert_broker_order_log(
+                conn,
+                user_id=int(user["id"]),
+                broker_account_id=int(broker["id"]),
+                strategy_code="SAMPLE",
+                signal_key=signal_key,
+                spec=spec,
+                status=("CANCELLED" if "CANCEL" in final_state else ("EXECUTED" if "COMPLETE" in final_state else "PLACED")),
+                live_mode=True,
+                broker_status=final_state,
+                broker_order_id=order_id,
+                error_text=cancel_error,
+                request_data={**(placed.get("request", {}) or {}), "session_hint": session_hint},
+                response_data={"placed": placed, "order_before": snapshot_before, "order_after": snapshot_after, "cancelled": cancelled, "session_hint": session_hint},
+            )
+            conn.commit()
+            return {"ok": True, "sample": {"mode": "live", "order_id": order_id, "symbol": symbol, "quantity": qty, "status": final_state, "cancelled": cancelled, "cancel_error": cancel_error, "variety": broker_variety, "session_hint": session_hint}, "broker": _public_broker(conn, int(user["id"]))}
+        except Exception as exc:
+            error_text = str(exc)
+            _upsert_broker_order_log(
+                conn,
+                user_id=int(user["id"]),
+                broker_account_id=int(broker["id"]),
+                strategy_code="SAMPLE",
+                signal_key=signal_key,
+                spec=spec,
+                status="FAILED",
+                live_mode=True,
+                broker_status="REJECTED",
+                error_text=error_text,
+                request_data={"variety": broker_variety, **spec, "session_hint": session_hint},
+                response_data={"error": error_text, "session_hint": session_hint},
+            )
+            conn.execute(
+                "UPDATE saas_broker_accounts SET last_error=?, last_checked_at=?, updated_at=? WHERE id=?",
+                (error_text[:500], now, now, int(broker["id"])),
+            )
+            conn.commit()
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "detail": f"Sample order was not accepted by broker ({broker_variety.upper()}, {session_hint}). {error_text}",
+                    "sample": {
+                        "mode": "live",
+                        "symbol": symbol,
+                        "quantity": qty,
+                        "status": "REJECTED",
+                        "variety": broker_variety,
+                        "session_hint": session_hint,
+                    },
+                    "broker": _public_broker(conn, int(user["id"])),
+                },
+                status_code=400,
+            )
     finally:
         conn.close()
 

@@ -396,11 +396,21 @@ except Exception as _saas_exc:
 # ─── FRONTEND ─────────────────────────────────────────────────────────────────
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 _FRONTEND = os.path.join(FRONTEND_DIR, "index.html")
+_FRONTEND_ADMIN = os.path.join(FRONTEND_DIR, "admin.html")
 app.mount("/frontend-static", StaticFiles(directory=os.path.abspath(FRONTEND_DIR)), name="frontend-static")
 
 @app.get("/")
 async def serve_frontend():
     resp = FileResponse(os.path.abspath(_FRONTEND))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
+
+
+@app.get("/admin")
+async def serve_admin_frontend():
+    resp = FileResponse(os.path.abspath(_FRONTEND_ADMIN))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     resp.headers["Pragma"] = "no-cache"
     resp.headers["Expires"] = "0"

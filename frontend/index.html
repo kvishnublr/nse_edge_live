@@ -4019,7 +4019,7 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
         </div>
 
         <div class="tab tab-nexus" style="--tc:#67e8f9;--tg:rgba(103,232,249,.14);--ts:rgba(103,232,249,.5)"
-             onclick="sw('nexus',this)" title="LOGIN HUB: user/admin access, wallets, strategy entitlements, and admin controls">
+             onclick="sw('nexus',this)" title="LOGIN HUB: user access, wallets, strategy entitlements, and payments">
           <span class="tab-glyph" aria-hidden="true">N</span>
           <span class="tab-txt">LOGIN HUB</span>
         </div>
@@ -4113,7 +4113,7 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
     <div class="nx-inline-launch">
       <div class="nx-inline-card">
         <div class="nx-inline-title">Login Nexus Portal</div>
-        <div class="nx-inline-sub">Open the full-screen login and access workspace for users/admins, wallets, strategy routing, payments, and control functions.</div>
+        <div class="nx-inline-sub">Open the full-screen user login and access workspace for wallets, strategy routing, and payments. Admin access is available on /admin with OTP.</div>
         <button class="nx-btn nx-btn-primary" type="button" onclick="openNexusModal()">Open Login Portal</button>
       </div>
     </div>
@@ -4976,7 +4976,7 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
       <div style="padding:7px 12px;border-bottom:1px solid var(--b1);display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap;background:rgba(14,165,233,.06)">
         <span style="font-size:7.5px;color:var(--t2);letter-spacing:1px">FROM</span>
         <input type="date" id="ir-hist-from" class="jfi" style="font-size:8px;padding:3px 6px;background:var(--s2);border:1px solid var(--b1);color:var(--t0);border-radius:3px"
-          oninput="const t=document.getElementById('ir-hist-to'); if(!t.value||t.value&lt;this.value) t.value=this.value; if(typeof irScheduleHistoryReload==='function') irScheduleHistoryReload();"
+          oninput="const t=document.getElementById('ir-hist-to'); if(!t.value||t.value<this.value) t.value=this.value; if(typeof irScheduleHistoryReload==='function') irScheduleHistoryReload();"
           onchange="if(typeof irScheduleHistoryReload==='function') irScheduleHistoryReload();">
         <span style="font-size:7.5px;color:var(--t2);letter-spacing:1px">TO</span>
         <input type="date" id="ir-hist-to" class="jfi" style="font-size:8px;padding:3px 6px;background:var(--s2);border:1px solid var(--b1);color:var(--t0);border-radius:3px"
@@ -7614,7 +7614,7 @@ entry_time    strike  type  entry  max   exit  return%
       <div class="nx-modal-title">
         <div class="nx-modal-kicker">STOCKR.IN CONTROL DECK</div>
         <div class="nx-modal-head">Nexus</div>
-        <div class="nx-modal-sub">Full-screen SaaS, user, wallet, payment, strategy, and admin workspace</div>
+        <div class="nx-modal-sub">Full-screen SaaS user, wallet, payment, and strategy workspace. Admin uses /admin OTP login.</div>
       </div>
       <div class="nx-modal-actions">
         <button class="nx-btn nx-btn-ghost" type="button" onclick="nxRefresh()">Refresh</button>
@@ -21354,7 +21354,7 @@ function hpRenderWrCanvas(days){
 })();
 </script>
 
-<script src="/frontend-static/saas_nexus.js?v=13"></script>
+<script src="/frontend-static/saas_nexus.js?v=17"></script>
 </body>
 </html>
 

@@ -15,7 +15,11 @@
     admin: null,
     brokerTest: null,
     selectedPaymentId: null,
+    adminOtpPending: false,
+    adminOtpEmail: '',
   };
+  const NX_ADMIN_ONLY = String(window.location.pathname || '').toLowerCase() === '/admin';
+  if(NX_ADMIN_ONLY) NX.authMode = 'admin';
 
   function el(id){ return document.getElementById(id); }
   function fmtMoney(v){ const n=Number(v||0); return '\u20B9' + n.toLocaleString('en-IN',{maximumFractionDigits:2}); }
@@ -180,6 +184,11 @@
     try{
       await ensureBoot();
       if(await refreshSession()){
+        if(NX_ADMIN_ONLY && String(((NX.user||{}).role)||'').toUpperCase() !== 'ADMIN'){
+          logout();
+          setNotice('info', 'Admin route requires admin sign-in with OTP.');
+          return;
+        }
         if((NX.user && NX.user.role) === 'ADMIN') await loadAdminData();
         else await loadUserData();
       }
@@ -227,7 +236,7 @@
       + '<div class="nx-kicker">'+escapeHtml(brand)+' ACCESS HUB</div>'
       + '<div class="nx-hero-top"><div><div class="nx-title">'+escapeHtml(brand)+' Login Nexus</div><div class="nx-sub">'+who+'<br>'+sub+'</div><div class="nx-pill-row" style="margin-top:14px"><span class="nx-pill">Portal + Identity</span><span class="nx-pill">Brand '+escapeHtml(brand)+'</span>'+gmailBadge+'</div></div>'
       + '<div class="nx-actions">'
-      + (NX.user ? '<button class="nx-btn nx-btn-ghost" onclick="nxRefresh()">Refresh</button><button class="nx-btn nx-btn-gold" onclick="nxLogout()">Logout</button>' : '<button class="nx-btn nx-btn-primary" onclick="nxSwitchAuth(\'signup\')">Open User Access</button><button class="nx-btn nx-btn-ghost" onclick="nxSwitchAuth(\'admin\')">Open Admin Access</button>')
+      + (NX.user ? '<button class="nx-btn nx-btn-ghost" onclick="nxRefresh()">Refresh</button><button class="nx-btn nx-btn-gold" onclick="nxLogout()">Logout</button>' : (NX_ADMIN_ONLY ? '<button class="nx-btn nx-btn-gold" onclick="nxSwitchAuth(\'admin\')">Open Admin Access</button>' : '<button class="nx-btn nx-btn-primary" onclick="nxSwitchAuth(\'signup\')">Open User Access</button><button class="nx-btn nx-btn-ghost" onclick="window.location.href=\'/admin\'">Open Admin Access</button>'))
       + '</div></div>'
       + '<div class="nx-hero-stats">'+stats+'</div></div>';
   }
@@ -238,14 +247,18 @@
       const u = NX.user;
       return '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Session</div><div class="nx-card-sub">JWT auth with separated user/admin access</div></div><span class="nx-badge cool">'+escapeHtml(u.role||'USER')+'</span></div><div class="nx-card-body"><div class="nx-list"><div class="nx-item"><div class="nx-item-title">'+escapeHtml(u.full_name || u.email)+'</div><div class="nx-item-sub">'+escapeHtml(u.email)+'<br>Created '+escapeHtml(fmtDate(u.created_at))+'</div></div><div class="nx-item"><div class="nx-item-title">Default onboarding coupon</div><div class="nx-item-sub">Use <b>'+escapeHtml(boot.coupon_code || 'WELCOME500')+'</b> for instant test credits if you create fresh users.</div></div></div></div></div>';
     }
+    if(NX_ADMIN_ONLY) NX.authMode = 'admin';
     function modeBtn(id,label){ return '<button class="nx-tab-btn'+(NX.authMode===id?' nx-btn-primary':'')+'" onclick="nxSwitchAuth(\''+id+'\')">'+label+'</button>'; }
     const gmailReady = !!boot.gmail_ready;
     const statusHtml = NX.notice && NX.notice.message ? '<div class="nx-status '+escapeHtml(NX.notice.type || 'info')+'">'+escapeHtml(NX.notice.message)+'</div>' : '';
     const loginBusy = NX.loadingAction === 'login';
     const signupBusy = NX.loadingAction === 'signup';
     const adminBusy = NX.loadingAction === 'admin-login';
+    const adminOtpBusy = NX.loadingAction === 'admin-otp-verify';
+    const tabsHtml = NX_ADMIN_ONLY ? modeBtn('admin','Admin Login') : (modeBtn('login','User Login')+modeBtn('signup','Create User')+modeBtn('admin','Admin Login'));
+    const adminSub = NX.adminOtpPending ? 'Step 2/2: Enter OTP received on Gmail/Phone' : 'Step 1/2: Enter admin credentials to receive OTP on Gmail/Phone';
     return '<div class="nx-card nx-auth-card nx-auth-card-wide"><div class="nx-card-head"><div><div class="nx-card-title">Login Portal</div><div class="nx-card-sub">Choose your lane: User Desk, New Signup, or Admin Command Access</div></div><span class="nx-badge '+(gmailReady?'good':'warn')+'">'+(gmailReady?'Gmail Ready':'Gmail Setup Pending')+'</span></div><div class="nx-card-body">'
-      + '<div class="nx-auth-wrap nx-auth-wrap-single"><div class="nx-auth-left"><div class="nx-tabs">'+modeBtn('login','User Login')+modeBtn('signup','Create User')+modeBtn('admin','Admin Login')+'</div>'+statusHtml
+      + '<div class="nx-auth-wrap nx-auth-wrap-single"><div class="nx-auth-left"><div class="nx-tabs">'+tabsHtml+'</div>'+statusHtml
       + '<div class="nx-auth-mode '+(NX.authMode==='login'?'on':'')+'">'
       + '<div class="nx-oauth-row"><button class="nx-oauth-btn" onclick="nxGooglePreview()"><span class="nx-oauth-g">G</span><span>Use Gmail (Email Login)</span></button></div>'
       + '<div class="nx-form-grid"><label class="nx-form-label">Email<input id="nx-login-email" class="nx-input" placeholder="trader@email.com"></label><label class="nx-form-label">Password<input id="nx-login-password" type="password" class="nx-input" placeholder="password"></label></div>'
@@ -259,15 +272,16 @@
       + '<div class="nx-actions" style="margin-top:12px"><button class="nx-btn nx-btn-primary nx-btn-wide" onclick="nxSignup()" '+(signupBusy?'disabled':'')+'>'+(signupBusy?'Creating...':'Create User Account')+'</button></div></div>'
       + '<div class="nx-auth-mode '+(NX.authMode==='admin'?'on':'')+'">'
       + '<div class="nx-form-grid"><label class="nx-form-label">Admin Email<input id="nx-admin-email" class="nx-input" placeholder="'+escapeHtml((boot.admin||{}).email || 'admin@stockr.in')+'"></label><label class="nx-form-label">Password<input id="nx-admin-password" type="password" class="nx-input" placeholder="admin password"></label></div>'
-      + '<div class="nx-inline-note" style="margin-top:10px">Bootstrap admin: <b>'+escapeHtml(defaultAdminEmail())+'</b>. Common typo <b>@stokr.in</b> is auto-corrected.</div>'
-      + '<div class="nx-actions" style="margin-top:12px"><button class="nx-btn nx-btn-gold nx-btn-wide" onclick="nxAdminLogin()" '+(adminBusy?'disabled':'')+'>'+(adminBusy?'Signing in...':'Enter Admin Desk')+'</button></div></div></div></div></div></div>';
+      + '<div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">OTP Code<input id="nx-admin-otp" class="nx-input" placeholder="6-digit OTP"></label><div style="display:flex;align-items:flex-end"><button class="nx-btn nx-btn-ghost nx-btn-wide" onclick="nxAdminRequestOtp()" '+(adminBusy?'disabled':'')+'>'+(adminBusy?'Sending OTP...':'Send OTP')+'</button></div></div>'
+      + '<div class="nx-inline-note" style="margin-top:10px">'+adminSub+'<br>Admin email: <b>'+escapeHtml(defaultAdminEmail())+'</b>.</div>'
+      + '<div class="nx-actions" style="margin-top:12px"><button class="nx-btn nx-btn-gold nx-btn-wide" onclick="nxAdminVerifyOtp()" '+((adminOtpBusy || !NX.adminOtpPending)?'disabled':'')+'>'+(adminOtpBusy?'Verifying...':'Verify OTP & Enter Admin Desk')+'</button></div></div></div></div></div></div>';
   }
 
   function renderPublicSideCards(){
     const boot = NX.boot || {};
     const gmailReady = !!boot.gmail_ready;
     return '<div class="nx-public-grid">'
-      + '<div class="nx-card nx-launch-card"><div class="nx-card-head"><div><div class="nx-card-title">Portal Highlights</div><div class="nx-card-sub">Quick overview of what users and admins can do right after login.</div></div></div><div class="nx-card-body"><div class="nx-list"><div class="nx-item"><div class="nx-item-title">User workspace</div><div class="nx-item-sub">Signup/login, strategy toggles, wallet credits, coupon redemption, payment orders, and trade journal.</div></div><div class="nx-item"><div class="nx-item-title">Admin workspace</div><div class="nx-item-sub">Dedicated login, user creation, strategy activation, coupon creation, payment confirmation, and platform metrics.</div></div><div class="nx-item"><div class="nx-item-title">Signal routing seam</div><div class="nx-item-sub">SPIKE and SWING route from the signal engine snapshot. INDEX routes from the index radar notifier. Existing tabs stay untouched.</div></div></div><div class="nx-cta-strip"><button class="nx-btn nx-btn-primary" onclick="nxSwitchAuth(\'signup\')">Create First User</button><button class="nx-btn nx-btn-ghost" onclick="nxSwitchAuth(\'admin\')">Open Admin Access</button></div></div></div>'
+      + '<div class="nx-card nx-launch-card"><div class="nx-card-head"><div><div class="nx-card-title">Portal Highlights</div><div class="nx-card-sub">Quick overview of what users and admins can do right after login.</div></div></div><div class="nx-card-body"><div class="nx-list"><div class="nx-item"><div class="nx-item-title">User workspace</div><div class="nx-item-sub">Signup/login, strategy toggles, wallet credits, coupon redemption, payment orders, and trade journal.</div></div><div class="nx-item"><div class="nx-item-title">Admin workspace</div><div class="nx-item-sub">Dedicated OTP-secured login on <b>/admin</b>, user creation, strategy activation, coupon creation, payment confirmation, and platform metrics.</div></div><div class="nx-item"><div class="nx-item-title">Signal routing seam</div><div class="nx-item-sub">SPIKE and SWING route from the signal engine snapshot. INDEX routes from the index radar notifier. Existing tabs stay untouched.</div></div></div><div class="nx-cta-strip"><button class="nx-btn nx-btn-primary" onclick="nxSwitchAuth(\'signup\')">Create First User</button><button class="nx-btn nx-btn-ghost" onclick="window.location.href=\'/admin\'">Open Admin Access</button></div></div></div>'
       + '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Gmail Integration</div><div class="nx-card-sub">Email channel health for onboarding and account lifecycle notifications.</div></div><span class="nx-badge '+(gmailReady?'good':'warn')+'">'+(gmailReady?'Connected':'Pending')+'</span></div><div class="nx-card-body"><div class="nx-glow-card"><div class="nx-glow-kicker">Mailer status</div><div class="nx-glow-title">'+(gmailReady?'Delivery active':'Awaiting credentials')+'</div><div class="nx-item-sub">Set <b>GMAIL_USERNAME</b> and <b>GMAIL_APP_PASSWORD</b> in <b>backend/.env</b>. Once connected, login/signup/payment emails can be sent from your brand mailbox.</div><div class="nx-mail-health '+(gmailReady?'good':'warn')+'">'+(gmailReady?'Mailbox is ready to send transactional emails.':'Add Gmail sender credentials to enable email delivery.')+'</div></div></div></div>'
       + '</div>';
   }
@@ -376,7 +390,10 @@
 
   function renderBody(){
     if(NX.loading && !NX.ready) return '<div class="nx-card"><div class="nx-card-body" style="padding:28px"><div class="nx-empty">Loading control hub...</div></div></div>';
-    if(!NX.user) return '<div class="nx-public-layout"><div>'+renderAuthCard()+'</div>'+renderPublicSideCards()+'</div>';
+    if(!NX.user){
+      if(NX_ADMIN_ONLY) return '<div class="nx-public-layout"><div>'+renderAuthCard()+'</div></div>';
+      return '<div class="nx-public-layout"><div>'+renderAuthCard()+'</div>'+renderPublicSideCards()+'</div>';
+    }
     return '<div class="nx-main-grid">' + (NX.user.role === 'ADMIN' ? renderAdminCards() : renderUserCards()) + '</div>';
   }
 
@@ -459,12 +476,32 @@
       });
     });
   };
-  window.nxAdminLogin = function(){
+  window.nxAdminRequestOtp = function(){
     const email = normalizeEmail((el('nx-admin-email')||{}).value || defaultAdminEmail());
     const password = String((el('nx-admin-password')||{}).value || '').trim();
     return runBusy('admin-login', function(){
-      return authFlow('/api/admin/login', { email: email, password: password }).catch(function(err){
-        const fallback = 'Admin login failed. Use ' + defaultAdminEmail() + ' or check the password.';
+      return nxApi('/api/admin/login/request-otp', { method:'POST', body: JSON.stringify({ email: email, password: password }) }).then(function(){
+        NX.adminOtpPending = true;
+        NX.adminOtpEmail = email;
+        setNotice('success', 'OTP sent to admin Gmail. Enter it below to continue.');
+        safeRender();
+        setTimeout(function(){ var oe = el('nx-admin-otp'); if(oe) oe.focus(); }, 40);
+      }).catch(function(err){
+        const fallback = 'Admin OTP request failed. Use ' + defaultAdminEmail() + ' or check credentials.';
+        setNotice('error', err.message || fallback);
+        toast(err.message || fallback);
+      });
+    });
+  };
+  window.nxAdminVerifyOtp = function(){
+    const email = normalizeEmail((el('nx-admin-email')||{}).value || NX.adminOtpEmail || defaultAdminEmail());
+    const otp = String((el('nx-admin-otp')||{}).value || '').trim();
+    return runBusy('admin-otp-verify', function(){
+      return authFlow('/api/admin/login/verify-otp', { email: email, otp: otp }).then(function(){
+        NX.adminOtpPending = false;
+        NX.adminOtpEmail = '';
+      }).catch(function(err){
+        const fallback = 'Admin OTP verification failed. Request new OTP if needed.';
         setNotice('error', err.message || fallback);
         toast(err.message || fallback);
       });
@@ -581,8 +618,9 @@
       const sample = (data || {}).sample || {};
       await loadUserData();
       safeRender();
-      toast('Sample order ' + (sample.order_id || '') + ' · ' + (sample.status || 'processed'));
+      toast('Sample order ' + (sample.order_id || '') + ' · ' + (sample.status || 'processed') + (sample.variety ? (' · ' + String(sample.variety).toUpperCase()) : ''));
     }catch(err){
+      try{ await loadUserData(); safeRender(); }catch(_){}
       toast(err.message || 'Sample order failed');
     }
   };

@@ -17,6 +17,9 @@ _DB_PATH = os.path.join(os.path.dirname(__file__), "data", "backtest.db")
 
 # Throttle REST quote bootstrap when price_cache is empty (slow ticker / token just fixed).
 _job_prices_rest_ts = 0.0
+_TOKEN_ALERT_COOLDOWN_SEC = 45 * 60
+_token_last_manual_alert_ts = 0.0
+_token_last_success_ts = 0.0
 
 
 def _ix_parse_expiry_date(expiry_text: str):
@@ -1137,44 +1140,98 @@ def job_spikes():
 
 
 # â”€â”€â”€ JOB: DAILY KITE TOKEN REFRESH (7:55 AM IST, Monâ€“Fri) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-def job_token_refresh():
-    """
-    Refresh Kite access token every trading morning at 7:55 AM IST (Asia/Kolkata)
-    via Playwright + pyotp. Reloads the new token into the live KiteConnect
-    instance so no restart is needed.
-
-    Requires KITE_USER_ID, KITE_PASSWORD, KITE_TOTP_SECRET, KITE_API_KEY,
-    KITE_API_SECRET (environment or backend/.env). The process must be running
-    at that time (always-on host or an external wake/ping if the service sleeps).
-    """
-    logger.info("=== Daily token refresh starting (scheduled Monâ€“Fri 07:55 IST) ===")
-    try:
-        from auto_token import refresh_token
-        ok = refresh_token()
-    except Exception as e:
-        logger.error(f"Token refresh exception: {e}")
-        ok = False
-
-    if not ok:
-        logger.error("Daily token refresh FAILED â€” will retry in 5 minutes")
-        # Schedule a one-off retry
-        import threading, time as _t
-        def _retry():
-            _t.sleep(300)
-            logger.info("Token refresh retry attempt...")
-            try:
-                from auto_token import refresh_token as _rt
-                if _rt():
-                    _apply_new_token()
-                    logger.info("Token refresh retry SUCCESS")
-                else:
-                    logger.error("Token refresh retry also FAILED â€” manual intervention needed")
-            except Exception as e2:
-                logger.error(f"Token refresh retry error: {e2}")
-        threading.Thread(target=_retry, daemon=True).start()
+def _send_token_manual_action_alert(reason: str, detail: str = "") -> None:
+    """Send a throttled Telegram alert when auto refresh cannot recover."""
+    global _token_last_manual_alert_ts
+    now_ts = time.time()
+    if (now_ts - _token_last_manual_alert_ts) < _TOKEN_ALERT_COOLDOWN_SEC:
         return
+    _token_last_manual_alert_ts = now_ts
+    try:
+        from signals import send_telegram_message
+        from config import TELEGRAM_BOT_TOKEN, get_telegram_chat_ids
 
-    _apply_new_token()
+        if not TELEGRAM_BOT_TOKEN or not get_telegram_chat_ids():
+            return
+        msg = (
+            "⚠ <b>Kite token manual check needed</b>\n"
+            f"Reason: <b>{reason}</b>\n"
+            f"{detail[:300] if detail else 'Auto refresh attempts failed.'}\n"
+            "Please validate broker session once and keep app running."
+        )
+        send_telegram_message(msg)
+    except Exception as e:
+        logger.warning("token manual alert failed: %s", e)
+
+
+def _run_token_refresh_cycle(reason: str, attempts: int = 2, retry_sec: int = 90, alert_on_fail: bool = True) -> bool:
+    """Try refresh -> apply -> profile verify, retrying silently."""
+    global _token_last_success_ts
+    last_err = ""
+    for i in range(max(1, int(attempts))):
+        if i > 0:
+            logger.info("Token refresh retry %s/%s (%s)", i + 1, attempts, reason)
+        try:
+            from auto_token import refresh_token
+
+            ok = bool(refresh_token())
+            if not ok:
+                last_err = "refresh_token returned false"
+            else:
+                _apply_new_token()
+                try:
+                    from feed import get_kite, fetch_quotes_rest
+
+                    profile = get_kite().profile()
+                    _token_last_success_ts = time.time()
+                    logger.info("Token refresh verified for user: %s", profile.get("user_name", "unknown"))
+                    try:
+                        fetch_quotes_rest()
+                    except Exception as _qe:
+                        logger.warning("token refresh cycle quote warmup: %s", _qe)
+                    return True
+                except Exception as verify_err:
+                    last_err = f"post-refresh verification failed: {verify_err}"
+        except Exception as e:
+            last_err = str(e)
+        logger.warning("Token refresh attempt failed (%s): %s", reason, last_err)
+        if i < (attempts - 1):
+            time.sleep(max(5, int(retry_sec)))
+    if alert_on_fail:
+        _send_token_manual_action_alert(reason, last_err)
+    return False
+
+
+def job_token_refresh(reason: str = "scheduled"):
+    """
+    Proactive multi-slot token refresh using headless flow.
+    Keeps login warm before market and retries silently before escalating.
+    """
+    logger.info("=== Token refresh starting (%s) ===", reason)
+    ok = _run_token_refresh_cycle(reason=reason, attempts=2, retry_sec=120, alert_on_fail=True)
+    if ok:
+        logger.info("Token refresh SUCCESS (%s)", reason)
+    else:
+        logger.error("Token refresh FAILED (%s) â€” manual intervention may be needed", reason)
+
+
+def job_token_health_watchdog():
+    """
+    Silent health precheck: if Kite session is invalid, auto-recover immediately.
+    Runs every few minutes during active daytime windows.
+    """
+    if not is_market_session_day():
+        return
+    now_ist = datetime.now(IST)
+    if now_ist.hour < 7 or now_ist.hour > 15:
+        return
+    try:
+        from feed import get_kite
+
+        get_kite().profile()
+    except Exception as e:
+        logger.warning("Token watchdog detected invalid Kite session: %s", e)
+        _run_token_refresh_cycle(reason="watchdog", attempts=2, retry_sec=45, alert_on_fail=True)
 
 
 def _apply_new_token():
@@ -1290,9 +1347,8 @@ def build_scheduler() -> BackgroundScheduler:
     sched.add_job(job_fii,           "interval", seconds=300, id="fii")
     sched.add_job(job_spikes,        "interval", seconds=10,  id="spikes")
     sched.add_job(job_confluence_idle, "interval", seconds=45, id="confluence_idle")
-    # Daily token refresh Monâ€“Fri 7:55 IST â€” before cash market open (9:15).
-    # Large misfire_grace_time: if the host wakes late (e.g. cloud cold start),
-    # the job still runs instead of being dropped.
+    # Proactive token refresh slots before market + mid-session safety.
+    # Large misfire_grace_time: if the host wakes late, jobs still run.
     sched.add_job(
         job_token_refresh,
         "cron",
@@ -1300,7 +1356,53 @@ def build_scheduler() -> BackgroundScheduler:
         minute=55,
         day_of_week="mon-fri",
         id="token_refresh",
+        kwargs={"reason": "slot-07:55"},
         misfire_grace_time=28800,
+        coalesce=True,
+        max_instances=1,
+    )
+    sched.add_job(
+        job_token_refresh,
+        "cron",
+        hour=8,
+        minute=20,
+        day_of_week="mon-fri",
+        id="token_refresh_0820",
+        kwargs={"reason": "slot-08:20"},
+        misfire_grace_time=28800,
+        coalesce=True,
+        max_instances=1,
+    )
+    sched.add_job(
+        job_token_refresh,
+        "cron",
+        hour=8,
+        minute=50,
+        day_of_week="mon-fri",
+        id="token_refresh_0850",
+        kwargs={"reason": "slot-08:50"},
+        misfire_grace_time=28800,
+        coalesce=True,
+        max_instances=1,
+    )
+    sched.add_job(
+        job_token_refresh,
+        "cron",
+        hour=12,
+        minute=30,
+        day_of_week="mon-fri",
+        id="token_refresh_1230",
+        kwargs={"reason": "slot-12:30"},
+        misfire_grace_time=28800,
+        coalesce=True,
+        max_instances=1,
+    )
+    sched.add_job(
+        job_token_health_watchdog,
+        "interval",
+        minutes=7,
+        id="token_watchdog",
+        misfire_grace_time=120,
         coalesce=True,
         max_instances=1,
     )
