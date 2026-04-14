@@ -10,7 +10,7 @@ import time
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.events import EVENT_JOB_ERROR
-from config import is_market_open, INDEX_RADAR as _IXR
+from config import is_market_open, is_market_session_day, get_market_status, INDEX_RADAR as _IXR
 from fetcher import IST
 
 _DB_PATH = os.path.join(os.path.dirname(__file__), "data", "backtest.db")
@@ -564,6 +564,13 @@ def job_confluence_idle():
 def job_stocks():
     """Fetch F&O stock OI."""
     if not _check_circuit("job_stocks"):
+        return
+    if not is_market_session_day():
+        if _signals:
+            _signals.set_market_closed_state(get_market_status())
+        if _ws:
+            _ws({"type": "stocks", "data": [], "timestamp": time.time()})
+        _record_success("job_stocks")
         return
 
     try:

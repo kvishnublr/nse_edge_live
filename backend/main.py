@@ -24,7 +24,7 @@ import signals
 import scheduler as sched
 from feed import feed_manager, get_all_prices
 from config import (
-    HOST, PORT, KITE_API_KEY, KITE_ACCESS_TOKEN, is_market_open, get_market_status,
+    HOST, PORT, KITE_API_KEY, KITE_ACCESS_TOKEN, is_market_open, is_market_session_day, get_market_status,
     apply_strategy_profile, get_strategy_profile_name, get_strategy_profiles,
 )
 
@@ -203,7 +203,10 @@ async def lifespan(app: FastAPI):
         if indices:
             sched.set_cache("indices", indices)
 
-        signals.run_signal_engine(indices, chain, fii, stocks or [], "intraday")
+        if is_market_open():
+            signals.run_signal_engine(indices, chain, fii, stocks or [], "intraday")
+        else:
+            signals.set_market_closed_state(get_market_status())
 
         # Ensure last_chain/last_macro are never overwritten by off-hours job with None
         # Re-affirm after run_signal_engine in case scheduler already fired
@@ -216,7 +219,7 @@ async def lifespan(app: FastAPI):
 
     # Backfill today's spikes from Kite 1-min history so the table is
     # populated even when the server starts after market hours.
-    if kite:
+    if kite and is_market_session_day():
         try:
             today_str = datetime.datetime.now(pytz.timezone("Asia/Kolkata")).date().isoformat()
             backfill = signals.build_today_spikes_from_kite_history(kite)
@@ -230,6 +233,10 @@ async def lifespan(app: FastAPI):
     # Restore today's index signals from DB so TODAY tab is never blank after restart
     try:
         import sqlite3 as _sq, datetime as _dt, json as _json
+        if not is_market_session_day():
+            signals.state["index_signals"] = []
+            signals.state["index_signals_date"] = datetime.date.today().isoformat()
+            raise RuntimeError("skip holiday/weekend index restore")
         _db = os.path.join(os.path.dirname(__file__), "data", "backtest.db")
         _today = _dt.date.today().isoformat()
         _conn = _sq.connect(_db)
@@ -519,11 +526,14 @@ async def refresh_state():
             broadcast({"type": "prices", "data": get_all_prices(), "ts": time.time()})
 
             # Re-run signal engine with best available data
-            signals.run_signal_engine(
-                indices, signals.state.get("last_chain"),
-                signals.state.get("last_fii"), signals.state.get("last_stocks") or [],
-                "intraday"
-            )
+            if is_market_open():
+                signals.run_signal_engine(
+                    indices, signals.state.get("last_chain"),
+                    signals.state.get("last_fii"), signals.state.get("last_stocks") or [],
+                    "intraday"
+                )
+            else:
+                signals.set_market_closed_state(get_market_status())
             broadcast({"type": "gates", "timestamp": time.time(), "data": {
                 "gates": {str(k): v for k, v in signals.state["gates"].items()},
                 "verdict": signals.state["verdict"],

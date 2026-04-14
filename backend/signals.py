@@ -505,6 +505,30 @@ state = {
 }
 
 # ─── PRICE HISTORY HELPERS ────────────────────────────────────────────────────
+def set_market_closed_state(reason: str = "Market closed") -> None:
+    """Clear intraday live outputs while keeping cached reference data intact."""
+    gate_names = {
+        1: "REGIME",
+        2: "SMART MONEY",
+        3: "STRUCTURE",
+        4: "TRIGGER",
+        5: "RISK VALID",
+    }
+    state["gates"] = {
+        idx: {"name": gate_names[idx], "state": "wt", "score": 50, "rows": []}
+        for idx in range(1, 6)
+    }
+    state["verdict"] = "NO TRADE"
+    state["verdict_sub"] = reason
+    state["pass_count"] = 0
+    state["confidence"] = 0.0
+    state["spikes"] = []
+    state["ticker"] = []
+    state["last_stocks"] = []
+    state["index_signals"] = []
+    state["index_signals_date"] = datetime.now(_IST).date().isoformat()
+    state["last_updated"] = time.time()
+
 def push_price(symbol: str, price: float, volume: float = 0):
     """Called by scheduler to maintain history for ATR/VWAP."""
     from feed import _hist  # shared deque in feed.py

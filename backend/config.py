@@ -681,14 +681,71 @@ ZONES = {
 }
 
 # ─── MARKET HOURS CHECK ───────────────────────────────────────────────────────
+NSE_TRADING_HOLIDAYS = {
+    "2025-02-26": "Mahashivratri",
+    "2025-03-14": "Holi",
+    "2025-03-31": "Id-Ul-Fitr (Ramadan Eid)",
+    "2025-04-10": "Shri Mahavir Jayanti",
+    "2025-04-14": "Dr. Baba Saheb Ambedkar Jayanti",
+    "2025-04-18": "Good Friday",
+    "2025-05-01": "Maharashtra Day",
+    "2025-08-15": "Independence Day",
+    "2025-08-27": "Ganesh Chaturthi",
+    "2025-10-02": "Mahatma Gandhi Jayanti/Dussehra",
+    "2025-10-21": "Diwali Laxmi Pujan",
+    "2025-10-22": "Diwali-Balipratipada",
+    "2025-11-05": "Prakash Gurpurb Sri Guru Nanak Dev",
+    "2025-12-25": "Christmas",
+    "2026-01-26": "Republic Day",
+    "2026-03-03": "Holi",
+    "2026-03-26": "Shri Ram Navami",
+    "2026-03-31": "Shri Mahavir Jayanti",
+    "2026-04-03": "Good Friday",
+    "2026-04-14": "Dr. Baba Saheb Ambedkar Jayanti",
+    "2026-05-01": "Maharashtra Day",
+    "2026-05-28": "Bakri Id",
+    "2026-06-26": "Muharram",
+    "2026-09-14": "Ganesh Chaturthi",
+    "2026-10-02": "Mahatma Gandhi Jayanti",
+    "2026-10-20": "Dussehra",
+    "2026-11-10": "Diwali-Balipratipada",
+    "2026-11-24": "Prakash Gurpurb Sri Guru Nanak Dev",
+    "2026-12-25": "Christmas",
+}
+
+
+def get_nse_holiday_name(target_date=None):
+    try:
+        if target_date is None:
+            ist = pytz.timezone('Asia/Kolkata')
+            target_date = datetime.datetime.now(ist).date()
+        if isinstance(target_date, datetime.datetime):
+            target_date = target_date.date()
+        return NSE_TRADING_HOLIDAYS.get(target_date.isoformat(), "")
+    except Exception:
+        return ""
+
+
+def is_market_session_day(target_date=None):
+    try:
+        if target_date is None:
+            ist = pytz.timezone('Asia/Kolkata')
+            target_date = datetime.datetime.now(ist).date()
+        if isinstance(target_date, datetime.datetime):
+            target_date = target_date.date()
+        if target_date.weekday() >= 5:
+            return False
+        return not bool(get_nse_holiday_name(target_date))
+    except Exception:
+        return True
+
+
 def is_market_open():
-    """Check if NSE market is currently open (9:15 AM - 3:30 PM IST, weekdays only)."""
+    """Check if NSE market is currently open (9:15 AM - 3:30 PM IST, trading days only)."""
     try:
         ist = pytz.timezone('Asia/Kolkata')
         now = datetime.datetime.now(ist)
-
-        # Check if weekday (Monday=0, Sunday=6)
-        if now.weekday() >= 5:  # Saturday or Sunday
+        if not is_market_session_day(now.date()):
             return False
 
         # Market hours: 9:15 AM to 3:30 PM
@@ -708,6 +765,9 @@ def get_market_status():
 
         if now.weekday() >= 5:
             return "closed (weekend)"
+        holiday_name = get_nse_holiday_name(now.date())
+        if holiday_name:
+            return f"closed (NSE holiday: {holiday_name})"
 
         market_open = now.replace(hour=9, minute=15, second=0, microsecond=0)
         market_close = now.replace(hour=15, minute=30, second=0, microsecond=0)
