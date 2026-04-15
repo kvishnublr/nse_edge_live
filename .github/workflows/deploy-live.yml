@@ -1,0 +1,84 @@
+# Live deploy: Direct AWS (typically EC2) over SSH.
+#
+# Setup (one time):
+#   1) Provision an EC2 instance and install: git, docker, docker compose
+#   2) Clone this repo on the server (example):
+#        sudo mkdir -p /opt/nse_edge_live && sudo chown -R ubuntu:ubuntu /opt/nse_edge_live
+#        git clone https://github.com/<you>/<repo>.git /opt/nse_edge_live
+#   3) Create a deploy SSH key (read-only access to the repo is enough) and add it to GitHub as a Deploy Key,
+#      or use a PAT on the instance.
+#   4) Repo → Settings → Secrets and variables → Actions → New repository secrets:
+#        AWS_SSH_HOST        (example: 12.34.56.78)
+#        AWS_SSH_USER        (example: ubuntu)
+#        AWS_SSH_PRIVATE_KEY (the PEM private key content)
+#        AWS_APP_DIR         (example: /opt/nse_edge_live)
+#        AWS_BRANCH          (optional override; example: main)
+#      Optional:
+#        AWS_DEPLOY_CMD      (override all commands; runs on the server)
+#
+# Default deploy behavior (when AWS_DEPLOY_CMD is not set):
+#   - git fetch/checkout/pull
+#   - if docker compose file exists → docker compose up -d --build
+#   - else → docker build + docker run (container: nse-edge-live)
+
+name: Deploy live
+
+on:
+  push:
+    branches: [main, master, Release_v1]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-live-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  aws-live:
+    name: AWS (SSH deploy)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.AWS_SSH_HOST }}
+          username: ${{ secrets.AWS_SSH_USER }}
+          key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            APP_DIR="${{ secrets.AWS_APP_DIR }}"
+            BRANCH="${{ secrets.AWS_BRANCH }}"
+            if [ -z "${APP_DIR}" ]; then
+              echo "Missing secret: AWS_APP_DIR"
+              exit 1
+            fi
+            if [ -z "${BRANCH}" ]; then
+              BRANCH="${{ github.ref_name }}"
+            fi
+            cd "$APP_DIR"
+
+            if [ -n "${{ secrets.AWS_DEPLOY_CMD }}" ]; then
+              echo "Running AWS_DEPLOY_CMD override"
+              bash -lc "${{ secrets.AWS_DEPLOY_CMD }}"
+              exit 0
+            fi
+
+            echo "Updating repo…"
+            git fetch --all --prune
+            git checkout "$BRANCH"
+            git pull --ff-only origin "$BRANCH"
+
+            if [ -f "docker-compose.yml" ] || [ -f "compose.yml" ]; then
+              echo "Docker Compose deploy…"
+              docker compose pull || true
+              docker compose up -d --build --remove-orphans
+            else
+              echo "Dockerfile deploy…"
+              docker build -t nse-edge-live:latest .
+              docker rm -f nse-edge-live || true
+              # Expose backend (container listens on 8080 from Dockerfile)
+              docker run -d --restart unless-stopped --name nse-edge-live -p 8080:8080 nse-edge-live:latest
+            fi
