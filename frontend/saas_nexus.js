@@ -406,7 +406,7 @@
     const profileLine = brokerProfileBits.length ? brokerProfileBits.join(' · ') : 'Not verified yet';
     const tokenClass = assist ? (assist.type === 'success' ? 'good' : (assist.type === 'error' ? 'bad' : 'cool')) : 'warn';
     const tokenTitle = assist ? escapeHtml(assist.title || 'Shared session checked') : 'Shared session not checked yet';
-    const tokenMessage = assist ? escapeHtml(assist.message || '') : 'Fastest path: use the server session if your Zerodha keys and token already live in backend/.env.';
+    const tokenMessage = assist ? escapeHtml(assist.message || '') : 'Fastest path: use Server Session if backend/.env already has a live Kite token. Cleanest fresh-login path: use One-Time Kite Login.';
     const tokenDetail = assist && assist.detail ? '<div class="nx-inline-note" style="margin-top:8px">'+escapeHtml(assist.detail)+'</div>' : '';
     const importing = NX.loadingAction === 'broker-import-env';
     const refreshing = NX.loadingAction === 'broker-refresh-env';
@@ -417,13 +417,14 @@
     const sampling = NX.loadingAction === 'broker-sample';
     const kiteBrand = '<div class="nx-kite-brand"><span class="nx-kite-z">Z</span><span>Zerodha Kite</span></div>';
     const steps = paper
-      ? '<div class="nx-z-paper-callout"><div class="nx-z-paper-title">Desk type: Paper</div><div class="nx-z-paper-sub">No Zerodha session on this desk. To connect Kite, open the <b>Broker</b> menu above and choose <b>Zerodha Kite</b>, then click <b>Validate &amp; Save</b> after you connect. <b>Paper route</b> (below) is separate: it only simulates orders once Zerodha is connected.</div></div>'
-      : '<div class="nx-z-steps-wrap"><div class="nx-z-steps-head">Connect Zerodha (three options)</div><ol class="nx-z-steps">'
-        + '<li><span class="nx-z-sn">1</span><div><strong>Server session</strong><span>If this server already has <code>backend/.env</code> Kite credentials, click <b>Use Server Session</b>.</span></div></li>'
-        + '<li><span class="nx-z-sn">2</span><div><strong>One-time login</strong><span>Opens Zerodha in your browser. Log in once; Nexus captures the redirect and saves the desk (needs API secret on file or in the form).</span></div></li>'
-        + '<li><span class="nx-z-sn">3</span><div><strong>Manual paste</strong><span>Paste the full redirect URL or <code>request_token</code>, then <b>Validate &amp; Save</b>.</span></div></li>'
+      ? '<div class="nx-z-paper-callout"><div class="nx-z-paper-title">Desk type: Paper</div><div class="nx-z-paper-sub">No Zerodha session on this desk. To connect Kite, open the <b>Broker</b> menu above and choose <b>Zerodha Kite</b>, then click <b>Save Desk &amp; Verify</b> after you connect. <b>Paper route</b> (below) is separate: it only simulates orders once Zerodha is connected.</div></div>'
+      : '<div class="nx-z-steps-wrap"><div class="nx-z-steps-head">Connect Zerodha (4 simple ways)</div><ol class="nx-z-steps">'
+        + '<li><span class="nx-z-sn">1</span><div><strong>Use Server Session</strong><span>If this machine already has a valid Kite token in <code>backend/.env</code>, connect in one click.</span></div></li>'
+        + '<li><span class="nx-z-sn">2</span><div><strong>One-Time Kite Login</strong><span>Best user flow. Open official Zerodha, log in once, and let Nexus complete the desk automatically.</span></div></li>'
+        + '<li><span class="nx-z-sn">3</span><div><strong>Open Login URL + paste</strong><span>Use your own browser, then paste the final redirect URL or <code>request_token</code> below.</span></div></li>'
+        + '<li><span class="nx-z-sn">4</span><div><strong>Local token generator</strong><span>Run <code>python generate_token.py</code>, then paste the token below or load it from <code>backend/.env</code>.</span></div></li>'
         + '</ol></div>'
-        + (paperRouteOn ? '<div class="nx-z-paper-route-note"><b>Paper route is ON</b> — orders stay simulated, but you still need a valid Kite session above for live quotes and session checks.</div>' : '');
+        + (paperRouteOn ? '<div class="nx-z-paper-route-note"><b>Paper route is ON</b> - orders stay simulated, but you still need a valid Kite session above for live quotes and session checks.</div>' : '');
     const quickLane = paper ? '' : ''
       + '<div class="nx-z-command-grid">'
       + '<div class="nx-z-command-card nx-z-command-card-primary"><div class="nx-z-fast-kicker">Quick connect</div><div class="nx-z-fast-title">Use server session</div><div class="nx-z-fast-sub">Fastest option. If this machine already has a valid Kite token in <b>backend/.env</b>, connect in one click.</div><div class="nx-actions" style="margin-top:14px"><button type="button" class="nx-btn nx-btn-primary" onclick="nxImportEnvBrokerToken()" '+(importing?'disabled':'')+'>'+(importing?'Importing...':'Use Server Session')+'</button><button type="button" class="nx-btn nx-btn-ghost" onclick="nxCheckServerTokenStatus()" '+(checking?'disabled':'')+'>'+(checking?'Checking...':'Check Status')+'</button></div></div>'
@@ -433,10 +434,25 @@
       + '<div class="nx-status '+tokenClass+'" style="margin-top:12px"><b>'+tokenTitle+'</b>'+(tokenMessage ? '<div style="margin-top:6px">'+tokenMessage+'</div>' : '')+tokenDetail+'</div>';
     const manualCard = paper ? '' : ''
       + '<div class="nx-z-manual-card">'
-      + '<div class="nx-z-manual-head"><div><div class="nx-z-fast-kicker">Fallback</div><div class="nx-z-fast-title">Manual redirect paste</div></div><div class="nx-inline-note">Only use this if the one-time login flow is unavailable for your Kite redirect setup.</div></div>'
-      + '<div class="nx-form-grid" style="margin-top:14px"><label class="nx-form-label">API key<input id="nx-broker-api-key" class="nx-input" autocomplete="off" placeholder="From Kite Connect" value=""></label><label class="nx-form-label">API secret<input id="nx-broker-api-secret" type="password" class="nx-input" autocomplete="new-password" placeholder="'+escapeHtml(broker.api_secret_masked || 'App secret')+'" value=""></label></div>'
-      + '<label class="nx-form-label" style="margin-top:14px">Redirect URL or request_token<input id="nx-broker-request-paste" class="nx-input" placeholder="https://…?request_token=…&amp;action=login&amp;status=success"></label>'
-      + '<div class="nx-inline-note" style="margin-top:10px">Paste the full final browser URL after Zerodha approval. Nexus extracts the token and validates it for you.</div>'
+      + '<div class="nx-z-manual-head"><div><div class="nx-z-fast-kicker">Token playbook</div><div class="nx-z-fast-title">The easiest way to get your Kite token</div></div><div class="nx-inline-note">Best path: click <b>One-Time Kite Login</b>, finish Zerodha login, then save. Alternate paths stay ready below if you prefer manual control.</div></div>'
+      + '<div class="nx-z-step-pills"><span class="nx-z-step-pill">1. Open Kite</span><span class="nx-z-step-pill">2. Login once</span><span class="nx-z-step-pill">3. Paste redirect URL or token</span><span class="nx-z-step-pill">4. Save &amp; verify</span></div>'
+      + '<div class="nx-z-guide-grid">'
+      + '<div class="nx-z-guide-card nx-z-guide-card-featured"><div class="nx-z-guide-top"><span class="nx-badge good">Recommended</span><span class="nx-z-guide-label">Fastest today</span></div><div class="nx-z-guide-title">One-Time Kite Login</div><div class="nx-z-guide-copy">Nexus opens official Zerodha, you complete the login once, and the desk is saved automatically.</div></div>'
+      + '<div class="nx-z-guide-card"><div class="nx-z-guide-top"><span class="nx-badge cool">Alternate</span><span class="nx-z-guide-label">Own browser</span></div><div class="nx-z-guide-title">Open Login URL</div><div class="nx-z-guide-copy">Best when you want Zerodha in your own browser window. Paste the final redirect URL below.</div></div>'
+      + '<div class="nx-z-guide-card"><div class="nx-z-guide-top"><span class="nx-badge warn">No re-login</span><span class="nx-z-guide-label">Reuse existing token</span></div><div class="nx-z-guide-title">Use Server Session</div><div class="nx-z-guide-copy">If <code>backend/.env</code> already has a fresh token, Nexus can attach it instantly.</div></div>'
+      + '<div class="nx-z-guide-card"><div class="nx-z-guide-top"><span class="nx-badge cool">Terminal fallback</span><span class="nx-z-guide-label">Most manual</span></div><div class="nx-z-guide-title">Generate token locally</div><div class="nx-z-guide-copy">Run <code>python generate_token.py</code>, then click <b>LOAD .ENV</b> or paste the token below.</div></div>'
+      + '</div>'
+      + '<div class="nx-z-manual-actions"><button type="button" class="nx-btn nx-btn-gold" onclick="nxKiteInteractiveLogin()" '+(interactiveStarting?'disabled':'')+'>'+(interactiveStarting?'Opening...':'One-Time Kite Login')+'</button><button type="button" class="nx-btn nx-btn-ghost" onclick="nxKiteOpenLogin()">Open Login URL</button><button type="button" class="nx-btn nx-btn-primary" onclick="nxImportEnvBrokerToken()" '+(importing?'disabled':'')+'>'+(importing?'Importing...':'Use Server Session')+'</button><button type="button" class="nx-btn nx-btn-ghost" onclick="nxRefreshEnvBrokerToken()" '+(refreshing?'disabled':'')+'>'+(refreshing?'Refreshing...':'Auto Refresh &amp; Use')+'</button></div>'
+      + '<div class="nx-z-command-strip"><span>Alternate way</span><code>python generate_token.py</code><span>Then click <b>LOAD .ENV</b> or <b>Use Server Session</b></span></div>'
+      + '<div class="nx-z-manual-grid">'
+      + '<div class="nx-z-manual-column"><div class="nx-z-mini-head">Manual fallback</div><div class="nx-inline-note">If Zerodha opens in your own browser, paste the final redirect URL here. Nexus extracts <code>request_token</code> automatically.</div><label class="nx-form-label" style="margin-top:14px">Redirect URL or request_token<input id="nx-broker-request-paste" class="nx-input" placeholder="https://127.0.0.1/?request_token=abc123&amp;action=login&amp;status=success"></label><div class="nx-inline-note" style="margin-top:10px">You can paste either the full URL or just the <code>request_token</code>. This is the cleanest alternate path if One-Time Kite Login is not available.</div></div>'
+      + '<div class="nx-z-manual-column"><div class="nx-z-mini-head">Kite app credentials</div><div class="nx-inline-note">Needed for manual redirect exchange when the server does not already know your app. If these are already saved in <code>backend/.env</code>, you can leave them blank.</div><div class="nx-form-grid" style="margin-top:14px"><label class="nx-form-label">API key<input id="nx-broker-api-key" class="nx-input" autocomplete="off" placeholder="From Kite Connect" value=""></label><label class="nx-form-label">API secret<input id="nx-broker-api-secret" type="password" class="nx-input" autocomplete="new-password" placeholder="'+escapeHtml(broker.api_secret_masked || 'App secret')+'" value=""></label></div><div class="nx-inline-note" style="margin-top:10px">If auto refresh fails because Zerodha asks for CAPTCHA, use <b>Open Login URL</b> or <b>One-Time Kite Login</b> instead.</div></div>'
+      + '</div>'
+      + '</div>';
+    const advancedToolkit = paper ? '' : ''
+      + '<div class="nx-z-advanced-shell">'
+      + '<div class="nx-z-advanced-hero"><div><div class="nx-z-fast-kicker">Advanced toolkit</div><div class="nx-z-advanced-title">Token, routing, and risk controls</div><div class="nx-z-advanced-copy">Use this section for direct access-token paste, product defaults, routing posture, and execution limits. If you only want to get connected quickly, the playbook above is enough. If Zerodha blocks automation with CAPTCHA, fall back to One-Time Kite Login, Open Login URL, or python generate_token.py.</div></div><div class="nx-z-advanced-badges"><span class="nx-badge '+tokenClass+'">'+tokenTitle+'</span><span class="nx-badge '+(sessOk?'good':'warn')+'">'+(sessOk ? 'Quotes ready' : 'Needs validation')+'</span></div></div>'
+      + '<div class="nx-z-advanced-grid"><div class="nx-z-advanced-tip"><div class="nx-z-mini-head">Fastest route</div><p>Use <b>Server Session</b> if this machine already has a valid token in <code>backend/.env</code>.</p></div><div class="nx-z-advanced-tip"><div class="nx-z-mini-head">Best fallback</div><p>Use <b>One-Time Kite Login</b> when auto refresh hits CAPTCHA or when you want the cleanest user flow.</p></div><div class="nx-z-advanced-tip"><div class="nx-z-mini-head">Direct paste</div><p>If you already have an access token, paste it below and save. This is the most manual route.</p></div></div>'
       + '</div>';
     const simpleForm = ''
       + '<div class="nx-z-simple">'
@@ -454,7 +470,7 @@
     }else if(sessOk && !broker.enabled){
       readiness = '<div class="nx-z-ready nx-z-ready-warn"><div class="nx-z-ready-title">Connected — routing off</div><div class="nx-z-ready-sub">Turn on <b>Broker enabled</b> in Advanced when you want auto-routing.</div></div>';
     }else{
-      readiness = '<div class="nx-z-ready"><div class="nx-z-ready-title">Not validated</div><div class="nx-z-ready-sub">Paste your redirect URL and click <b>Validate &amp; save</b>. We confirm your session immediately.</div></div>';
+      readiness = '<div class="nx-z-ready"><div class="nx-z-ready-title">Not validated</div><div class="nx-z-ready-sub">Start with <b>One-Time Kite Login</b> or <b>Use Server Session</b>. If needed, paste your redirect URL or token and save. Nexus checks the session immediately.</div></div>';
     }
     return ''
       + '<div class="nx-card nx-kite-dock">'
@@ -467,18 +483,19 @@
       + '</div>'
       + '<div class="nx-card-body nx-kite-dock-body"><div class="nx-kite-dock-grid">'
       + '<div class="nx-kite-dock-main">'+simpleForm
-      + '<details class="nx-z-advanced"><summary>Advanced routing &amp; manual token</summary>'
+      + '<details class="nx-z-advanced"><summary>Token guide, routing &amp; risk controls</summary>'
       + '<div class="nx-z-advanced-body">'
+      + advancedToolkit
       + '<div class="nx-form-grid"><label class="nx-form-label">Broker user ID<input id="nx-broker-user-id" class="nx-input" placeholder="AB1234" value="'+escapeHtml(broker.broker_user_id || '')+'"></label><label class="nx-form-label">Default qty<input id="nx-broker-qty" class="nx-input" placeholder="1" value="'+escapeHtml(String(broker.default_quantity || 1))+'"></label></div>'
-      + '<div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Manual access token<input id="nx-broker-access-token" class="nx-input" placeholder="'+escapeHtml(broker.access_token_masked || 'Only if not using login URL')+'" value=""></label><label class="nx-form-label">Intraday product<select id="nx-broker-intraday-product" class="nx-select"><option '+((broker.intraday_product||'MIS')==='MIS'?'selected':'')+'>MIS</option><option '+((broker.intraday_product||'MIS')==='CNC'?'selected':'')+'>CNC</option><option '+((broker.intraday_product||'MIS')==='NRML'?'selected':'')+'>NRML</option></select></label></div>'
+      + '<div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Manual access token<input id="nx-broker-access-token" class="nx-input" placeholder="'+escapeHtml(broker.access_token_masked || 'Paste only if you already have a fresh access token')+'" value=""></label><label class="nx-form-label">Intraday product<select id="nx-broker-intraday-product" class="nx-select"><option '+((broker.intraday_product||'MIS')==='MIS'?'selected':'')+'>MIS</option><option '+((broker.intraday_product||'MIS')==='CNC'?'selected':'')+'>CNC</option><option '+((broker.intraday_product||'MIS')==='NRML'?'selected':'')+'>NRML</option></select></label></div>'
       + '<div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Positional product<select id="nx-broker-positional-product" class="nx-select"><option '+((broker.positional_product||'CNC')==='CNC'?'selected':'')+'>CNC</option><option '+((broker.positional_product||'CNC')==='NRML'?'selected':'')+'>NRML</option><option '+((broker.positional_product||'CNC')==='MIS'?'selected':'')+'>MIS</option></select></label><label class="nx-form-label">&nbsp;</label></div>'
       + '<div class="nx-toggle-grid" style="margin-top:14px"><label class="nx-check"><input id="nx-broker-enabled" type="checkbox"'+checkedAttr(!!broker.enabled)+'><span>Broker enabled</span><span class="nx-check-hint">Allow routing to this desk</span></label><label class="nx-check"><input id="nx-broker-paper-mode" type="checkbox"'+checkedAttr(!!broker.paper_mode || paper)+'><span>Paper route</span><span class="nx-check-hint">Simulate orders (Kite session can still be real)</span></label><label class="nx-check"><input id="nx-broker-live-mode" type="checkbox"'+checkedAttr(!!broker.live_mode && !paper)+' '+(liveLocked ? 'disabled' : '')+'><span>Live mode</span><span class="nx-check-hint">Real broker orders when off paper route</span></label><label class="nx-check"><input id="nx-user-auto-execute" type="checkbox"'+checkedAttr(!!((user.controls||{}).auto_execute))+'><span>Auto execute</span></label></div>'
       + '<div class="nx-form-grid-3" style="margin-top:12px"><label class="nx-form-label">Daily loss<input id="nx-user-daily-loss" class="nx-input" placeholder="2500" value="'+escapeHtml(String((user.controls||{}).daily_loss_limit || 0))+'"></label><label class="nx-form-label">Max trades / day<input id="nx-user-max-trades" class="nx-input" placeholder="6" value="'+escapeHtml(String((user.controls||{}).max_trades_per_day || 0))+'"></label><label class="nx-form-label">Max open signals<input id="nx-user-max-open" class="nx-input" placeholder="3" value="'+escapeHtml(String((user.controls||{}).max_open_signals || 0))+'"></label></div>'
       + '</div></details>'
       + '<div class="nx-z-cta">'
-      + '<button type="button" class="nx-btn nx-btn-primary nx-btn-validate" onclick="nxBrokerConnect()" '+(saving?'disabled':'')+'>'+(saving?'Saving...':'Validate & Save')+'</button>'
-      + '<button type="button" class="nx-btn nx-btn-ghost" onclick="nxBrokerTest()" '+(testing?'disabled':'')+'>'+(testing?'Testing...':'Test Session')+'</button>'
-      + '<button type="button" class="nx-btn nx-btn-gold" onclick="nxBrokerSampleOrder()" '+(sampling?'disabled':'')+'>'+(sampling?'Running...':'Sample Order')+'</button>'
+      + '<button type="button" class="nx-btn nx-btn-primary nx-btn-validate" onclick="nxBrokerConnect()" '+(saving?'disabled':'')+'>'+(saving?'Saving...':'Save Desk & Verify')+'</button>'
+      + '<button type="button" class="nx-btn nx-btn-ghost" onclick="nxBrokerTest()" '+(testing?'disabled':'')+'>'+(testing?'Testing...':'Check Session')+'</button>'
+      + '<button type="button" class="nx-btn nx-btn-gold" onclick="nxBrokerSampleOrder()" '+(sampling?'disabled':'')+'>'+(sampling?'Running...':'Dry-Run Order')+'</button>'
       + '</div>'
       + brokerTestHtml
       + '<div class="nx-inline-note" style="margin-top:12px">SPIKE and SWING can route as equity. INDEX stays inbox-only until contract mapping ships.</div>'
@@ -859,14 +876,33 @@
     });
   };
   window.nxKiteOpenLogin = function(){
-    const key = String(((el('nx-broker-api-key')||{}).value || '')).trim();
-    const dash = (NX.dashboard || {}).broker || {};
-    let url = String(dash.login_url || '').trim();
-    if(!url && key){
-      url = 'https://kite.zerodha.com/connect/login?api_key=' + encodeURIComponent(key);
-    }
-    if(!url){ toast('Enter your API key first (from Kite Connect)'); return; }
-    window.open(url, '_blank', 'noopener');
+    return runBusy('broker-open-login-url', async function(){
+      try{
+        const key = String(((el('nx-broker-api-key')||{}).value || '')).trim();
+        const dash = (NX.dashboard || {}).broker || {};
+        let url = String(dash.login_url || '').trim();
+        if(!url){
+          try{
+            const info = await nxApi('/api/token-login-url', { method:'GET' });
+            url = String((info || {}).login_url || '').trim();
+          }catch(_){ }
+        }
+        if(!url && key){
+          url = 'https://kite.zerodha.com/connect/login?api_key=' + encodeURIComponent(key);
+        }
+        if(!url){ toast('Need a Kite API key or backend/.env KITE_API_KEY first'); return; }
+        window.open(url, '_blank', 'noopener');
+        NX.brokerAssist = {
+          type:'cool',
+          title:'Official Kite login opened in your browser',
+          message:'Log in there, then paste the final redirect URL or request_token into Manual fallback and click Save Desk & Verify.',
+          detail:'Alternate path: run python generate_token.py locally, then click LOAD .ENV or Use Server Session. One-Time Kite Login still gives the cleanest experience when it is available.'
+        };
+        safeRender();
+      }catch(err){
+        toast(err.message || 'Could not open Kite login URL');
+      }
+    });
   };
   window.nxCheckServerTokenStatus = function(){
     return runBusy('broker-token-status', async function(){
