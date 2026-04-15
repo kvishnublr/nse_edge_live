@@ -2924,8 +2924,10 @@ async def token_status():
 
 @app.post("/api/token-refresh")
 async def token_refresh_manual():
-    """Manually trigger a Kite token refresh via Playwright headless login."""
+    """Manually trigger a Kite token refresh with a bounded subprocess."""
     import asyncio as _aio
+    import subprocess as _subprocess
+    import sys as _sys
     from pathlib import Path
     from dotenv import load_dotenv
 
@@ -2933,46 +2935,68 @@ async def token_refresh_manual():
     if _envp.is_file():
         load_dotenv(_envp, override=True)
 
-    # Pre-flight: check all required credentials are present
-    missing = [k for k in ("KITE_USER_ID","KITE_PASSWORD","KITE_TOTP_SECRET","KITE_API_KEY","KITE_API_SECRET")
-               if not os.getenv(k,"").strip()]
+    missing = [k for k in ("KITE_USER_ID", "KITE_PASSWORD", "KITE_TOTP_SECRET", "KITE_API_KEY", "KITE_API_SECRET")
+               if not os.getenv(k, "").strip()]
     if missing:
         return JSONResponse({
             "ok": False,
             "msg": f"Missing env vars: {', '.join(missing)}. Add these to backend/.env or your host environment and restart."
         }, status_code=400)
 
+    _script = Path(__file__).resolve().parent / "auto_token.py"
+    _timeout_s = max(45, int(os.getenv("TOKEN_REFRESH_TIMEOUT_SECONDS", "150") or 150))
+
+    def _summarize_cli(output: str) -> str:
+        lines = [str(line or "").strip() for line in str(output or "").splitlines()]
+        lines = [
+            line for line in lines
+            if line
+            and not set(line) <= {"="}
+            and "STOCKR.IN v5" not in line
+            and "auto_token  INFO" not in line
+        ]
+        for line in reversed(lines):
+            low = line.lower()
+            if "failed" in low or "missing" in low or "not installed" in low or "browser login failed" in low:
+                return line
+        return lines[-1] if lines else "Auto refresh did not complete. Use One-Time Kite Login or verify backend/.env credentials."
+
     loop = _aio.get_event_loop()
+
     def _do():
-        import logging, io
-        # Capture auto_token log output to surface real errors
-        log_stream = io.StringIO()
-        h = logging.StreamHandler(log_stream)
-        h.setLevel(logging.WARNING)
-        logging.getLogger("auto_token").addHandler(h)
         try:
-            from auto_token import refresh_token
-            ok = refresh_token()
-            if ok:
-                from scheduler import _apply_new_token
-                _apply_new_token()
-            log_stream.seek(0)
-            err = log_stream.read().strip()
-            return (ok, err or ("" if ok else "Login failed — check credentials or TOTP secret"))
-        except Exception as e:
-            return (False, str(e))
-        finally:
-            logging.getLogger("auto_token").removeHandler(h)
+            proc = _subprocess.run(
+                [_sys.executable, str(_script)],
+                cwd=str(_script.parent),
+                capture_output=True,
+                text=True,
+                timeout=_timeout_s,
+                env={**os.environ, "PYTHONUNBUFFERED": "1"},
+            )
+        except _subprocess.TimeoutExpired as exc:
+            combined = "\n".join(part for part in [exc.stdout or "", exc.stderr or ""] if part).strip()
+            return (False, f"Auto refresh timed out after {_timeout_s}s. {_summarize_cli(combined)}")
+        except Exception as exc:
+            return (False, str(exc))
+        combined = "\n".join(part for part in [proc.stdout or "", proc.stderr or ""] if part).strip()
+        if proc.returncode == 0:
+            return (True, _summarize_cli(combined))
+        return (False, _summarize_cli(combined))
 
     result, errmsg = await loop.run_in_executor(None, _do)
     if result:
         try:
             from feed import fetch_quotes_rest
+            from scheduler import _apply_new_token
 
+            _apply_new_token()
             fetch_quotes_rest()
-        except Exception as _qe:
-            logger.warning("token-refresh: fetch_quotes_rest: %s", _qe)
-        await refresh_state()
+        except Exception as exc:
+            logger.warning("token-refresh: fetch_quotes_rest: %s", exc)
+        try:
+            await _aio.wait_for(refresh_state(), timeout=20)
+        except Exception as exc:
+            logger.warning("token-refresh: refresh_state: %s", exc)
         return JSONResponse({"ok": True, "msg": "Token refreshed and applied live"})
     return JSONResponse({"ok": False, "msg": errmsg}, status_code=500)
 

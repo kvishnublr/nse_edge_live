@@ -13,7 +13,9 @@
     payments: [],
     trades: [],
     admin: null,
+    workspaceTab: localStorage.getItem('nx_workspace_tab') || '',
     brokerTest: null,
+    brokerAssist: null,
     selectedPaymentId: null,
     adminOtpPending: false,
     adminOtpEmail: '',
@@ -94,6 +96,52 @@
   function defaultAdminEmail(){
     return normalizeEmail((((NX.boot || {}).admin || {}).email) || 'admin@stockr.in');
   }
+  function workspaceTabs(){
+    if(!NX.user) return [];
+    if(String((NX.user.role || '')).toUpperCase() === 'ADMIN'){
+      return [
+        { id:'overview', label:'Overview', kicker:'Desk', desc:'Metrics, brand pulse, and quick status' },
+        { id:'users', label:'Users', kicker:'Accounts', desc:'Provision users and manage wallets' },
+        { id:'routing', label:'Routing', kicker:'Signals', desc:'Strategy entitlement and engine delivery' },
+        { id:'payments', label:'Payments', kicker:'Rail', desc:'Coupons, UPI setup, and approvals' },
+        { id:'brand', label:'Brand', kicker:'Mailer', desc:'Identity, Gmail, and support profile' },
+        { id:'signals', label:'Feed', kicker:'Events', desc:'Recently routed user alerts' }
+      ];
+    }
+    return [
+      { id:'overview', label:'Overview', kicker:'Desk', desc:'Account, wallet, and readiness snapshot' },
+      { id:'execution', label:'Execution', kicker:'Zerodha', desc:'Broker connect, token actions, and routing' },
+      { id:'signals', label:'Signals', kicker:'Inbox', desc:'Signal stream and strategy switches' },
+      { id:'wallet', label:'Wallet', kicker:'Credits', desc:'Ledger, coupon, and balance state' },
+      { id:'payments', label:'Payments', kicker:'Plans', desc:'Plan upgrades, QR, and approvals' },
+      { id:'journal', label:'Journal', kicker:'Performance', desc:'Trade curve and quick trade logging' },
+      { id:'settings', label:'Settings', kicker:'Alerts', desc:'Email, Telegram, WhatsApp, and limits' }
+    ];
+  }
+  function workspaceTabStoreKey(){
+    const role = String((((NX.user || {}).role) || NX.role || 'guest')).toLowerCase();
+    return 'nx_workspace_tab_' + role;
+  }
+  function ensureWorkspaceTab(){
+    const tabs = workspaceTabs();
+    if(!tabs.length) return '';
+    const active = String(NX.workspaceTab || localStorage.getItem(workspaceTabStoreKey()) || '').trim().toLowerCase();
+    const valid = tabs.some(function(tab){ return tab.id === active; });
+    NX.workspaceTab = valid ? active : tabs[0].id;
+    localStorage.setItem(workspaceTabStoreKey(), NX.workspaceTab);
+    return NX.workspaceTab;
+  }
+  function currentWorkspaceTab(){
+    return ensureWorkspaceTab();
+  }
+  function workspaceMeta(tabId){
+    const id = String(tabId || currentWorkspaceTab() || '').toLowerCase();
+    const tabs = workspaceTabs();
+    for(let i=0;i<tabs.length;i+=1){
+      if(tabs[i].id === id) return tabs[i];
+    }
+    return tabs[0] || null;
+  }
   function setNotice(type, message){
     NX.notice = message ? { type: type || 'info', message: String(message) } : null;
   }
@@ -112,7 +160,7 @@
     if(NX.token) headers.Authorization = 'Bearer ' + NX.token;
     const res = await fetch(resolveUrl(url), Object.assign({}, opts, { headers }));
     const data = await res.json().catch(function(){ return {}; });
-    if(!res.ok){ throw new Error(data.detail || data.message || ('Request failed: ' + res.status)); }
+    if(!res.ok){ throw new Error(data.detail || data.message || data.msg || ('Request failed: ' + res.status)); }
     return data;
   }
   function remember(token, role){
@@ -121,7 +169,7 @@
     if(NX.token) localStorage.setItem('nx_token', NX.token); else localStorage.removeItem('nx_token');
     if(NX.role) localStorage.setItem('nx_role', NX.role); else localStorage.removeItem('nx_role');
   }
-  function logout(){ remember('', ''); NX.user=null; NX.dashboard=null; NX.admin=null; NX.payments=[]; NX.trades=[]; NX.loadingAction=''; NX.brokerTest=null; NX.selectedPaymentId=null; clearNotice(); safeRender(); }
+  function logout(){ if(window._nxKiteInteractiveTimer){ clearTimeout(window._nxKiteInteractiveTimer); window._nxKiteInteractiveTimer = null; } remember('', ''); NX.user=null; NX.dashboard=null; NX.admin=null; NX.payments=[]; NX.trades=[]; NX.loadingAction=''; NX.brokerTest=null; NX.brokerAssist=null; NX.selectedPaymentId=null; clearNotice(); safeRender(); }
 
   async function ensureBoot(){
     if(NX.boot) return NX.boot;
@@ -284,6 +332,29 @@
       + '</div>';
   }
 
+  function renderWorkspaceShell(opts){
+    const tabs = opts.tabs || [];
+    const active = currentWorkspaceTab();
+    const meta = workspaceMeta(active) || {};
+    const railCards = (opts.railCards || []).join('');
+    const tabHtml = tabs.map(function(tab){
+      const on = tab.id === active;
+      return '<button class="nx-workspace-tab'+(on?' on':'')+'" onclick="nxSetWorkspaceTab(\''+tab.id+'\')"><span class="nx-workspace-tab-kicker">'+escapeHtml(tab.kicker || '')+'</span><span class="nx-workspace-tab-label">'+escapeHtml(tab.label || tab.id)+'</span><span class="nx-workspace-tab-desc">'+escapeHtml(tab.desc || '')+'</span></button>';
+    }).join('');
+    return ''
+      + '<div class="nx-workspace-shell">'
+      + '<aside class="nx-workspace-rail">'
+      + '<div class="nx-workspace-rail-card"><div class="nx-workspace-rail-kicker">'+escapeHtml(opts.railKicker || 'Workspace')+'</div><div class="nx-workspace-rail-title">'+escapeHtml(opts.railTitle || 'Nexus Desk')+'</div><div class="nx-workspace-rail-sub">'+escapeHtml(opts.railSub || 'Choose a tab to focus one area at a time.')+'</div></div>'
+      + '<div class="nx-workspace-tab-stack">'+tabHtml+'</div>'
+      + railCards
+      + '</aside>'
+      + '<section class="nx-workspace-main">'
+      + '<div class="nx-workspace-pane-head"><div><div class="nx-workspace-pane-kicker">'+escapeHtml(meta.kicker || opts.railKicker || 'Workspace')+'</div><div class="nx-workspace-pane-title">'+escapeHtml(meta.label || opts.railTitle || 'Desk')+'</div><div class="nx-workspace-pane-sub">'+escapeHtml(meta.desc || opts.railSub || '')+'</div></div>'+(opts.headRight || '')+'</div>'
+      + '<div class="nx-workspace-pane-body">'+(opts.body || '')+'</div>'
+      + '</section>'
+      + '</div>';
+  }
+
   function renderSignalItems(items){
     if(!items || !items.length) return '<div class="nx-empty">No routed signals yet. Once live engines emit SPIKE, INDEX, or SWING ideas, they will appear here automatically.</div>';
     return '<div class="nx-list">' + items.map(function(item){
@@ -298,6 +369,113 @@
       const v = Number(x.pnl||0), h = Math.max(18, Math.round(Math.abs(v)/max*110));
       return '<div class="nx-bar'+(v<0?' neg':'')+'" style="height:'+h+'px"><span>'+escapeHtml(String(x.date||'').slice(5))+'</span></div>';
     }).join('') + '</div>';
+  }
+
+  function renderUserNotifyCard(contacts, notifications){
+    return '<div class="nx-card nx-notify-card"><div class="nx-card-head"><div><div class="nx-card-title">Alerts &amp; channels</div><div class="nx-card-sub">Signal delivery, risk nudges, and weekday token reminders.</div></div></div><div class="nx-card-body">'
+      + '<div class="nx-form-grid"><label class="nx-form-label">WhatsApp<input id="nx-user-whatsapp" class="nx-input" placeholder="+91 9876543210" value="'+escapeHtml(contacts.whatsapp_phone || '')+'"></label><label class="nx-form-label">Telegram ID<input id="nx-user-telegram" class="nx-input" placeholder="123456789" value="'+escapeHtml(contacts.telegram_chat_id || '')+'"></label></div>'
+      + '<div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">WhatsApp API Key<input id="nx-user-whatsapp-apikey" class="nx-input" placeholder="'+escapeHtml(contacts.whatsapp_apikey_masked || 'CallMeBot API key')+'" value=""></label><label class="nx-form-label">Channel state<input class="nx-input" disabled value="'+escapeHtml((notifications.email ? 'Email ' : '') + (notifications.telegram ? 'Telegram ' : '') + (notifications.whatsapp ? 'WhatsApp ' : '') || 'All disabled')+'"></label></div>'
+      + '<div class="nx-toggle-grid" style="margin-top:14px"><label class="nx-check"><input id="nx-user-notify-email" type="checkbox"'+checkedAttr(!!notifications.email)+'><span>Email</span></label><label class="nx-check"><input id="nx-user-notify-telegram" type="checkbox"'+checkedAttr(!!notifications.telegram)+'><span>Telegram</span></label><label class="nx-check"><input id="nx-user-notify-whatsapp" type="checkbox"'+checkedAttr(!!notifications.whatsapp)+'><span>WhatsApp</span></label><label class="nx-check"><input id="nx-user-token-reminder" type="checkbox"'+checkedAttr(!!notifications.token_reminder)+'><span>Token reminder</span></label></div>'
+      + '<div class="nx-actions" style="margin-top:12px"><button class="nx-btn nx-btn-primary" onclick="nxSaveNotifications()">Save notifications</button></div>'
+      + '<div class="nx-inline-note" style="margin-top:10px">Last reminder: '+escapeHtml(fmtDate(notifications.last_token_reminder_at))+'</div></div></div>';
+  }
+
+  function renderKiteExecutionHub(user, broker, brokerOptions, brokerProfileBits, brokerTestHtml, executionOrders, liveLocked){
+    const code = String(broker.broker_code || 'PAPER').toUpperCase();
+    const paper = code === 'PAPER';
+    const sessOk = broker.status === 'CONNECTED' || broker.status === 'READY';
+    const engineReady = !!broker.enabled && sessOk && !paper;
+    const assist = NX.brokerAssist || null;
+    const statusClass = sessOk ? 'good' : (broker.status === 'ERROR' ? 'bad' : 'warn');
+    const modeBadge = broker.live_mode ? 'bad' : 'cool';
+    const modeLabel = broker.live_mode ? 'Live execution' : 'Paper / safe';
+    const profileLine = brokerProfileBits.length ? brokerProfileBits.join(' · ') : 'Not verified yet';
+    const tokenClass = assist ? (assist.type === 'success' ? 'good' : (assist.type === 'error' ? 'bad' : 'cool')) : 'warn';
+    const tokenTitle = assist ? escapeHtml(assist.title || 'Shared session checked') : 'Shared session not checked yet';
+    const tokenMessage = assist ? escapeHtml(assist.message || '') : 'Fastest path: use the server session if your Zerodha keys and token already live in backend/.env.';
+    const tokenDetail = assist && assist.detail ? '<div class="nx-inline-note" style="margin-top:8px">'+escapeHtml(assist.detail)+'</div>' : '';
+    const importing = NX.loadingAction === 'broker-import-env';
+    const refreshing = NX.loadingAction === 'broker-refresh-env';
+    const checking = NX.loadingAction === 'broker-token-status';
+    const interactiveStarting = NX.loadingAction === 'broker-interactive-start';
+    const saving = NX.loadingAction === 'broker-connect';
+    const testing = NX.loadingAction === 'broker-test';
+    const sampling = NX.loadingAction === 'broker-sample';
+    const kiteBrand = '<div class="nx-kite-brand"><span class="nx-kite-z">Z</span><span>Zerodha Kite</span></div>';
+    const steps = paper
+      ? '<div class="nx-z-paper-callout"><div class="nx-z-paper-title">Paper routing</div><div class="nx-z-paper-sub">No broker login needed. Orders are simulated while you test the full routing path.</div></div>'
+      : '<div class="nx-z-steps-wrap"><div class="nx-z-steps-head">Simple Zerodha flow</div><ol class="nx-z-steps">'
+        + '<li><span class="nx-z-sn">1</span><div><strong>Fast lane</strong><span>Use the server session if backend/.env already has a valid token.</span></div></li>'
+        + '<li><span class="nx-z-sn">2</span><div><strong>Login</strong><span>Otherwise open Kite, approve the app, and copy the final address.</span></div></li>'
+        + '<li><span class="nx-z-sn">3</span><div><strong>Save</strong><span>Paste the URL or request_token and we validate it instantly.</span></div></li>'
+        + '</ol></div>';
+    const quickLane = paper ? '' : ''
+      + '<div class="nx-z-command-grid">'
+      + '<div class="nx-z-command-card nx-z-command-card-primary"><div class="nx-z-fast-kicker">Quick connect</div><div class="nx-z-fast-title">Use server session</div><div class="nx-z-fast-sub">Fastest option. If this machine already has a valid Kite token in <b>backend/.env</b>, connect in one click.</div><div class="nx-actions" style="margin-top:14px"><button type="button" class="nx-btn nx-btn-primary" onclick="nxImportEnvBrokerToken()" '+(importing?'disabled':'')+'>'+(importing?'Importing...':'Use Server Session')+'</button><button type="button" class="nx-btn nx-btn-ghost" onclick="nxCheckServerTokenStatus()" '+(checking?'disabled':'')+'>'+(checking?'Checking...':'Check Status')+'</button></div></div>'
+      + '<div class="nx-z-command-card nx-z-command-card-lite"><div class="nx-z-fast-kicker">One-time login</div><div class="nx-z-fast-title">Open official Kite</div><div class="nx-z-fast-sub">Nexus opens the official Zerodha page. The user types credentials only there, and Nexus completes the connection automatically after login.</div><div class="nx-actions" style="margin-top:14px"><button type="button" class="nx-btn nx-btn-gold" onclick="nxKiteInteractiveLogin()" '+(interactiveStarting?'disabled':'')+'>'+(interactiveStarting?'Opening...':'One-Time Kite Login')+'</button></div></div>'
+      + '<div class="nx-z-command-card"><div class="nx-z-fast-kicker">Auto refresh</div><div class="nx-z-fast-title">Refresh and use</div><div class="nx-z-fast-sub">If user ID, password, TOTP, API key, and secret are saved in <b>backend/.env</b>, refresh the session automatically.</div><div class="nx-actions" style="margin-top:14px"><button type="button" class="nx-btn nx-btn-ghost" onclick="nxRefreshEnvBrokerToken()" '+(refreshing?'disabled':'')+'>'+(refreshing?'Refreshing...':'Auto Refresh & Use')+'</button></div></div>'
+      + '</div>'
+      + '<div class="nx-status '+tokenClass+'" style="margin-top:12px"><b>'+tokenTitle+'</b>'+(tokenMessage ? '<div style="margin-top:6px">'+tokenMessage+'</div>' : '')+tokenDetail+'</div>';
+    const manualCard = paper ? '' : ''
+      + '<div class="nx-z-manual-card">'
+      + '<div class="nx-z-manual-head"><div><div class="nx-z-fast-kicker">Fallback</div><div class="nx-z-fast-title">Manual redirect paste</div></div><div class="nx-inline-note">Only use this if the one-time login flow is unavailable for your Kite redirect setup.</div></div>'
+      + '<div class="nx-form-grid" style="margin-top:14px"><label class="nx-form-label">API key<input id="nx-broker-api-key" class="nx-input" autocomplete="off" placeholder="From Kite Connect" value=""></label><label class="nx-form-label">API secret<input id="nx-broker-api-secret" type="password" class="nx-input" autocomplete="new-password" placeholder="'+escapeHtml(broker.api_secret_masked || 'App secret')+'" value=""></label></div>'
+      + '<label class="nx-form-label" style="margin-top:14px">Redirect URL or request_token<input id="nx-broker-request-paste" class="nx-input" placeholder="https://…?request_token=…&amp;action=login&amp;status=success"></label>'
+      + '<div class="nx-inline-note" style="margin-top:10px">Paste the full final browser URL after Zerodha approval. Nexus extracts the token and validates it for you.</div>'
+      + '</div>';
+    const simpleForm = ''
+      + '<div class="nx-z-simple">'
+      + '<div class="nx-form-grid nx-z-topline"><label class="nx-form-label">Broker<select id="nx-broker-code" class="nx-select" onchange="nxBrokerCodeSync()">'+brokerOptions+'</select></label><label class="nx-form-label">Desk label<input id="nx-broker-label" class="nx-input" placeholder="Primary desk" value="'+escapeHtml(broker.account_label || '')+'"></label></div>'
+      + '<div id="nx-paper-fields" class="nx-z-toggle" style="display:'+(paper?'block':'none')+'"><p class="nx-z-lead">Paper mode rehearses routing without a live broker. Switch to <b>Zerodha Kite</b> when you want real fills.</p></div>'
+      + '<div id="nx-zerodha-fields" class="nx-z-toggle" style="display:'+(paper?'none':'block')+'">'
+      + quickLane
+      + manualCard
+      + '</div></div>';
+    let readiness = '';
+    if(paper){
+      readiness = '<div class="nx-z-ready nx-z-ready-paper"><div class="nx-z-ready-title">Paper desk</div><div class="nx-z-ready-sub">Simulated orders only. Select Zerodha and validate to go live.</div></div>';
+    }else if(sessOk && broker.enabled){
+      readiness = '<div class="nx-z-ready nx-z-ready-on"><div class="nx-z-ready-title">Ready for execution</div><div class="nx-z-ready-sub">Kite session verified. Enable <b>Live mode</b> only when you want real orders.</div></div>';
+    }else if(sessOk && !broker.enabled){
+      readiness = '<div class="nx-z-ready nx-z-ready-warn"><div class="nx-z-ready-title">Connected — routing off</div><div class="nx-z-ready-sub">Turn on <b>Broker enabled</b> in Advanced when you want auto-routing.</div></div>';
+    }else{
+      readiness = '<div class="nx-z-ready"><div class="nx-z-ready-title">Not validated</div><div class="nx-z-ready-sub">Paste your redirect URL and click <b>Validate &amp; save</b>. We confirm your session immediately.</div></div>';
+    }
+    return ''
+      + '<div class="nx-card nx-kite-dock">'
+      + '<div class="nx-kite-dock-head">'
+      + '<div class="nx-kite-dock-title-row">'
+      + '<div><div class="nx-card-title nx-kite-dock-title">Trading execution</div><div class="nx-card-sub">Cleaner Zerodha onboarding with quick import, manual fallback, and routing controls in one place.</div></div>'
+      + '<div class="nx-kite-dock-badges"><span class="nx-badge '+statusClass+'">'+escapeHtml(broker.status || 'Idle')+'</span><span class="nx-badge '+modeBadge+'">'+modeLabel+'</span><span class="nx-badge '+(engineReady ? 'good' : 'warn')+'">'+(engineReady ? 'Engine ready' : (paper ? 'Paper' : 'Awaiting validation'))+'</span></div>'
+      + '</div>'
+      + '<div class="nx-kite-dock-hero">'+(paper ? '' : kiteBrand)+steps+'</div>'
+      + '</div>'
+      + '<div class="nx-card-body nx-kite-dock-body"><div class="nx-kite-dock-grid">'
+      + '<div class="nx-kite-dock-main">'+simpleForm
+      + '<details class="nx-z-advanced"><summary>Advanced routing &amp; manual token</summary>'
+      + '<div class="nx-z-advanced-body">'
+      + '<div class="nx-form-grid"><label class="nx-form-label">Broker user ID<input id="nx-broker-user-id" class="nx-input" placeholder="AB1234" value="'+escapeHtml(broker.broker_user_id || '')+'"></label><label class="nx-form-label">Default qty<input id="nx-broker-qty" class="nx-input" placeholder="1" value="'+escapeHtml(String(broker.default_quantity || 1))+'"></label></div>'
+      + '<div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Manual access token<input id="nx-broker-access-token" class="nx-input" placeholder="'+escapeHtml(broker.access_token_masked || 'Only if not using login URL')+'" value=""></label><label class="nx-form-label">Intraday product<select id="nx-broker-intraday-product" class="nx-select"><option '+((broker.intraday_product||'MIS')==='MIS'?'selected':'')+'>MIS</option><option '+((broker.intraday_product||'MIS')==='CNC'?'selected':'')+'>CNC</option><option '+((broker.intraday_product||'MIS')==='NRML'?'selected':'')+'>NRML</option></select></label></div>'
+      + '<div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Positional product<select id="nx-broker-positional-product" class="nx-select"><option '+((broker.positional_product||'CNC')==='CNC'?'selected':'')+'>CNC</option><option '+((broker.positional_product||'CNC')==='NRML'?'selected':'')+'>NRML</option><option '+((broker.positional_product||'CNC')==='MIS'?'selected':'')+'>MIS</option></select></label><label class="nx-form-label">&nbsp;</label></div>'
+      + '<div class="nx-toggle-grid" style="margin-top:14px"><label class="nx-check"><input id="nx-broker-enabled" type="checkbox"'+checkedAttr(!!broker.enabled)+'><span>Broker enabled</span></label><label class="nx-check"><input id="nx-broker-paper-mode" type="checkbox"'+checkedAttr(!!broker.paper_mode)+'><span>Paper route</span></label><label class="nx-check"><input id="nx-broker-live-mode" type="checkbox"'+checkedAttr(!!broker.live_mode)+' '+(liveLocked ? 'disabled' : '')+'><span>Live mode</span></label><label class="nx-check"><input id="nx-user-auto-execute" type="checkbox"'+checkedAttr(!!((user.controls||{}).auto_execute))+'><span>Auto execute</span></label></div>'
+      + '<div class="nx-form-grid-3" style="margin-top:12px"><label class="nx-form-label">Daily loss<input id="nx-user-daily-loss" class="nx-input" placeholder="2500" value="'+escapeHtml(String((user.controls||{}).daily_loss_limit || 0))+'"></label><label class="nx-form-label">Max trades / day<input id="nx-user-max-trades" class="nx-input" placeholder="6" value="'+escapeHtml(String((user.controls||{}).max_trades_per_day || 0))+'"></label><label class="nx-form-label">Max open signals<input id="nx-user-max-open" class="nx-input" placeholder="3" value="'+escapeHtml(String((user.controls||{}).max_open_signals || 0))+'"></label></div>'
+      + '</div></details>'
+      + '<div class="nx-z-cta">'
+      + '<button type="button" class="nx-btn nx-btn-primary nx-btn-validate" onclick="nxBrokerConnect()" '+(saving?'disabled':'')+'>'+(saving?'Saving...':'Validate & Save')+'</button>'
+      + '<button type="button" class="nx-btn nx-btn-ghost" onclick="nxBrokerTest()" '+(testing?'disabled':'')+'>'+(testing?'Testing...':'Test Session')+'</button>'
+      + '<button type="button" class="nx-btn nx-btn-gold" onclick="nxBrokerSampleOrder()" '+(sampling?'disabled':'')+'>'+(sampling?'Running...':'Sample Order')+'</button>'
+      + '</div>'
+      + brokerTestHtml
+      + '<div class="nx-inline-note" style="margin-top:12px">SPIKE and SWING can route as equity. INDEX stays inbox-only until contract mapping ships.</div>'
+      + '</div>'
+      + '<div class="nx-kite-dock-side">'
+      + readiness
+      + '<div class="nx-item nx-kite-health"><div class="nx-item-title">Session</div><div class="nx-item-sub">'+profileLine+'</div>'
+      + '<div class="nx-broker-chips" style="margin-top:12px"><span class="nx-badge cool">Key '+escapeHtml(broker.api_key_masked || '—')+'</span><span class="nx-badge warn">Secret '+escapeHtml(broker.api_secret_masked || '—')+'</span><span class="nx-badge cool">Token '+escapeHtml(broker.access_token_masked || '—')+'</span></div>'
+      + (broker.last_error ? '<div class="nx-status error" style="margin-top:12px">'+escapeHtml(broker.last_error)+'</div>' : '<div class="nx-status success" style="margin-top:12px">No blocking errors. Use <b>Test session</b> after market opens if needed.</div>')
+      + '</div>'
+      + '<div class="nx-item" style="margin-top:12px"><div class="nx-item-title">Recent auto orders</div><div class="nx-item-sub">Live and simulated attempts from the router.</div><div style="margin-top:12px">'+executionOrders+'</div></div>'
+      + '</div></div></div></div>';
   }
 
   function renderUserCards(){
@@ -352,15 +530,37 @@
     if((broker.profile||{}).email) brokerProfileBits.push(escapeHtml(broker.profile.email));
     const liveLocked = String(broker.broker_code || '').toUpperCase() === 'PAPER';
     const brokerTest = NX.brokerTest || null;
-    const brokerTestHtml = brokerTest ? '<div class="nx-status '+escapeHtml(brokerTest.type === 'error' ? 'error' : 'success')+'" style="margin-top:12px"><b>'+(brokerTest.type === 'error' ? 'Not connected' : 'Connected')+'</b>'+(brokerTest.message ? ' · ' + escapeHtml(brokerTest.message) : '')+(brokerTest.detail ? '<div style="margin-top:6px">'+escapeHtml(brokerTest.detail)+'</div>' : '')+'</div>' : '';
-    return ''
-      + '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Overview</div><div class="nx-card-sub">User dashboard, wallet, controls, and routing metrics</div></div><span class="nx-badge cool">'+escapeHtml((user.subscription||{}).plan_code || 'No Plan')+'</span></div><div class="nx-card-body"><div class="nx-metric-grid"><div class="nx-metric"><div class="nx-metric-k">Balance</div><div class="nx-metric-v">'+fmtMoney((((user.wallet||{}).balance)||0))+'</div></div><div class="nx-metric"><div class="nx-metric-k">Unread</div><div class="nx-metric-v">'+fmtNum(metrics.signals_unread||0)+'</div></div><div class="nx-metric"><div class="nx-metric-k">Closed Trades</div><div class="nx-metric-v">'+fmtNum((perf.summary||{}).closed_trades||0)+'</div></div><div class="nx-metric"><div class="nx-metric-k">Total PnL</div><div class="nx-metric-v">'+fmtMoney((perf.summary||{}).total_pnl||0)+'</div></div></div><div class="nx-inline-note" style="margin-top:14px">Controls: daily loss '+fmtMoney(((user.controls||{}).daily_loss_limit)||0)+' · max trades '+fmtNum(((user.controls||{}).max_trades_per_day)||0)+' · profit share '+fmtNum(((user.controls||{}).profit_share_pct)||0)+'%</div></div></div>'
-      + '<div class="nx-card nx-broker-shell"><div class="nx-card-head"><div><div class="nx-card-title">Broker & Auto Trade</div><div class="nx-card-sub">Select a broker after user login, test connectivity, and let supported signals route from the app automatically.</div></div><span class="nx-badge '+((broker.status==='CONNECTED'||broker.status==='READY') ? 'good' : (broker.status==='ERROR' ? 'bad' : 'warn'))+'">'+escapeHtml(broker.status || 'DISCONNECTED')+'</span></div><div class="nx-card-body"><div class="nx-broker-grid"><div><div class="nx-item nx-broker-highlight"><div class="nx-item-top"><div><div class="nx-item-title">'+escapeHtml(broker.broker_name || 'Broker Workspace')+'</div><div class="nx-item-sub">'+escapeHtml(broker.help || 'Connect a broker or keep paper mode on while you validate automation.')+'</div></div><span class="nx-badge '+(broker.live_mode ? 'bad' : 'cool')+'">'+(broker.live_mode ? 'Live Mode' : 'Paper Safe')+'</span></div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Broker<select id="nx-broker-code" class="nx-select" onchange="nxBrokerCodeSync()">'+brokerOptions+'</select></label><label class="nx-form-label">Account Label<input id="nx-broker-label" class="nx-input" placeholder="Primary Desk" value="'+escapeHtml(broker.account_label || '')+'"></label></div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Broker User ID<input id="nx-broker-user-id" class="nx-input" placeholder="AB1234" value="'+escapeHtml(broker.broker_user_id || '')+'"></label><label class="nx-form-label">Default Quantity<input id="nx-broker-qty" class="nx-input" placeholder="1" value="'+escapeHtml(String(broker.default_quantity || 1))+'"></label></div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">API Key<input id="nx-broker-api-key" class="nx-input" placeholder="Kite API key" value=""></label><label class="nx-form-label">Access Token<input id="nx-broker-access-token" class="nx-input" placeholder="'+escapeHtml(broker.access_token_masked || 'Paste fresh access token')+'" value=""></label></div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Intraday Product<select id="nx-broker-intraday-product" class="nx-select"><option '+((broker.intraday_product||'MIS')==='MIS'?'selected':'')+'>MIS</option><option '+((broker.intraday_product||'MIS')==='CNC'?'selected':'')+'>CNC</option><option '+((broker.intraday_product||'MIS')==='NRML'?'selected':'')+'>NRML</option></select></label><label class="nx-form-label">Positional Product<select id="nx-broker-positional-product" class="nx-select"><option '+((broker.positional_product||'CNC')==='CNC'?'selected':'')+'>CNC</option><option '+((broker.positional_product||'CNC')==='NRML'?'selected':'')+'>NRML</option><option '+((broker.positional_product||'CNC')==='MIS'?'selected':'')+'>MIS</option></select></label></div><div class="nx-toggle-grid" style="margin-top:14px"><label class="nx-check"><input id="nx-broker-enabled" type="checkbox"'+checkedAttr(!!broker.enabled)+'><span>Broker enabled</span></label><label class="nx-check"><input id="nx-broker-paper-mode" type="checkbox"'+checkedAttr(!!broker.paper_mode)+'><span>Paper route</span></label><label class="nx-check"><input id="nx-broker-live-mode" type="checkbox"'+checkedAttr(!!broker.live_mode)+' '+(liveLocked ? 'disabled' : '')+'><span>Live mode</span></label><label class="nx-check"><input id="nx-user-auto-execute" type="checkbox"'+checkedAttr(!!((user.controls||{}).auto_execute))+'><span>Auto execute</span></label></div><div class="nx-form-grid-3" style="margin-top:12px"><label class="nx-form-label">Daily Loss<input id="nx-user-daily-loss" class="nx-input" placeholder="2500" value="'+escapeHtml(String((user.controls||{}).daily_loss_limit || 0))+'"></label><label class="nx-form-label">Max Trades / Day<input id="nx-user-max-trades" class="nx-input" placeholder="6" value="'+escapeHtml(String((user.controls||{}).max_trades_per_day || 0))+'"></label><label class="nx-form-label">Max Open Signals<input id="nx-user-max-open" class="nx-input" placeholder="3" value="'+escapeHtml(String((user.controls||{}).max_open_signals || 0))+'"></label></div><div class="nx-actions" style="margin-top:14px"><button class="nx-btn nx-btn-primary" onclick="nxBrokerConnect()">Save & Connect</button><button class="nx-btn nx-btn-ghost" onclick="nxBrokerTest()">Test Connection</button><button class="nx-btn nx-btn-gold" onclick="nxBrokerSampleOrder()">Place Sample Order</button>'+(broker.login_url ? '<a class="nx-btn nx-btn-gold" href="'+escapeHtml(broker.login_url)+'" target="_blank" rel="noreferrer">Open Broker Login</a>' : '')+'</div>'+brokerTestHtml+'<div class="nx-inline-note" style="margin-top:12px">Supported today: SPIKE and SWING can auto-route as equity orders. INDEX stays inbox-only until option-contract expiry mapping is added.</div></div></div><div><div class="nx-item"><div class="nx-item-title">Connection Health</div><div class="nx-item-sub">'+(brokerProfileBits.length ? brokerProfileBits.join(' · ') : 'No verified broker profile yet.')+'</div><div class="nx-broker-chips" style="margin-top:12px"><span class="nx-badge cool">API '+escapeHtml(broker.api_key_masked || 'not saved')+'</span><span class="nx-badge warn">Token '+escapeHtml(broker.access_token_masked || 'not saved')+'</span><span class="nx-badge '+((broker.enabled && (broker.status==='CONNECTED'||broker.status==='READY')) ? 'good' : 'warn')+'">'+(broker.enabled ? 'Routing Enabled' : 'Routing Off')+'</span></div>'+(broker.last_error ? '<div class="nx-status error" style="margin-top:12px">'+escapeHtml(broker.last_error)+'</div>' : '<div class="nx-status info" style="margin-top:12px">Keep paper mode on first. When the test passes, turn live mode on only if you want app-triggered orders to hit the broker account.</div>')+'</div><div class="nx-item" style="margin-top:12px"><div class="nx-item-title">Notifications & Channels</div><div class="nx-item-sub">Every routed call can go to your selected channels. Token reminder runs on weekdays before pre-open.</div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">WhatsApp<input id="nx-user-whatsapp" class="nx-input" placeholder="+91 9876543210" value="'+escapeHtml(contacts.whatsapp_phone || '')+'"></label><label class="nx-form-label">Telegram ID<input id="nx-user-telegram" class="nx-input" placeholder="123456789" value="'+escapeHtml(contacts.telegram_chat_id || '')+'"></label></div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">WhatsApp API Key<input id="nx-user-whatsapp-apikey" class="nx-input" placeholder="'+escapeHtml(contacts.whatsapp_apikey_masked || 'CallMeBot API key')+'" value=""></label><label class="nx-form-label">Channel State<input class="nx-input" disabled value="'+escapeHtml((notifications.email ? 'Email ' : '') + (notifications.telegram ? 'Telegram ' : '') + (notifications.whatsapp ? 'WhatsApp ' : '') || 'All disabled')+'"></label></div><div class="nx-toggle-grid" style="margin-top:14px"><label class="nx-check"><input id="nx-user-notify-email" type="checkbox"'+checkedAttr(!!notifications.email)+'><span>Email</span></label><label class="nx-check"><input id="nx-user-notify-telegram" type="checkbox"'+checkedAttr(!!notifications.telegram)+'><span>Telegram</span></label><label class="nx-check"><input id="nx-user-notify-whatsapp" type="checkbox"'+checkedAttr(!!notifications.whatsapp)+'><span>WhatsApp</span></label><label class="nx-check"><input id="nx-user-token-reminder" type="checkbox"'+checkedAttr(!!notifications.token_reminder)+'><span>Token reminder</span></label></div><div class="nx-actions" style="margin-top:12px"><button class="nx-btn nx-btn-primary" onclick="nxSaveNotifications()">Save Notifications</button></div><div class="nx-inline-note" style="margin-top:10px">Last reminder: '+escapeHtml(fmtDate(notifications.last_token_reminder_at))+'</div></div><div class="nx-item" style="margin-top:12px"><div class="nx-item-title">Recent Auto Orders</div><div class="nx-item-sub">Every simulated or live attempt is logged here so the trading engine remains observable.</div><div style="margin-top:12px">'+executionOrders+'</div></div></div></div></div></div>'
-      + '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Signal Inbox</div><div class="nx-card-sub">Routed SPIKE, INDEX, and SWING events from the live engines</div></div><button class="nx-mini-btn" onclick="nxRefresh()">Reload</button></div><div class="nx-card-body">'+renderSignalItems(d.signals || [])+'</div></div>'
-      + '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Strategies</div><div class="nx-card-sub">Per-user entitlement and threshold control</div></div></div><div class="nx-card-body">'+strategyHtml+'</div></div>'
-      + '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Wallet & Ledger</div><div class="nx-card-sub">Coupon credits, paid wallet state, and fee deductions</div></div></div><div class="nx-card-body"><div class="nx-split"><div>'+ledgerHtml+'</div><div><div class="nx-item"><div class="nx-item-title">Redeem coupon</div><div class="nx-item-sub">Apply additional credits or capped-test accounts.</div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Coupon Code<input id="nx-coupon-code" class="nx-input" placeholder="WELCOME500"></label><div style="display:flex;align-items:flex-end"><button class="nx-btn nx-btn-gold" onclick="nxRedeemCoupon()">Redeem</button></div></div></div><div class="nx-item" style="margin-top:12px"><div class="nx-item-title">Wallet State</div><div class="nx-item-sub">Type '+escapeHtml((user.wallet||{}).type || 'COUPON')+' · status '+escapeHtml((user.wallet||{}).status || 'ACTIVE')+' · cap '+fmtMoney(((user.wallet||{}).coupon_profit_cap)||0)+'</div></div></div></div></div></div>'
-      + '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Performance & Trades</div><div class="nx-card-sub">Trade journal, curve, and lightweight performance snapshot</div></div></div><div class="nx-card-body"><div class="nx-split"><div>'+renderCurve(perf.curve || [])+'<div class="nx-inline-note" style="margin-top:12px">Wins '+fmtNum((perf.summary||{}).wins||0)+' · Losses '+fmtNum((perf.summary||{}).losses||0)+' · Win rate '+fmtNum((perf.summary||{}).win_rate||0)+'%</div></div><div><div class="nx-item"><div class="nx-item-title">Quick trade journal</div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Symbol<input id="nx-trade-symbol" class="nx-input" placeholder="RELIANCE"></label><label class="nx-form-label">Strategy<select id="nx-trade-strategy" class="nx-select"><option>SPIKE</option><option>INDEX</option><option>SWING</option></select></label></div><div class="nx-form-grid-3" style="margin-top:12px"><label class="nx-form-label">Entry<input id="nx-trade-entry" class="nx-input" placeholder="100"></label><label class="nx-form-label">Exit<input id="nx-trade-exit" class="nx-input" placeholder="110"></label><label class="nx-form-label">PnL<input id="nx-trade-pnl" class="nx-input" placeholder="250"></label></div><div class="nx-actions" style="margin-top:12px"><button class="nx-btn nx-btn-primary" onclick="nxCreateTrade()">Add Trade</button></div></div><div class="nx-item" style="margin-top:12px">'+tradeHtml+'</div></div></div></div></div>'
-      + '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Plans & Payments</div><div class="nx-card-sub">Choose a plan, show the saved payment rail, and update payment success directly in the app</div></div><span class="nx-badge '+((paymentProfile.upi_id && paymentProfile.enabled)?'good':'warn')+'">'+escapeHtml(paymentProfile.upi_id || 'UPI pending')+'</span></div><div class="nx-card-body"><div class="nx-split"><div>'+planHtml+'</div><div>'+paymentRows+paymentViewer+'</div></div></div></div>';
+    const brokerTestHtml = brokerTest ? '<div class="nx-status '+escapeHtml(brokerTest.type === 'error' ? 'error' : 'success')+'" style="margin-top:12px"><b>'+(brokerTest.type === 'error' ? 'Validation issue' : 'Session OK')+'</b>'+(brokerTest.message ? ' · ' + escapeHtml(brokerTest.message) : '')+(brokerTest.detail ? '<div style="margin-top:6px">'+escapeHtml(brokerTest.detail)+'</div>' : '')+'</div>' : '';
+    const kiteDeskHtml = renderKiteExecutionHub(user, broker, brokerOptions, brokerProfileBits, brokerTestHtml, executionOrders, liveLocked);
+    const notifyCardHtml = renderUserNotifyCard(contacts, notifications);
+    const overviewCard = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Overview</div><div class="nx-card-sub">Wallet, signals, and performance snapshot</div></div><span class="nx-badge cool">'+escapeHtml((user.subscription||{}).plan_code || 'No Plan')+'</span></div><div class="nx-card-body"><div class="nx-metric-grid"><div class="nx-metric"><div class="nx-metric-k">Balance</div><div class="nx-metric-v">'+fmtMoney((((user.wallet||{}).balance)||0))+'</div></div><div class="nx-metric"><div class="nx-metric-k">Unread</div><div class="nx-metric-v">'+fmtNum(metrics.signals_unread||0)+'</div></div><div class="nx-metric"><div class="nx-metric-k">Closed Trades</div><div class="nx-metric-v">'+fmtNum((perf.summary||{}).closed_trades||0)+'</div></div><div class="nx-metric"><div class="nx-metric-k">Total PnL</div><div class="nx-metric-v">'+fmtMoney((perf.summary||{}).total_pnl||0)+'</div></div></div><div class="nx-inline-note" style="margin-top:14px">Controls: daily loss '+fmtMoney(((user.controls||{}).daily_loss_limit)||0)+' · max trades '+fmtNum(((user.controls||{}).max_trades_per_day)||0)+' · profit share '+fmtNum(((user.controls||{}).profit_share_pct)||0)+'%</div></div></div>';
+    const statusStrip = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Workspace status</div><div class="nx-card-sub">Live access posture for your desk, broker, and payments.</div></div></div><div class="nx-card-body"><div class="nx-workspace-mini-grid"><div class="nx-item"><div class="nx-item-title">Subscription</div><div class="nx-item-sub">'+escapeHtml((user.subscription||{}).plan_code || 'No active plan')+' · '+escapeHtml((user.subscription||{}).status || 'NONE')+'</div></div><div class="nx-item"><div class="nx-item-title">Broker</div><div class="nx-item-sub">'+escapeHtml(broker.broker_name || 'Paper Router')+' · '+escapeHtml(broker.status || 'Idle')+'</div></div><div class="nx-item"><div class="nx-item-title">Notifications</div><div class="nx-item-sub">'+escapeHtml((notifications.email ? 'Email ' : '') + (notifications.telegram ? 'Telegram ' : '') + (notifications.whatsapp ? 'WhatsApp ' : '') || 'All disabled')+'</div></div></div></div></div>';
+    const signalsCard = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Signal Inbox</div><div class="nx-card-sub">Routed SPIKE, INDEX, and SWING events from the live engines</div></div><button class="nx-mini-btn" onclick="nxRefresh()">Reload</button></div><div class="nx-card-body">'+renderSignalItems(d.signals || [])+'</div></div>';
+    const strategiesCard = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Strategies</div><div class="nx-card-sub">Per-user entitlement and threshold control</div></div></div><div class="nx-card-body">'+strategyHtml+'</div></div>';
+    const walletCard = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Wallet & Ledger</div><div class="nx-card-sub">Coupon credits, paid wallet state, and fee deductions</div></div></div><div class="nx-card-body"><div class="nx-split"><div>'+ledgerHtml+'</div><div><div class="nx-item"><div class="nx-item-title">Redeem coupon</div><div class="nx-item-sub">Apply additional credits or capped-test accounts.</div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Coupon Code<input id="nx-coupon-code" class="nx-input" placeholder="WELCOME500"></label><div style="display:flex;align-items:flex-end"><button class="nx-btn nx-btn-gold" onclick="nxRedeemCoupon()">Redeem</button></div></div></div><div class="nx-item" style="margin-top:12px"><div class="nx-item-title">Wallet State</div><div class="nx-item-sub">Type '+escapeHtml((user.wallet||{}).type || 'COUPON')+' · status '+escapeHtml((user.wallet||{}).status || 'ACTIVE')+' · cap '+fmtMoney(((user.wallet||{}).coupon_profit_cap)||0)+'</div></div></div></div></div></div>';
+    const journalCard = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Performance & Trades</div><div class="nx-card-sub">Trade journal, curve, and lightweight performance snapshot</div></div></div><div class="nx-card-body"><div class="nx-split"><div>'+renderCurve(perf.curve || [])+'<div class="nx-inline-note" style="margin-top:12px">Wins '+fmtNum((perf.summary||{}).wins||0)+' · Losses '+fmtNum((perf.summary||{}).losses||0)+' · Win rate '+fmtNum((perf.summary||{}).win_rate||0)+'%</div></div><div><div class="nx-item"><div class="nx-item-title">Quick trade journal</div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Symbol<input id="nx-trade-symbol" class="nx-input" placeholder="RELIANCE"></label><label class="nx-form-label">Strategy<select id="nx-trade-strategy" class="nx-select"><option>SPIKE</option><option>INDEX</option><option>SWING</option></select></label></div><div class="nx-form-grid-3" style="margin-top:12px"><label class="nx-form-label">Entry<input id="nx-trade-entry" class="nx-input" placeholder="100"></label><label class="nx-form-label">Exit<input id="nx-trade-exit" class="nx-input" placeholder="110"></label><label class="nx-form-label">PnL<input id="nx-trade-pnl" class="nx-input" placeholder="250"></label></div><div class="nx-actions" style="margin-top:12px"><button class="nx-btn nx-btn-primary" onclick="nxCreateTrade()">Add Trade</button></div></div><div class="nx-item" style="margin-top:12px">'+tradeHtml+'</div></div></div></div></div>';
+    const paymentsCard = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Plans & Payments</div><div class="nx-card-sub">Choose a plan, show the saved payment rail, and update payment success directly in the app</div></div><span class="nx-badge '+((paymentProfile.upi_id && paymentProfile.enabled)?'good':'warn')+'">'+escapeHtml(paymentProfile.upi_id || 'UPI pending')+'</span></div><div class="nx-card-body"><div class="nx-split"><div>'+planHtml+'</div><div>'+paymentRows+paymentViewer+'</div></div></div></div>';
+    const controlsCard = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Risk & Automation</div><div class="nx-card-sub">Save your routing posture along with alert preferences.</div></div></div><div class="nx-card-body"><div class="nx-toggle-grid"><label class="nx-check"><input id="nx-user-auto-execute" type="checkbox"'+checkedAttr(!!((user.controls||{}).auto_execute))+'><span>Auto execute</span></label><div class="nx-pay-chip"><span>Broker</span><strong>'+escapeHtml(broker.broker_name || 'Paper Router')+'</strong></div><div class="nx-pay-chip"><span>Desk mode</span><strong>'+(broker.live_mode ? 'Live' : 'Safe / Paper')+'</strong></div><div class="nx-pay-chip"><span>Broker status</span><strong>'+escapeHtml(broker.status || 'Idle')+'</strong></div></div><div class="nx-form-grid-3" style="margin-top:12px"><label class="nx-form-label">Daily loss<input id="nx-user-daily-loss" class="nx-input" placeholder="2500" value="'+escapeHtml(String((user.controls||{}).daily_loss_limit || 0))+'"></label><label class="nx-form-label">Max trades / day<input id="nx-user-max-trades" class="nx-input" placeholder="6" value="'+escapeHtml(String((user.controls||{}).max_trades_per_day || 0))+'"></label><label class="nx-form-label">Max open signals<input id="nx-user-max-open" class="nx-input" placeholder="3" value="'+escapeHtml(String((user.controls||{}).max_open_signals || 0))+'"></label></div><div class="nx-actions" style="margin-top:12px"><button class="nx-btn nx-btn-primary" onclick="nxSaveNotifications()">Save Preferences</button></div></div></div>';
+    const tab = currentWorkspaceTab();
+    let body = overviewCard + statusStrip;
+    if(tab === 'execution') body = kiteDeskHtml;
+    else if(tab === 'signals') body = signalsCard + strategiesCard;
+    else if(tab === 'wallet') body = walletCard;
+    else if(tab === 'payments') body = paymentsCard;
+    else if(tab === 'journal') body = journalCard;
+    else if(tab === 'settings') body = '<div class="nx-settings-grid">'+controlsCard+notifyCardHtml+'</div>';
+    return renderWorkspaceShell({
+      tabs: workspaceTabs(),
+      railKicker: 'User workspace',
+      railTitle: user.full_name || user.email || 'Trader',
+      railSub: 'Vertical tabs keep each area focused while the rest of the workspace stays out of the way.',
+      railCards: [
+        '<div class="nx-workspace-rail-card nx-workspace-rail-metric"><div class="nx-workspace-rail-kicker">Wallet</div><div class="nx-workspace-rail-title">'+fmtMoney((((user.wallet||{}).balance)||0))+'</div><div class="nx-workspace-rail-sub">'+escapeHtml((user.wallet||{}).type || 'Wallet')+' · '+escapeHtml((user.subscription||{}).plan_code || 'No plan')+'</div></div>',
+        '<div class="nx-workspace-rail-card nx-workspace-rail-metric"><div class="nx-workspace-rail-kicker">Broker</div><div class="nx-workspace-rail-title">'+escapeHtml(broker.broker_name || 'Paper Router')+'</div><div class="nx-workspace-rail-sub">'+escapeHtml(broker.status || 'Idle')+' · '+(broker.live_mode ? 'Live mode' : 'Safe mode')+'</div></div>'
+      ],
+      headRight: '<div class="nx-pill-row"><span class="nx-pill">Unread '+fmtNum(metrics.signals_unread||0)+'</span><span class="nx-pill">Trades '+fmtNum((perf.summary||{}).closed_trades||0)+'</span><span class="nx-pill">'+escapeHtml((user.subscription||{}).plan_code || 'No Plan')+'</span></div>',
+      body: body
+    });
   }
 
   function renderAdminCards(){
@@ -376,14 +576,32 @@
     const coupons = (a.coupons||[]).length ? '<table class="nx-mini-table"><thead><tr><th>Code</th><th>Credit</th><th>Used</th><th>Cap</th></tr></thead><tbody>'+(a.coupons||[]).slice(0,8).map(function(c){ return '<tr><td>'+escapeHtml(c.code)+'</td><td>'+fmtMoney(c.credit)+'</td><td>'+fmtNum(c.used_count)+' / '+fmtNum(c.usage_limit)+'</td><td>'+fmtMoney(c.max_profit)+'</td></tr>'; }).join('')+'</tbody></table>' : '<div class="nx-empty">No coupons yet.</div>';
     const payments = (a.paymentsFull||[]).length ? '<table class="nx-mini-table"><thead><tr><th>Order</th><th>Status</th><th>Plan</th><th>Action</th></tr></thead><tbody>'+(a.paymentsFull||[]).slice(0,8).map(function(p){ const st=String(p.status||'').toUpperCase(); const action=(st==='PAID'?'—':'<button class="nx-mini-btn" onclick="nxAdminMarkPaid('+p.id+')">'+(st==='PENDING_VALIDATION'?'Approve':'Mark Paid')+'</button>'); return '<tr><td>#'+fmtNum(p.id)+'</td><td>'+escapeHtml(p.status)+'</td><td>'+escapeHtml(p.plan_code || 'CUSTOM')+'</td><td>'+action+'</td></tr>'; }).join('')+'</tbody></table>' : '<div class="nx-empty">No orders yet.</div>';
     const signals = (a.signals||[]).length ? '<div class="nx-list">'+(a.signals||[]).slice(0,6).map(function(s){ return '<div class="nx-item"><div class="nx-item-top"><div><div class="nx-item-title">'+escapeHtml(s.headline)+'</div><div class="nx-item-sub">'+escapeHtml(s.strategy_code)+' · '+escapeHtml(fmtDate(s.created_at))+'</div></div><span class="nx-badge cool">'+fmtNum(s.confidence)+'%</span></div></div>'; }).join('')+'</div>' : '<div class="nx-empty">No routed events yet.</div>';
-    return ''
-      + '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Admin Command Deck</div><div class="nx-card-sub">Monitor the SaaS layer without touching the existing trading panels</div></div></div><div class="nx-card-body"><div class="nx-metric-grid"><div class="nx-metric"><div class="nx-metric-k">Users</div><div class="nx-metric-v">'+fmtNum((a.metrics||{}).total_users||0)+'</div></div><div class="nx-metric"><div class="nx-metric-k">Active</div><div class="nx-metric-v">'+fmtNum((a.metrics||{}).active_users||0)+'</div></div><div class="nx-metric"><div class="nx-metric-k">Revenue</div><div class="nx-metric-v">'+fmtMoney((a.metrics||{}).revenue||0)+'</div></div><div class="nx-metric"><div class="nx-metric-k">Signals</div><div class="nx-metric-v">'+fmtNum((a.metrics||{}).signals_total||0)+'</div></div></div></div></div>'
-      + '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Brand & Mail</div><div class="nx-card-sub">STOCKR.IN identity and Gmail notification status</div></div><span class="nx-badge '+(gmailReady ? 'good' : 'warn')+'">'+(gmailReady ? 'Gmail Connected' : 'Gmail Pending')+'</span></div><div class="nx-card-body"><div class="nx-item"><div class="nx-item-title">'+escapeHtml((NX.boot||{}).brand || 'STOCKR.IN')+'</div><div class="nx-item-sub">Set <b>GMAIL_USERNAME</b>, <b>GMAIL_APP_PASSWORD</b>, and optional sender env vars in <b>backend/.env</b> to activate welcome, payment, and optional signal emails.</div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Test Email<input id="nx-admin-gmail-test-email" class="nx-input" placeholder="'+escapeHtml((((NX.user||{}).email)||((NX.boot||{}).admin||{}).email || 'admin@stockr.in'))+'"></label><div style="display:flex;align-items:flex-end"><button class="nx-btn '+(gmailReady ? 'nx-btn-primary' : 'nx-btn-ghost')+'" onclick="nxAdminSendTestEmail()" '+(gmailReady ? '' : 'disabled')+'>Send Gmail Test</button></div></div></div></div></div>'
-      + '<div class="nx-card nx-payment-admin-card"><div class="nx-card-head"><div><div class="nx-card-title">Payment Rail</div><div class="nx-card-sub">Set the exact UPI destination that user QR codes should credit.</div></div><span class="nx-badge '+((paymentProfile.upi_id && paymentProfile.enabled)?'good':'warn')+'">'+((paymentProfile.upi_id && paymentProfile.enabled)?'Live UPI rail':'Setup needed')+'</span></div><div class="nx-card-body"><div class="nx-split"><div><div class="nx-item nx-pay-destination"><div class="nx-item-title">Settlement destination</div><div class="nx-item-sub">Save this once. Every new local payment QR in the user panel will point to this UPI ID and payee.</div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Payee Name<input id="nx-admin-upi-payee-name" class="nx-input" placeholder="STOCKR.IN" value="'+escapeHtml(paymentProfile.payee_name || '')+'"></label><label class="nx-form-label">UPI ID<input id="nx-admin-upi-id" class="nx-input" placeholder="stockrin@upi" value="'+escapeHtml(paymentProfile.upi_id || '')+'"></label></div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Merchant Code<input id="nx-admin-upi-merchant-code" class="nx-input" placeholder="Optional merchant code" value="'+escapeHtml(paymentProfile.merchant_code || '')+'"></label><label class="nx-form-label">Support Phone<input id="nx-admin-upi-support-phone" class="nx-input" placeholder="+91 9876543210" value="'+escapeHtml(paymentProfile.support_phone || '')+'"></label></div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Support Email<input id="nx-admin-upi-support-email" class="nx-input" placeholder="payments@stockr.in" value="'+escapeHtml(paymentProfile.support_email || '')+'"></label><label class="nx-form-label">Accent Color<input id="nx-admin-upi-theme" class="nx-input" placeholder="#5ec8ff" value="'+escapeHtml(paymentProfile.theme_color || '#5ec8ff')+'"></label></div><label class="nx-form-label" style="margin-top:12px">Instructions<textarea id="nx-admin-upi-instructions" class="nx-textarea" placeholder="Explain how the payment should be confirmed.">'+escapeHtml(paymentProfile.instructions || '')+'</textarea></label><div class="nx-toggle-grid" style="margin-top:12px"><label class="nx-check"><input id="nx-admin-upi-enabled" type="checkbox"'+checkedAttr(!!paymentProfile.enabled)+'><span>Enable direct UPI rail</span></label><div class="nx-pay-chip"><span>Mode</span><strong>'+(paymentProfile.can_auto_confirm ? 'Webhook-ready' : 'Direct UPI')+'</strong></div><div class="nx-pay-chip"><span>Status</span><strong>'+(paymentProfile.upi_id ? 'Configured' : 'Pending')+'</strong></div><div class="nx-pay-chip"><span>Stored UPI</span><strong>'+escapeHtml(paymentProfile.upi_id || 'Not saved')+'</strong></div></div><div class="nx-actions" style="margin-top:12px"><button class="nx-btn nx-btn-primary" onclick="nxAdminSavePaymentProfile()">Save Payment Rail</button><button class="nx-btn nx-btn-ghost" onclick="nxCopyText(\''+escapeHtml(paymentProfile.upi_id || '')+'\', \'UPI ID copied\')">Copy UPI ID</button></div><div class="nx-status info" style="margin-top:12px">'+(paymentProfile.can_auto_confirm ? 'Razorpay + webhook can auto-confirm gateway payments. Direct UPI QR still points to this exact destination.' : 'Direct UPI QR will send money to this saved UPI ID exactly. Payment status still needs in-app confirmation unless a gateway webhook is enabled.')+'</div></div></div><div><div class="nx-pay-panel nx-pay-preview"><div class="nx-pay-head"><div><div class="nx-item-title">Live preview</div><div class="nx-item-sub">This is what the user payment rail will use for new order QR codes.</div></div><span class="nx-badge cool">'+escapeHtml(paymentProfile.payee_name || 'Payee')+'</span></div><div class="nx-pay-bits"><div class="nx-pay-chip"><span>UPI ID</span><strong>'+escapeHtml(paymentProfile.upi_id || 'Not set')+'</strong></div><div class="nx-pay-chip"><span>Support</span><strong>'+escapeHtml([paymentProfile.support_phone, paymentProfile.support_email].filter(Boolean).join(' · ') || 'Not set')+'</strong></div><div class="nx-pay-chip"><span>Merchant</span><strong>'+escapeHtml(paymentProfile.merchant_code || 'Optional')+'</strong></div><div class="nx-pay-chip"><span>Brand</span><strong>'+escapeHtml((NX.boot||{}).brand || 'STOCKR.IN')+'</strong></div></div><div class="nx-inline-note" style="margin-top:12px">'+escapeHtml(paymentProfile.instructions || 'Instructions will appear to the user here.')+'</div></div></div></div></div>'
-      + '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Users & Wallets</div><div class="nx-card-sub">Provision new users, top up accounts, and govern risk controls</div></div></div><div class="nx-card-body"><div class="nx-admin-grid"><div><div class="nx-item"><div class="nx-item-title">Create user</div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Name<input id="nx-admin-user-name" class="nx-input" placeholder="Desk User"></label><label class="nx-form-label">Email<input id="nx-admin-user-email" class="nx-input" placeholder="desk@client.com"></label></div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Password<input id="nx-admin-user-password" class="nx-input" placeholder="Welcome@123"></label><label class="nx-form-label">Role<select id="nx-admin-user-role" class="nx-select"><option>USER</option><option>ADMIN</option></select></label></div><div class="nx-actions" style="margin-top:12px"><button class="nx-btn nx-btn-primary" onclick="nxAdminCreateUser()">Create</button></div></div></div><div><table class="nx-mini-table"><thead><tr><th>Email</th><th>Role</th><th>Status</th><th>Wallet</th><th>Action</th></tr></thead><tbody>'+userRows+'</tbody></table></div></div></div></div>'
-      + '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Strategies & Routing</div><div class="nx-card-sub">Turn engine streams on or off at the entitlement layer</div></div></div><div class="nx-card-body"><div class="nx-strategy-grid">'+stratCards+'</div></div></div>'
-      + '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Coupons & Payments</div><div class="nx-card-sub">Bootstrap offers, manual finance operations, and live webhook-ready orders</div></div></div><div class="nx-card-body"><div class="nx-admin-grid"><div><div class="nx-item"><div class="nx-item-title">Create coupon</div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Code<input id="nx-admin-coupon-code" class="nx-input" placeholder="DESK1000"></label><label class="nx-form-label">Credit<input id="nx-admin-coupon-credit" class="nx-input" placeholder="1000"></label></div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Max Profit<input id="nx-admin-coupon-cap" class="nx-input" placeholder="2000"></label><label class="nx-form-label">Usage Limit<input id="nx-admin-coupon-limit" class="nx-input" placeholder="25"></label></div><div class="nx-actions" style="margin-top:12px"><button class="nx-btn nx-btn-gold" onclick="nxAdminCreateCoupon()">Create Coupon</button></div></div><div class="nx-item" style="margin-top:12px">'+coupons+'</div></div><div><div class="nx-item">'+payments+'</div></div></div></div></div>'
-      + '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Recent Routed Signals</div><div class="nx-card-sub">Last delivered inbox events across all subscribed users</div></div></div><div class="nx-card-body">'+signals+'</div></div>';
+    const overviewCard = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Admin Command Deck</div><div class="nx-card-sub">Monitor the SaaS layer without touching the existing trading panels</div></div></div><div class="nx-card-body"><div class="nx-metric-grid"><div class="nx-metric"><div class="nx-metric-k">Users</div><div class="nx-metric-v">'+fmtNum((a.metrics||{}).total_users||0)+'</div></div><div class="nx-metric"><div class="nx-metric-k">Active</div><div class="nx-metric-v">'+fmtNum((a.metrics||{}).active_users||0)+'</div></div><div class="nx-metric"><div class="nx-metric-k">Revenue</div><div class="nx-metric-v">'+fmtMoney((a.metrics||{}).revenue||0)+'</div></div><div class="nx-metric"><div class="nx-metric-k">Signals</div><div class="nx-metric-v">'+fmtNum((a.metrics||{}).signals_total||0)+'</div></div></div></div></div>';
+    const brandCard = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Brand & Mail</div><div class="nx-card-sub">STOCKR.IN identity and Gmail notification status</div></div><span class="nx-badge '+(gmailReady ? 'good' : 'warn')+'">'+(gmailReady ? 'Gmail Connected' : 'Gmail Pending')+'</span></div><div class="nx-card-body"><div class="nx-item"><div class="nx-item-title">'+escapeHtml((NX.boot||{}).brand || 'STOCKR.IN')+'</div><div class="nx-item-sub">Set <b>GMAIL_USERNAME</b>, <b>GMAIL_APP_PASSWORD</b>, and optional sender env vars in <b>backend/.env</b> to activate welcome, payment, and optional signal emails.</div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Test Email<input id="nx-admin-gmail-test-email" class="nx-input" placeholder="'+escapeHtml((((NX.user||{}).email)||((NX.boot||{}).admin||{}).email || 'admin@stockr.in'))+'"></label><div style="display:flex;align-items:flex-end"><button class="nx-btn '+(gmailReady ? 'nx-btn-primary' : 'nx-btn-ghost')+'" onclick="nxAdminSendTestEmail()" '+(gmailReady ? '' : 'disabled')+'>Send Gmail Test</button></div></div></div></div></div>';
+    const paymentRailCard = '<div class="nx-card nx-payment-admin-card"><div class="nx-card-head"><div><div class="nx-card-title">Payment Rail</div><div class="nx-card-sub">Set the exact UPI destination that user QR codes should credit.</div></div><span class="nx-badge '+((paymentProfile.upi_id && paymentProfile.enabled)?'good':'warn')+'">'+((paymentProfile.upi_id && paymentProfile.enabled)?'Live UPI rail':'Setup needed')+'</span></div><div class="nx-card-body"><div class="nx-split"><div><div class="nx-item nx-pay-destination"><div class="nx-item-title">Settlement destination</div><div class="nx-item-sub">Save this once. Every new local payment QR in the user panel will point to this UPI ID and payee.</div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Payee Name<input id="nx-admin-upi-payee-name" class="nx-input" placeholder="STOCKR.IN" value="'+escapeHtml(paymentProfile.payee_name || '')+'"></label><label class="nx-form-label">UPI ID<input id="nx-admin-upi-id" class="nx-input" placeholder="stockrin@upi" value="'+escapeHtml(paymentProfile.upi_id || '')+'"></label></div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Merchant Code<input id="nx-admin-upi-merchant-code" class="nx-input" placeholder="Optional merchant code" value="'+escapeHtml(paymentProfile.merchant_code || '')+'"></label><label class="nx-form-label">Support Phone<input id="nx-admin-upi-support-phone" class="nx-input" placeholder="+91 9876543210" value="'+escapeHtml(paymentProfile.support_phone || '')+'"></label></div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Support Email<input id="nx-admin-upi-support-email" class="nx-input" placeholder="payments@stockr.in" value="'+escapeHtml(paymentProfile.support_email || '')+'"></label><label class="nx-form-label">Accent Color<input id="nx-admin-upi-theme" class="nx-input" placeholder="#5ec8ff" value="'+escapeHtml(paymentProfile.theme_color || '#5ec8ff')+'"></label></div><label class="nx-form-label" style="margin-top:12px">Instructions<textarea id="nx-admin-upi-instructions" class="nx-textarea" placeholder="Explain how the payment should be confirmed.">'+escapeHtml(paymentProfile.instructions || '')+'</textarea></label><div class="nx-toggle-grid" style="margin-top:12px"><label class="nx-check"><input id="nx-admin-upi-enabled" type="checkbox"'+checkedAttr(!!paymentProfile.enabled)+'><span>Enable direct UPI rail</span></label><div class="nx-pay-chip"><span>Mode</span><strong>'+(paymentProfile.can_auto_confirm ? 'Webhook-ready' : 'Direct UPI')+'</strong></div><div class="nx-pay-chip"><span>Status</span><strong>'+(paymentProfile.upi_id ? 'Configured' : 'Pending')+'</strong></div><div class="nx-pay-chip"><span>Stored UPI</span><strong>'+escapeHtml(paymentProfile.upi_id || 'Not saved')+'</strong></div></div><div class="nx-actions" style="margin-top:12px"><button class="nx-btn nx-btn-primary" onclick="nxAdminSavePaymentProfile()">Save Payment Rail</button><button class="nx-btn nx-btn-ghost" onclick="nxCopyText(\''+escapeHtml(paymentProfile.upi_id || '')+'\', \'UPI ID copied\')">Copy UPI ID</button></div><div class="nx-status info" style="margin-top:12px">'+(paymentProfile.can_auto_confirm ? 'Razorpay + webhook can auto-confirm gateway payments. Direct UPI QR still points to this exact destination.' : 'Direct UPI QR will send money to this saved UPI ID exactly. Payment status still needs in-app confirmation unless a gateway webhook is enabled.')+'</div></div></div><div><div class="nx-pay-panel nx-pay-preview"><div class="nx-pay-head"><div><div class="nx-item-title">Live preview</div><div class="nx-item-sub">This is what the user payment rail will use for new order QR codes.</div></div><span class="nx-badge cool">'+escapeHtml(paymentProfile.payee_name || 'Payee')+'</span></div><div class="nx-pay-bits"><div class="nx-pay-chip"><span>UPI ID</span><strong>'+escapeHtml(paymentProfile.upi_id || 'Not set')+'</strong></div><div class="nx-pay-chip"><span>Support</span><strong>'+escapeHtml([paymentProfile.support_phone, paymentProfile.support_email].filter(Boolean).join(' · ') || 'Not set')+'</strong></div><div class="nx-pay-chip"><span>Merchant</span><strong>'+escapeHtml(paymentProfile.merchant_code || 'Optional')+'</strong></div><div class="nx-pay-chip"><span>Brand</span><strong>'+escapeHtml((NX.boot||{}).brand || 'STOCKR.IN')+'</strong></div></div><div class="nx-inline-note" style="margin-top:12px">'+escapeHtml(paymentProfile.instructions || 'Instructions will appear to the user here.')+'</div></div></div></div></div>';
+    const usersCard = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Users & Wallets</div><div class="nx-card-sub">Provision new users, top up accounts, and govern risk controls</div></div></div><div class="nx-card-body"><div class="nx-admin-grid"><div><div class="nx-item"><div class="nx-item-title">Create user</div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Name<input id="nx-admin-user-name" class="nx-input" placeholder="Desk User"></label><label class="nx-form-label">Email<input id="nx-admin-user-email" class="nx-input" placeholder="desk@client.com"></label></div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Password<input id="nx-admin-user-password" class="nx-input" placeholder="Welcome@123"></label><label class="nx-form-label">Role<select id="nx-admin-user-role" class="nx-select"><option>USER</option><option>ADMIN</option></select></label></div><div class="nx-actions" style="margin-top:12px"><button class="nx-btn nx-btn-primary" onclick="nxAdminCreateUser()">Create</button></div></div></div><div><table class="nx-mini-table"><thead><tr><th>Email</th><th>Role</th><th>Status</th><th>Wallet</th><th>Action</th></tr></thead><tbody>'+userRows+'</tbody></table></div></div></div></div>';
+    const routingCard = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Strategies & Routing</div><div class="nx-card-sub">Turn engine streams on or off at the entitlement layer</div></div></div><div class="nx-card-body"><div class="nx-strategy-grid">'+stratCards+'</div></div></div>';
+    const couponsCard = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Coupons & Payments</div><div class="nx-card-sub">Bootstrap offers, manual finance operations, and live webhook-ready orders</div></div></div><div class="nx-card-body"><div class="nx-admin-grid"><div><div class="nx-item"><div class="nx-item-title">Create coupon</div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Code<input id="nx-admin-coupon-code" class="nx-input" placeholder="DESK1000"></label><label class="nx-form-label">Credit<input id="nx-admin-coupon-credit" class="nx-input" placeholder="1000"></label></div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Max Profit<input id="nx-admin-coupon-cap" class="nx-input" placeholder="2000"></label><label class="nx-form-label">Usage Limit<input id="nx-admin-coupon-limit" class="nx-input" placeholder="25"></label></div><div class="nx-actions" style="margin-top:12px"><button class="nx-btn nx-btn-gold" onclick="nxAdminCreateCoupon()">Create Coupon</button></div></div><div class="nx-item" style="margin-top:12px">'+coupons+'</div></div><div><div class="nx-item">'+payments+'</div></div></div></div></div>';
+    const signalsCard = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Recent Routed Signals</div><div class="nx-card-sub">Last delivered inbox events across all subscribed users</div></div></div><div class="nx-card-body">'+signals+'</div></div>';
+    const tab = currentWorkspaceTab();
+    let body = overviewCard;
+    if(tab === 'users') body = usersCard;
+    else if(tab === 'routing') body = routingCard;
+    else if(tab === 'payments') body = paymentRailCard + couponsCard;
+    else if(tab === 'brand') body = brandCard;
+    else if(tab === 'signals') body = signalsCard;
+    return renderWorkspaceShell({
+      tabs: workspaceTabs(),
+      railKicker: 'Admin workspace',
+      railTitle: (NX.user || {}).full_name || 'Admin',
+      railSub: 'Each operational surface has its own lane, so user, routing, payment, and brand actions stay separated.',
+      railCards: [
+        '<div class="nx-workspace-rail-card nx-workspace-rail-metric"><div class="nx-workspace-rail-kicker">Users</div><div class="nx-workspace-rail-title">'+fmtNum((a.metrics||{}).total_users||0)+'</div><div class="nx-workspace-rail-sub">Active '+fmtNum((a.metrics||{}).active_users||0)+' · Signals '+fmtNum((a.metrics||{}).signals_total||0)+'</div></div>',
+        '<div class="nx-workspace-rail-card nx-workspace-rail-metric"><div class="nx-workspace-rail-kicker">Payments</div><div class="nx-workspace-rail-title">'+((paymentProfile.upi_id && paymentProfile.enabled)?'UPI Live':'Setup')+'</div><div class="nx-workspace-rail-sub">'+escapeHtml(paymentProfile.upi_id || 'No UPI rail saved')+'</div></div>'
+      ],
+      headRight: '<div class="nx-pill-row"><span class="nx-pill">Revenue '+fmtMoney((a.metrics||{}).revenue||0)+'</span><span class="nx-pill">'+(gmailReady ? 'Gmail Live' : 'Gmail Pending')+'</span></div>',
+      body: body
+    });
   }
 
   function renderBody(){
@@ -392,7 +610,8 @@
       if(NX_ADMIN_ONLY) return '<div class="nx-public-layout"><div>'+renderAuthCard()+'</div></div>';
       return '<div class="nx-public-layout"><div>'+renderAuthCard()+'</div>'+renderPublicSideCards()+'</div>';
     }
-    return '<div class="nx-main-grid">' + (NX.user.role === 'ADMIN' ? renderAdminCards() : renderUserCards()) + '</div>';
+    ensureWorkspaceTab();
+    return NX.user.role === 'ADMIN' ? renderAdminCards() : renderUserCards();
   }
 
   function renderAll(){
@@ -437,6 +656,14 @@
     toast('Welcome to Login Nexus');
   }
 
+  window.nxSetWorkspaceTab = function(tab){
+    NX.workspaceTab = String(tab || '').trim().toLowerCase();
+    localStorage.setItem(workspaceTabStoreKey(), NX.workspaceTab);
+    safeRender();
+    if(NX.workspaceTab === 'execution'){
+      setTimeout(function(){ if(window.nxBrokerCodeSync) window.nxBrokerCodeSync(); }, 0);
+    }
+  };
   window.nxSwitchAuth = function(mode){ NX.authMode = mode; clearNotice(); safeRender(); };
   window.nxGooglePreview = function(){
     NX.authMode = 'login';
@@ -517,11 +744,15 @@
   function brokerPayload(){
     const code = String(((el('nx-broker-code')||{}).value || 'PAPER')).toUpperCase();
     const live = !!((el('nx-broker-live-mode')||{}).checked) && code !== 'PAPER';
+    const pasteEl = el('nx-broker-request-paste');
+    const secEl = el('nx-broker-api-secret');
     return {
       broker_code: code,
       account_label: String(((el('nx-broker-label')||{}).value || '')).trim(),
       broker_user_id: String(((el('nx-broker-user-id')||{}).value || '')).trim(),
       api_key: String(((el('nx-broker-api-key')||{}).value || '')).trim(),
+      api_secret: secEl ? String(secEl.value || '').trim() : '',
+      request_token: pasteEl ? String(pasteEl.value || '').trim() : '',
       access_token: String(((el('nx-broker-access-token')||{}).value || '')).trim(),
       enabled: !!((el('nx-broker-enabled')||{}).checked),
       paper_mode: !!((el('nx-broker-paper-mode')||{}).checked) || code === 'PAPER',
@@ -536,6 +767,10 @@
     const code = String(((el('nx-broker-code')||{}).value || 'PAPER')).toUpperCase();
     const liveEl = el('nx-broker-live-mode');
     const paperEl = el('nx-broker-paper-mode');
+    const z = el('nx-zerodha-fields');
+    const p = el('nx-paper-fields');
+    if(z) z.style.display = code === 'PAPER' ? 'none' : 'block';
+    if(p) p.style.display = code === 'PAPER' ? 'block' : 'none';
     if(code === 'PAPER'){
       if(liveEl){ liveEl.checked = false; liveEl.disabled = true; }
       if(paperEl) paperEl.checked = true;
@@ -543,64 +778,259 @@
       liveEl.disabled = false;
     }
   };
-  window.nxBrokerConnect = async function(){
-    try{
-      const payload = brokerPayload();
-      const data = await nxApi('/api/user/broker/connect', { method:'POST', body: JSON.stringify(payload) });
-      const b = (data || {}).broker || {};
-      NX.brokerTest = {
-        type: (b.status === 'CONNECTED' || b.status === 'READY') ? 'success' : 'error',
-        message: (b.status === 'CONNECTED' || b.status === 'READY') ? 'Broker settings saved and connected' : 'Broker save completed but connection is not ready',
-        detail: [((b.profile||{}).name || ''), ((b.profile||{}).user_id ? ('ID ' + (b.profile||{}).user_id) : ''), (b.broker_name || '')].filter(Boolean).join(' · ')
-      };
-      await nxApi('/api/user/controls', { method:'PATCH', body: JSON.stringify({ auto_execute: payload.auto_execute, daily_loss_limit: Number(((el('nx-user-daily-loss')||{}).value || 0)), max_trades_per_day: Number(((el('nx-user-max-trades')||{}).value || 0)), max_open_signals: Number(((el('nx-user-max-open')||{}).value || 0)) }) });
-      await loadUserData();
-      safeRender();
-      toast(payload.live_mode ? 'Broker connected in live mode' : 'Broker settings saved');
-      setTimeout(function(){ window.nxBrokerCodeSync && window.nxBrokerCodeSync(); }, 20);
-    }catch(err){
-      NX.brokerTest = { type:'error', message:'Broker not connected', detail: err.message || 'Connection failed' };
-      safeRender();
-      toast(err.message);
+  function stopKiteInteractivePoll(){
+    if(window._nxKiteInteractiveTimer){
+      clearTimeout(window._nxKiteInteractiveTimer);
+      window._nxKiteInteractiveTimer = null;
     }
+  }
+  async function pollKiteInteractiveStatus(opts){
+    opts = opts || {};
+    try{
+      const data = await nxApi('/api/user/broker/kite-interactive-status', { method:'GET' });
+      const info = (data || {}).interactive || {};
+      const broker = (data || {}).broker || {};
+      const status = String(info.status || 'IDLE').toUpperCase();
+      if(info.message){
+        NX.brokerAssist = {
+          type: status === 'CONNECTED' ? 'success' : (status === 'ERROR' ? 'error' : (status === 'CANCELLED' || status === 'TIMEOUT' ? 'info' : 'cool')),
+          title: status === 'CONNECTED' ? 'One-time Kite login completed' : (status === 'WAITING' ? 'Complete login in the Kite window' : (status === 'STARTING' ? 'Opening Kite login' : (status === 'CANCELLED' ? 'Kite login was closed' : (status === 'TIMEOUT' ? 'Kite login timed out' : 'Kite login status')))),
+          message: String(info.message || ''),
+          detail: String(info.detail || '')
+        };
+      }
+      if(status === 'CONNECTED'){
+        NX.brokerTest = {
+          type:'success',
+          message:'Broker connected through one-time Kite login',
+          detail:[((broker.profile||{}).name || ''), ((broker.profile||{}).user_id ? ('ID ' + (broker.profile||{}).user_id) : ''), (broker.broker_name || '')].filter(Boolean).join(' · ')
+        };
+        stopKiteInteractivePoll();
+        await loadUserData();
+        safeRender();
+        if(!opts.silent) toast('One-time Kite login completed');
+        return info;
+      }
+      if(info.active || status === 'WAITING' || status === 'STARTING'){
+        safeRender();
+        stopKiteInteractivePoll();
+        window._nxKiteInteractiveTimer = setTimeout(function(){ pollKiteInteractiveStatus({ silent:true }); }, 2000);
+        return info;
+      }
+      stopKiteInteractivePoll();
+      safeRender();
+      if(!opts.silent && (status === 'CANCELLED' || status === 'TIMEOUT' || status === 'ERROR')){
+        toast(String(info.message || 'Kite login did not complete'));
+      }
+      return info;
+    }catch(err){
+      stopKiteInteractivePoll();
+      NX.brokerAssist = { type:'error', title:'Kite login status failed', message: err.message || 'Unable to read Kite login status' };
+      safeRender();
+      if(!opts.silent) toast(err.message || 'Unable to read Kite login status');
+      throw err;
+    }
+  }
+  window.nxKiteInteractiveLogin = function(){
+    return runBusy('broker-interactive-start', async function(){
+      try{
+        stopKiteInteractivePoll();
+        const payload = brokerPayload();
+        payload.broker_code = 'ZERODHA';
+        payload.paper_mode = false;
+        const data = await nxApi('/api/user/broker/kite-interactive-start', { method:'POST', body: JSON.stringify(payload) });
+        const info = (data || {}).interactive || {};
+        NX.brokerAssist = {
+          type:'cool',
+          title:'Official Kite window opened',
+          message:String(info.message || 'Complete login in the Kite window. Nexus will finish the connection automatically.'),
+          detail:String(info.detail || '')
+        };
+        safeRender();
+        toast('Kite login opened. Finish it in the browser window.');
+        window._nxKiteInteractiveTimer = setTimeout(function(){ pollKiteInteractiveStatus({ silent:true }); }, 1500);
+      }catch(err){
+        NX.brokerAssist = { type:'error', title:'Could not open Kite login', message: err.message || 'Interactive Kite login failed to start' };
+        safeRender();
+        toast(err.message || 'Interactive Kite login failed to start');
+      }
+    });
   };
-  window.nxBrokerTest = async function(){
-    try{
-      const payload = brokerPayload();
-      const data = await nxApi('/api/user/broker/test', { method:'POST', body: JSON.stringify(payload) });
-      const b = (data || {}).broker || {};
-      NX.brokerTest = {
-        type: 'success',
-        message: 'Broker test successful',
-        detail: [((b.profile||{}).name || ''), ((b.profile||{}).user_id ? ('ID ' + (b.profile||{}).user_id) : ''), (b.broker_name || '')].filter(Boolean).join(' · ') || (b.status || 'Connected')
-      };
-      await loadUserData();
-      safeRender();
-      toast('Broker connection test passed');
-      setTimeout(function(){ window.nxBrokerCodeSync && window.nxBrokerCodeSync(); }, 20);
-    }catch(err){
-      NX.brokerTest = { type:'error', message:'Broker test failed', detail: err.message || 'Not connected' };
-      safeRender();
-      toast(err.message);
+  window.nxKiteOpenLogin = function(){
+    const key = String(((el('nx-broker-api-key')||{}).value || '')).trim();
+    const dash = (NX.dashboard || {}).broker || {};
+    let url = String(dash.login_url || '').trim();
+    if(!url && key){
+      url = 'https://kite.zerodha.com/connect/login?api_key=' + encodeURIComponent(key);
     }
+    if(!url){ toast('Enter your API key first (from Kite Connect)'); return; }
+    window.open(url, '_blank', 'noopener');
   };
-  window.nxBrokerSampleOrder = async function(){
-    try{
-      const symbol = String(window.prompt('Sample symbol (NSE equity).', 'SBIN') || '').trim().toUpperCase();
-      if(!symbol) return;
-      const qtyRaw = window.prompt('Quantity', String(Number(((el('nx-broker-qty')||{}).value || 1) || 1)));
-      if(qtyRaw === null) return;
-      const qty = Math.max(1, Number(qtyRaw || 1));
-      const autoCancel = window.confirm('Auto-cancel sample order after placement? (Recommended)');
-      const data = await nxApi('/api/user/broker/sample-order', { method:'POST', body: JSON.stringify({ symbol: symbol, quantity: qty, auto_cancel: autoCancel }) });
-      const sample = (data || {}).sample || {};
-      await loadUserData();
-      safeRender();
-      toast('Sample order ' + (sample.order_id || '') + ' · ' + (sample.status || 'processed') + (sample.variety ? (' · ' + String(sample.variety).toUpperCase()) : ''));
-    }catch(err){
-      try{ await loadUserData(); safeRender(); }catch(_){}
-      toast(err.message || 'Sample order failed');
-    }
+  window.nxCheckServerTokenStatus = function(){
+    return runBusy('broker-token-status', async function(){
+      try{
+        const data = await nxApi('/api/token-status', { method:'GET' });
+        NX.brokerAssist = {
+          type: data.valid ? 'success' : 'info',
+          title: data.valid ? 'Shared Zerodha session is live' : (data.has_token ? 'Shared token needs attention' : 'No shared token loaded'),
+          message: data.valid ? ('Logged in as ' + (data.user || 'Zerodha user') + '.') : (data.error || 'Token is not ready yet.'),
+          detail: 'Server uptime ' + fmtNum(data.uptime_h || 0) + 'h'
+        };
+        safeRender();
+        toast(data.valid ? 'Server Zerodha session is ready' : (data.error || 'Shared session not ready'));
+      }catch(err){
+        NX.brokerAssist = { type:'error', title:'Status check failed', message: err.message || 'Unable to read shared token status' };
+        safeRender();
+        toast(err.message || 'Unable to read shared token status');
+      }
+    });
+  };
+  window.nxImportEnvBrokerToken = function(){
+    return runBusy('broker-import-env', async function(){
+      try{
+        const payload = brokerPayload();
+        payload.broker_code = 'ZERODHA';
+        payload.paper_mode = false;
+        const data = await nxApi('/api/user/broker/import-env-token', { method:'POST', body: JSON.stringify(payload) });
+        const b = (data || {}).broker || {};
+        const status = String((b || {}).status || '').toUpperCase();
+        const brokerError = String((b || {}).last_error || '').trim();
+        await loadUserData();
+        if(status !== 'CONNECTED' && status !== 'READY'){
+          NX.brokerAssist = {
+            type:'error',
+            title:'Shared session not ready',
+            message: brokerError || 'The server token is still invalid or expired.',
+            detail: status ? ('Broker status: ' + status) : ''
+          };
+          NX.brokerTest = {
+            type:'error',
+            message:'Broker not connected',
+            detail: brokerError || (status ? ('Broker status: ' + status) : 'Import failed')
+          };
+          safeRender();
+          toast(brokerError || 'Shared Zerodha session is not ready');
+          return;
+        }
+        NX.brokerAssist = { type:'success', title:'Server session imported', message:'Nexus attached the Zerodha session from backend/.env.', detail:(b.profile||{}).user_id ? ('User ID ' + (b.profile||{}).user_id) : '' };
+        NX.brokerTest = {
+          type:'success',
+          message:'Broker connected using the shared server session',
+          detail:[((b.profile||{}).name || ''), ((b.profile||{}).user_id ? ('ID ' + (b.profile||{}).user_id) : ''), (b.broker_name || '')].filter(Boolean).join(' · ')
+        };
+        safeRender();
+        toast('Shared Zerodha session connected');
+        setTimeout(function(){ window.nxBrokerCodeSync && window.nxBrokerCodeSync(); }, 20);
+      }catch(err){
+        NX.brokerAssist = { type:'error', title:'Import failed', message: err.message || 'Could not import shared session' };
+        NX.brokerTest = { type:'error', message:'Broker not connected', detail: err.message || 'Import failed' };
+        safeRender();
+        toast(err.message || 'Could not import shared session');
+      }
+    });
+  };
+  window.nxRefreshEnvBrokerToken = function(){
+    return runBusy('broker-refresh-env', async function(){
+      try{
+        const status = await nxApi('/api/token-status', { method:'GET' });
+        if(status && status.valid){
+          NX.brokerAssist = {
+            type:'success',
+            title:'Shared token already ready',
+            message:'The server Zerodha session is already valid. Attaching it to this Nexus desk now.',
+            detail: status.user ? ('Logged in as ' + status.user) : ''
+          };
+          safeRender();
+          await window.nxImportEnvBrokerToken();
+          return;
+        }
+        NX.brokerAssist = {
+          type:'cool',
+          title:'Refreshing shared session',
+          message:'Nexus is generating a fresh Zerodha token from backend credentials. This can take a little time.',
+          detail:'If it cannot finish automatically, use One-Time Kite Login.'
+        };
+        safeRender();
+        const refreshed = await nxApi('/api/token-refresh', { method:'POST', body: JSON.stringify({ source:'nexus' }) });
+        NX.brokerAssist = { type:'success', title:'Server token refreshed', message: refreshed.msg || 'A new Zerodha token was generated.' };
+        await window.nxImportEnvBrokerToken();
+      }catch(err){
+        NX.brokerAssist = {
+          type:'error',
+          title:'Auto refresh failed',
+          message: err.message || 'Could not refresh Zerodha token automatically',
+          detail:'Use One-Time Kite Login if you want the app to finish the broker connection through the official Zerodha page.'
+        };
+        safeRender();
+        toast(err.message || 'Auto refresh failed');
+      }
+    });
+  };
+  window.nxBrokerConnect = function(){
+    return runBusy('broker-connect', async function(){
+      try{
+        const payload = brokerPayload();
+        const data = await nxApi('/api/user/broker/connect', { method:'POST', body: JSON.stringify(payload) });
+        const b = (data || {}).broker || {};
+        NX.brokerTest = {
+          type: (b.status === 'CONNECTED' || b.status === 'READY') ? 'success' : 'error',
+          message: (b.status === 'CONNECTED' || b.status === 'READY') ? 'Broker settings saved and connected' : 'Broker save completed but connection is not ready',
+          detail: [((b.profile||{}).name || ''), ((b.profile||{}).user_id ? ('ID ' + (b.profile||{}).user_id) : ''), (b.broker_name || '')].filter(Boolean).join(' · ')
+        };
+        await nxApi('/api/user/controls', { method:'PATCH', body: JSON.stringify({ auto_execute: payload.auto_execute, daily_loss_limit: Number(((el('nx-user-daily-loss')||{}).value || 0)), max_trades_per_day: Number(((el('nx-user-max-trades')||{}).value || 0)), max_open_signals: Number(((el('nx-user-max-open')||{}).value || 0)) }) });
+        await loadUserData();
+        safeRender();
+        toast(payload.live_mode ? 'Broker connected in live mode' : 'Broker settings saved');
+        if((b.status === 'CONNECTED' || b.status === 'READY') && el('nx-broker-request-paste')) el('nx-broker-request-paste').value = '';
+        setTimeout(function(){ window.nxBrokerCodeSync && window.nxBrokerCodeSync(); }, 20);
+      }catch(err){
+        NX.brokerTest = { type:'error', message:'Broker not connected', detail: err.message || 'Connection failed' };
+        safeRender();
+        toast(err.message);
+      }
+    });
+  };
+  window.nxBrokerTest = function(){
+    return runBusy('broker-test', async function(){
+      try{
+        const payload = brokerPayload();
+        const data = await nxApi('/api/user/broker/test', { method:'POST', body: JSON.stringify(payload) });
+        const b = (data || {}).broker || {};
+        NX.brokerTest = {
+          type: 'success',
+          message: 'Broker test successful',
+          detail: [((b.profile||{}).name || ''), ((b.profile||{}).user_id ? ('ID ' + (b.profile||{}).user_id) : ''), (b.broker_name || '')].filter(Boolean).join(' · ') || (b.status || 'Connected')
+        };
+        await loadUserData();
+        safeRender();
+        toast('Broker connection test passed');
+        setTimeout(function(){ window.nxBrokerCodeSync && window.nxBrokerCodeSync(); }, 20);
+      }catch(err){
+        NX.brokerTest = { type:'error', message:'Broker test failed', detail: err.message || 'Not connected' };
+        safeRender();
+        toast(err.message);
+      }
+    });
+  };
+  window.nxBrokerSampleOrder = function(){
+    return runBusy('broker-sample', async function(){
+      try{
+        const symbol = String(window.prompt('Sample symbol (NSE equity).', 'SBIN') || '').trim().toUpperCase();
+        if(!symbol) return;
+        const qtyRaw = window.prompt('Quantity', String(Number(((el('nx-broker-qty')||{}).value || 1) || 1)));
+        if(qtyRaw === null) return;
+        const qty = Math.max(1, Number(qtyRaw || 1));
+        const autoCancel = window.confirm('Auto-cancel sample order after placement? (Recommended)');
+        const data = await nxApi('/api/user/broker/sample-order', { method:'POST', body: JSON.stringify({ symbol: symbol, quantity: qty, auto_cancel: autoCancel }) });
+        const sample = (data || {}).sample || {};
+        await loadUserData();
+        safeRender();
+        toast('Sample order ' + (sample.order_id || '') + ' · ' + (sample.status || 'processed') + (sample.variety ? (' · ' + String(sample.variety).toUpperCase()) : ''));
+      }catch(err){
+        try{ await loadUserData(); safeRender(); }catch(_){}
+        toast(err.message || 'Sample order failed');
+      }
+    });
   };
   window.nxSaveNotifications = async function(){
     try{

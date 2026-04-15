@@ -10,14 +10,18 @@ import logging
 import os
 import re
 import secrets
+import shutil
 import smtplib
 import sqlite3
 import ssl
+import subprocess
+import tempfile
 import threading
+import time
 from pathlib import Path
 from email.message import EmailMessage
 from typing import Any, Optional
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlparse
 
 import requests
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -88,6 +92,10 @@ BROKER_CATALOG = [
         "help": "Good for validating routing and automation before switching to a live broker.",
     },
 ]
+
+KITE_INTERACTIVE_TIMEOUT_SECONDS = max(120, int(os.getenv("SAAS_KITE_INTERACTIVE_TIMEOUT_SECONDS", "300") or 300))
+_kite_interactive_lock = threading.Lock()
+_kite_interactive_sessions: dict[int, dict[str, Any]] = {}
 
 
 def _utc_now() -> dt.datetime:
@@ -985,6 +993,22 @@ def _broker_row(conn: sqlite3.Connection, user_id: int) -> sqlite3.Row | None:
     return conn.execute("SELECT * FROM saas_broker_accounts WHERE user_id=?", (user_id,)).fetchone()
 
 
+def _parse_kite_request_token(raw: str) -> str:
+    """Accept full redirect URL, query string, or raw request_token (same idea as generate_token.py)."""
+    s = str(raw or "").strip().strip('"').strip("'")
+    if not s:
+        return ""
+    if "request_token=" not in s:
+        return s
+    url = s if "://" in s else f"https://127.0.0.1/{s.lstrip('?&')}"
+    parsed = urlparse(url)
+    params = parse_qs(parsed.query)
+    toks = params.get("request_token", [])
+    if not toks and parsed.fragment:
+        toks = parse_qs(parsed.fragment).get("request_token", [])
+    return toks[0] if toks else s
+
+
 def _broker_login_url(account: sqlite3.Row | dict[str, Any] | None) -> Optional[str]:
     if not account:
         return None
@@ -999,6 +1023,226 @@ def _broker_login_url(account: sqlite3.Row | dict[str, Any] | None) -> Optional[
         return str(kite.login_url() or "")
     except Exception:
         return None
+
+
+def _set_kite_interactive_session(user_id: int, **fields: Any) -> dict[str, Any]:
+    with _kite_interactive_lock:
+        session = dict(_kite_interactive_sessions.get(int(user_id), {}))
+        session.update(fields)
+        session["user_id"] = int(user_id)
+        session["updated_at"] = _utc_iso()
+        _kite_interactive_sessions[int(user_id)] = session
+        return dict(session)
+
+
+def _get_kite_interactive_session(user_id: int) -> dict[str, Any]:
+    with _kite_interactive_lock:
+        return dict(_kite_interactive_sessions.get(int(user_id), {}))
+
+
+def _public_kite_interactive_session(user_id: int) -> dict[str, Any]:
+    raw = _get_kite_interactive_session(user_id)
+    if not raw:
+        return {"active": False, "status": "IDLE", "message": "No interactive Kite login in progress."}
+    return {
+        "active": bool(raw.get("active", False)),
+        "status": str(raw.get("status") or "IDLE"),
+        "message": str(raw.get("message") or ""),
+        "detail": str(raw.get("detail") or ""),
+        "session_id": str(raw.get("session_id") or ""),
+        "started_at": raw.get("started_at"),
+        "updated_at": raw.get("updated_at"),
+        "broker_preview": raw.get("broker_preview") or None,
+    }
+
+
+def _find_windows_browser() -> tuple[str, str]:
+    candidates = [
+        ("Microsoft Edge", shutil.which("msedge.exe")),
+        ("Google Chrome", shutil.which("chrome.exe")),
+        ("Microsoft Edge", r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
+        ("Microsoft Edge", r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"),
+        ("Google Chrome", r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
+        ("Google Chrome", r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
+    ]
+    for label, path in candidates:
+        if path and os.path.isfile(path):
+            return label, path
+    raise RuntimeError("Could not find Edge or Chrome on this machine")
+
+
+def _start_interactive_kite_login(user_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+    session_id = secrets.token_urlsafe(10)
+    api_key = str(payload.get("api_key") or "").strip()
+    api_secret = str(payload.get("api_secret") or "").strip()
+    if not api_key or not api_secret:
+        raise HTTPException(status_code=400, detail="API key and API secret are required for interactive Kite login")
+    login_url = ""
+    try:
+        from kiteconnect import KiteConnect
+
+        login_url = str(KiteConnect(api_key=api_key).login_url() or "")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not build Kite login URL: {exc}") from exc
+
+    broker_preview = {
+        "account_label": str(payload.get("account_label") or "Zerodha Desk"),
+        "broker_code": "ZERODHA",
+        "api_key_masked": _mask_secret(api_key),
+    }
+    _set_kite_interactive_session(
+        user_id,
+        active=True,
+        status="STARTING",
+        message="Opening official Kite login window...",
+        detail="Complete login in the Zerodha window. Nexus will attach the session automatically.",
+        session_id=session_id,
+        started_at=_utc_iso(),
+        broker_preview=broker_preview,
+    )
+
+    def _worker() -> None:
+        final_url = ""
+        browser_proc = None
+        profile_dir = None
+        captured_urls: list[str] = []
+
+        def _capture(url: str) -> None:
+            nonlocal final_url
+            text = str(url or "").strip()
+            if not text or "request_token" not in text:
+                return
+            if text not in captured_urls:
+                captured_urls.append(text)
+            if not final_url:
+                final_url = text
+
+        try:
+            browser_name, browser_path = _find_windows_browser()
+            debug_port = secrets.randbelow(1000) + 9223
+            profile_dir = tempfile.mkdtemp(prefix="stockr_kite_login_")
+            _set_kite_interactive_session(
+                user_id,
+                status="WAITING",
+                message=f"{browser_name} Kite window opened.",
+                detail="Log in there once. You do not need to paste the redirect URL manually.",
+            )
+            browser_proc = subprocess.Popen(
+                [
+                    browser_path,
+                    f"--remote-debugging-port={debug_port}",
+                    f"--user-data-dir={profile_dir}",
+                    "--no-first-run",
+                    "--new-window",
+                    login_url,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            debug_url = f"http://127.0.0.1:{debug_port}/json"
+            deadline = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=KITE_INTERACTIVE_TIMEOUT_SECONDS)
+            while dt.datetime.now(dt.timezone.utc) < deadline:
+                if final_url:
+                    break
+                if browser_proc.poll() is not None:
+                    break
+                try:
+                    resp = requests.get(debug_url, timeout=2)
+                    if resp.ok:
+                        for target in resp.json() or []:
+                            _capture((target or {}).get("url") or "")
+                            if final_url:
+                                break
+                except Exception:
+                    pass
+                time.sleep(1)
+
+            if not final_url and captured_urls:
+                final_url = captured_urls[0]
+            if not final_url and browser_proc.poll() is not None:
+                _set_kite_interactive_session(
+                    user_id,
+                    active=False,
+                    status="CANCELLED",
+                    message="Kite window was closed before login finished.",
+                    detail="Open One-Time Kite Login again when you want to retry.",
+                )
+                return
+            if not final_url:
+                _set_kite_interactive_session(
+                    user_id,
+                    active=False,
+                    status="TIMEOUT",
+                    message="Kite login timed out.",
+                    detail="Try again and finish the login in the opened Zerodha window.",
+                )
+                return
+        except Exception as exc:
+            logger.warning("interactive kite login failed to launch: %s", exc)
+            _set_kite_interactive_session(
+                user_id,
+                active=False,
+                status="ERROR",
+                message="Could not open interactive Kite login.",
+                detail=str(exc),
+            )
+            return
+        finally:
+            try:
+                if browser_proc and browser_proc.poll() is None:
+                    browser_proc.terminate()
+            except Exception:
+                pass
+            try:
+                if profile_dir and os.path.isdir(profile_dir):
+                    shutil.rmtree(profile_dir, ignore_errors=True)
+            except Exception:
+                pass
+
+        request_token = _parse_kite_request_token(final_url)
+        if not request_token:
+            _set_kite_interactive_session(
+                user_id,
+                active=False,
+                status="ERROR",
+                message="Kite login completed, but request token was not captured.",
+                detail="Check the Kite app redirect URL in Kite Connect and try again.",
+            )
+            return
+        try:
+            save_payload = dict(payload or {})
+            save_payload["request_token"] = request_token
+            save_payload["broker_code"] = "ZERODHA"
+            conn = get_conn()
+            try:
+                broker = _save_broker_connection(conn, int(user_id), save_payload, test_only=False)
+            finally:
+                conn.close()
+            _set_kite_interactive_session(
+                user_id,
+                active=False,
+                status="CONNECTED",
+                message="Zerodha login completed and broker session is attached.",
+                detail=str(((broker.get("profile") or {}).get("user_id")) or ""),
+                broker_preview={
+                    "broker_code": broker.get("broker_code"),
+                    "status": broker.get("status"),
+                    "account_label": broker.get("account_label"),
+                    "broker_name": broker.get("broker_name"),
+                },
+            )
+        except Exception as exc:
+            logger.warning("interactive kite login exchange failed: %s", exc)
+            _set_kite_interactive_session(
+                user_id,
+                active=False,
+                status="ERROR",
+                message="Kite login was captured, but broker validation failed.",
+                detail=str(exc),
+            )
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return _public_kite_interactive_session(user_id) | {"login_url": login_url}
 
 
 def _public_broker(conn: sqlite3.Connection, user_id: int) -> dict[str, Any]:
@@ -1017,6 +1261,7 @@ def _public_broker(conn: sqlite3.Connection, user_id: int) -> dict[str, Any]:
             "intraday_product": "MIS",
             "positional_product": "CNC",
             "order_variety": "regular",
+            "api_secret_masked": "",
             "catalog": BROKER_CATALOG,
             "recent_orders": [],
         }
@@ -1041,6 +1286,7 @@ def _public_broker(conn: sqlite3.Connection, user_id: int) -> dict[str, Any]:
         "account_label": row["account_label"] or "",
         "broker_user_id": row["broker_user_id"] or "",
         "api_key_masked": _mask_secret(str(row["api_key"] or "")),
+        "api_secret_masked": _mask_secret(_unpack_secret(row["api_secret_enc"])),
         "access_token_masked": _mask_secret(_unpack_secret(row["access_token_enc"])),
         "last_error": row["last_error"] or "",
         "profile": profile,
@@ -1665,7 +1911,7 @@ def _save_broker_connection(conn: sqlite3.Connection, user_id: int, body: dict[s
         raise HTTPException(status_code=400, detail="Unsupported broker")
     api_key = str(body.get("api_key", row["api_key"]) or row["api_key"] or "").strip()
     api_secret = str(body.get("api_secret") or "").strip() or _unpack_secret(row["api_secret_enc"])
-    access_token = str(body.get("access_token") or "").strip() or _unpack_secret(row["access_token_enc"])
+    access_token = str(body.get("access_token") or "").strip()
     refresh_token = str(body.get("refresh_token") or "").strip() or _unpack_secret(row["refresh_token_enc"])
     account_label = str(body.get("account_label", row["account_label"]) or row["account_label"] or catalog[broker_code]["name"]).strip()
     broker_user_id = str(body.get("broker_user_id", row["broker_user_id"]) or row["broker_user_id"] or "").strip()
@@ -1692,8 +1938,27 @@ def _save_broker_connection(conn: sqlite3.Connection, user_id: int, body: dict[s
     else:
         if not api_key:
             raise HTTPException(status_code=400, detail="API key required for broker")
+        request_raw = str(body.get("request_token") or body.get("redirect_url") or "").strip()
+        request_token = _parse_kite_request_token(request_raw) if request_raw else ""
+        if request_token:
+            secret_for_exchange = str(body.get("api_secret") or "").strip() or _unpack_secret(row["api_secret_enc"])
+            if not secret_for_exchange:
+                raise HTTPException(status_code=400, detail="API secret required to complete Zerodha login")
+            try:
+                from kiteconnect import KiteConnect
+
+                kite = KiteConnect(api_key=api_key)
+                sess = kite.generate_session(request_token, api_secret=secret_for_exchange)
+                access_token = str(sess.get("access_token") or "")
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"Zerodha login exchange failed: {exc}") from exc
         if not access_token:
-            raise HTTPException(status_code=400, detail="Access token required for broker")
+            access_token = _unpack_secret(row["access_token_enc"])
+        if not access_token:
+            raise HTTPException(
+                status_code=400,
+                detail="Complete Zerodha login (paste redirect URL) or provide an access token",
+            )
         try:
             test_result = _zerodha_test_connection(api_key, access_token)
             profile = {
@@ -2063,6 +2328,84 @@ async def user_broker_test(request: Request, authorization: Optional[str] = Head
     try:
         broker = _save_broker_connection(conn, int(user["id"]), body, test_only=True)
         return {"ok": True, "broker": broker, "tested": True}
+    finally:
+        conn.close()
+
+
+@router.post("/api/user/broker/kite-interactive-start")
+async def user_broker_kite_interactive_start(request: Request, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+    user = _require_user(authorization)
+    body = await request.json()
+    conn = get_conn()
+    try:
+        row = _broker_row(conn, int(user["id"]))
+    finally:
+        conn.close()
+    load_dotenv(BASE_DIR / ".env", override=True)
+    payload = dict(body or {})
+    payload["broker_code"] = "ZERODHA"
+    payload["api_key"] = str(payload.get("api_key") or (row["api_key"] if row else "") or os.getenv("KITE_API_KEY", "")).strip()
+    payload["api_secret"] = str(payload.get("api_secret") or (_unpack_secret(row["api_secret_enc"]) if row else "") or os.getenv("KITE_API_SECRET", "")).strip()
+    if not str(payload.get("account_label") or "").strip():
+        payload["account_label"] = str((row["account_label"] if row else "") or "Zerodha Desk")
+    if "paper_mode" not in payload:
+        payload["paper_mode"] = False
+    if "enabled" not in payload:
+        payload["enabled"] = True
+    status = _start_interactive_kite_login(int(user["id"]), payload)
+    return {"ok": True, "interactive": status}
+
+
+@router.get("/api/user/broker/kite-interactive-status")
+async def user_broker_kite_interactive_status(authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+    user = _require_user(authorization)
+    conn = get_conn()
+    try:
+        broker = _public_broker(conn, int(user["id"]))
+    finally:
+        conn.close()
+    return {"ok": True, "interactive": _public_kite_interactive_session(int(user["id"])), "broker": broker}
+
+
+@router.post("/api/user/broker/import-env-token")
+async def user_broker_import_env_token(request: Request, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+    user = _require_user(authorization)
+    body = await request.json()
+    load_dotenv(BASE_DIR / ".env", override=True)
+    api_key = str(os.getenv("KITE_API_KEY", "") or "").strip()
+    api_secret = str(os.getenv("KITE_API_SECRET", "") or "").strip()
+    access_token = str(os.getenv("KITE_ACCESS_TOKEN", "") or "").strip()
+    broker_user_id = str(os.getenv("KITE_USER_ID", "") or "").strip()
+    missing = [name for name, value in (("KITE_API_KEY", api_key), ("KITE_ACCESS_TOKEN", access_token)) if not value]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing env values: " + ", ".join(missing) + ". Refresh/load your Zerodha token first.",
+        )
+    payload = dict(body or {})
+    payload.update(
+        {
+            "broker_code": "ZERODHA",
+            "api_key": api_key,
+            "api_secret": api_secret,
+            "access_token": access_token,
+            "broker_user_id": broker_user_id,
+        }
+    )
+    if not str(payload.get("account_label") or "").strip():
+        payload["account_label"] = "Zerodha Desk"
+    if "paper_mode" not in payload:
+        payload["paper_mode"] = False
+    if "enabled" not in payload:
+        payload["enabled"] = True
+    conn = get_conn()
+    try:
+        broker = _save_broker_connection(conn, int(user["id"]), payload, test_only=False)
+        status = str((broker or {}).get("status") or "").upper()
+        if status not in {"CONNECTED", "READY"}:
+            detail = str((broker or {}).get("last_error") or "").strip() or "Shared Zerodha session is not ready yet."
+            raise HTTPException(status_code=400, detail=detail)
+        return {"ok": True, "broker": broker, "imported": True, "user": _public_user(conn, int(user["id"]))}
     finally:
         conn.close()
 
