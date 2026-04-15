@@ -78,9 +78,11 @@
 .nx-badge.cool{background:rgba(88,214,255,.14);color:#86e4ff}
 .nx-split{display:grid;grid-template-columns:1.15fr .85fr;gap:14px}
 .nx-metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
-.nx-metric{padding:14px;border-radius:18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06)}
+.nx-metric{padding:14px;border-radius:18px;background:
+  radial-gradient(circle at 0% 0%, rgba(103,232,249,.08), transparent 34%),
+  linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025));border:1px solid rgba(255,255,255,.08);box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
 .nx-metric-k{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#91a7c6}
-.nx-metric-v{font-size:22px;font-weight:800;margin-top:8px}
+.nx-metric-v{font-family:var(--fh,"Syne",sans-serif);font-size:22px;font-weight:900;margin-top:8px;color:#f4fbff;letter-spacing:.01em;text-shadow:0 10px 24px rgba(88,214,255,.08)}
 .nx-row{display:flex;justify-content:space-between;gap:14px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)}
 .nx-row:last-child{border-bottom:0}
 .nx-curve{display:flex;align-items:flex-end;gap:8px;height:140px;padding:16px 10px 8px;border-radius:18px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06)}
@@ -98,9 +100,47 @@
 .nx-toast{position:fixed;right:18px;bottom:18px;z-index:9999;min-width:220px;max-width:340px;padding:10px 12px;border-radius:8px;background:var(--s2,#182438);border:1px solid var(--b1,#253856);box-shadow:var(--nx-shadow);color:var(--t0,#d8e8f8);font-family:var(--fn,"IBM Plex Mono",monospace);font-size:8px;letter-spacing:.03em;opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity .22s,transform .22s}
 .nx-toast.on{opacity:1;transform:translateY(0)}
 .nx-admin-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.nx-admin-users-shell{background:
+  radial-gradient(circle at 0% 0%, rgba(103,232,249,.1), transparent 24%),
+  radial-gradient(circle at 100% 0%, rgba(255,191,94,.1), transparent 22%),
+  linear-gradient(180deg, rgba(14,25,44,.98), rgba(10,19,35,.98))}
+.nx-admin-users-hero{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;flex-wrap:wrap;margin-bottom:18px;padding:18px 20px;border-radius:24px;border:1px solid rgba(103,232,249,.14);background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.025))}
+.nx-admin-users-copy{max-width:760px}
+.nx-admin-users-kicker,.nx-admin-panel-kicker{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#8fdfff;font-weight:800}
+.nx-admin-users-title{margin-top:10px;font-family:var(--fh,"Syne",sans-serif);font-size:30px;line-height:1.08;font-weight:900;color:#f5fbff}
+.nx-admin-users-sub{margin-top:10px;font-size:13px;line-height:1.7;color:#aac6e2}
+.nx-admin-users-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;min-width:min(100%,430px)}
+.nx-admin-users-grid{display:grid;grid-template-columns:minmax(360px,.9fr) minmax(0,1.1fr);gap:18px}
+.nx-admin-create-panel,.nx-admin-table-panel{padding:22px;border-radius:24px;border:1px solid rgba(255,255,255,.1);background:linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.02));box-shadow:0 20px 36px rgba(2,8,18,.18)}
+.nx-admin-create-panel{background:
+  radial-gradient(circle at 0% 0%, rgba(103,232,249,.12), transparent 34%),
+  linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.02))}
+.nx-admin-panel-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.nx-admin-panel-title{margin-top:8px;font-family:var(--fh,"Syne",sans-serif);font-size:24px;font-weight:900;line-height:1.08;color:#eff8ff}
+.nx-admin-panel-note{max-width:300px;font-size:12px;line-height:1.65;color:#9fbedd}
+.nx-admin-form-grid{gap:16px}
+.nx-admin-form-label{gap:8px;font-size:11px;letter-spacing:.14em;color:#a7cbef}
+.nx-admin-input{min-height:62px;border-radius:18px;border-color:rgba(146,201,255,.18);background:rgba(8,18,34,.74);color:#f5fbff;font-size:15px;font-weight:700;letter-spacing:.01em}
+.nx-admin-input::placeholder{color:#7f99b8;opacity:1}
+.nx-admin-input:focus{border-color:rgba(103,232,249,.42);box-shadow:0 0 0 4px rgba(103,232,249,.12)}
+.nx-admin-password-tip{margin-top:14px;padding:12px 14px;border-radius:16px;border:1px solid rgba(255,191,94,.18);background:rgba(255,191,94,.06);font-size:12px;line-height:1.65;color:#f0d7ae}
+.nx-admin-table-wrap{margin-top:16px;border-radius:20px;border:1px solid rgba(255,255,255,.08);overflow:hidden;background:rgba(6,14,28,.44)}
+.nx-admin-users-table{font-size:13px}
+.nx-admin-users-table th{padding:14px 12px;background:rgba(255,255,255,.03);font-size:11px;letter-spacing:.16em;color:#9dc8f1}
+.nx-admin-users-table td{padding:16px 12px;color:#eef7ff;font-size:14px;font-weight:700}
+.nx-admin-users-table tbody tr:nth-child(odd) td{background:rgba(255,255,255,.02)}
+.nx-admin-users-table tbody tr:nth-child(even) td{background:rgba(6,14,28,.34)}
+.nx-admin-users-table tbody tr:hover td{background:rgba(103,232,249,.1)}
+.nx-admin-user-id{font-size:15px;font-weight:800;color:#f4fbff;word-break:break-word}
+.nx-admin-wallet-value{font-size:15px;color:#ffe09c;font-weight:900}
+.nx-admin-credit-btn{min-width:110px;background:linear-gradient(135deg, rgba(255,255,255,.1), rgba(255,255,255,.04));border-color:rgba(255,255,255,.14);color:#ecf6ff}
+.nx-admin-credit-btn:hover{border-color:rgba(103,232,249,.34);background:rgba(103,232,249,.1)}
 .nx-mini-table{width:100%;border-collapse:collapse;font-size:12px}
 .nx-mini-table th,.nx-mini-table td{padding:10px 8px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left;vertical-align:top}
 .nx-mini-table th{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#91a7c6}
+.nx-mini-table td{color:#dceeff;font-weight:600;text-shadow:0 0 0 transparent}
+.nx-mini-table tbody tr:nth-child(odd) td{background:rgba(7,15,30,.18)}
+.nx-mini-table tbody tr:hover td{background:rgba(103,232,249,.08)}
 .nx-mini-table tr[onclick]{cursor:pointer}
 .nx-mini-table tr.nx-row-active td{background:rgba(103,232,249,.08)}
 .nx-pay-panel{margin-top:14px;padding:14px;border-radius:16px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03)}
@@ -170,9 +210,9 @@
 @keyframes nxFloatA{0%,100%{transform:translate(0,0)}50%{transform:translate(3px,2px)}}
 @keyframes nxFloatB{0%,100%{transform:translate(0,0)}50%{transform:translate(-3px,2px)}}
 @keyframes nxShine{0%{opacity:0}100%{opacity:0}}
-@media (max-width:1280px){.nx-main-grid,.nx-grid,.nx-split,.nx-admin-grid{grid-template-columns:1fr}.nx-hero-stats,.nx-metric-grid,.nx-strategy-grid,.nx-plan-grid,.nx-form-grid-3{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:980px){.nx-auth-wrap,.nx-public-grid,.nx-broker-grid,.nx-pay-grid,.nx-pay-bits{grid-template-columns:1fr}}
-@media (max-width:760px){.nx-shell{padding:12px}.nx-title{font-size:30px}.nx-hero{padding:16px}.nx-hero-stats,.nx-metric-grid,.nx-strategy-grid,.nx-plan-grid,.nx-form-grid,.nx-form-grid-3,.nx-toggle-grid,.nx-pay-bits{grid-template-columns:1fr}.nx-card-head{padding:14px 14px 10px}.nx-card-body{padding:0 14px 14px}.nx-btn-wide{width:100%}.nx-qr-ring{width:210px;height:210px}}
+@media (max-width:1280px){.nx-main-grid,.nx-grid,.nx-split,.nx-admin-grid,.nx-admin-users-grid{grid-template-columns:1fr}.nx-hero-stats,.nx-metric-grid,.nx-strategy-grid,.nx-plan-grid,.nx-form-grid-3,.nx-admin-users-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:980px){.nx-auth-wrap,.nx-public-grid,.nx-broker-grid,.nx-pay-grid,.nx-pay-bits{grid-template-columns:1fr}.nx-admin-users-stats{grid-template-columns:1fr}}
+@media (max-width:760px){.nx-shell{padding:12px}.nx-title{font-size:30px}.nx-hero{padding:16px}.nx-hero-stats,.nx-metric-grid,.nx-strategy-grid,.nx-plan-grid,.nx-form-grid,.nx-form-grid-3,.nx-toggle-grid,.nx-pay-bits,.nx-admin-users-stats{grid-template-columns:1fr}.nx-card-head{padding:14px 14px 10px}.nx-card-body{padding:0 14px 14px}.nx-btn-wide{width:100%}.nx-qr-ring{width:210px;height:210px}.nx-admin-users-title{font-size:24px}.nx-admin-panel-title{font-size:20px}.nx-admin-create-panel,.nx-admin-table-panel{padding:18px}}
 
 
 #nx-modal{display:none;position:fixed;inset:0;z-index:100001;align-items:stretch;justify-content:center}
@@ -266,6 +306,12 @@ body.nx-modal-open{overflow:hidden!important}
   border-color:rgba(71, 137, 219, .18);
   background:linear-gradient(180deg, rgba(255,255,255,.98), rgba(242,247,252,.98));
 }
+.light .nx-metric{
+  border-color:rgba(111,142,176,.18);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(71,137,219,.08), transparent 36%),
+    linear-gradient(180deg, rgba(255,255,255,.99), rgba(244,248,253,.97));
+}
 .light .nx-card:hover{
   border-color:rgba(71, 137, 219, .34);
   box-shadow:0 26px 48px rgba(33, 73, 118, .14);
@@ -316,6 +362,48 @@ body.nx-modal-open{overflow:hidden!important}
 .light .nx-stat-label{
   color:#6080a1;
 }
+.light .nx-admin-users-shell{
+  background:
+    radial-gradient(circle at 0% 0%, rgba(90,187,137,.1), transparent 26%),
+    radial-gradient(circle at 100% 0%, rgba(255,191,94,.1), transparent 24%),
+    linear-gradient(180deg, rgba(255,255,255,.99), rgba(242,247,252,.98));
+}
+.light .nx-admin-users-hero,
+.light .nx-admin-create-panel,
+.light .nx-admin-table-panel,
+.light .nx-admin-table-wrap{
+  border-color:rgba(111,142,176,.18);
+  background:linear-gradient(180deg, rgba(255,255,255,.98), rgba(242,247,252,.96));
+  box-shadow:0 20px 40px rgba(33,73,118,.1);
+}
+.light .nx-admin-users-title,
+.light .nx-admin-panel-title,
+.light .nx-admin-user-id{
+  color:#17304a;
+}
+.light .nx-admin-users-sub,
+.light .nx-admin-panel-note,
+.light .nx-admin-form-label{
+  color:#53718f;
+}
+.light .nx-admin-input{
+  background:rgba(255,255,255,.98);
+  border-color:rgba(111,142,176,.22);
+  color:#17304a;
+}
+.light .nx-admin-input::placeholder{color:#7c95ae}
+.light .nx-admin-password-tip{
+  border-color:rgba(200,160,80,.28);
+  background:rgba(255,224,176,.24);
+  color:#5c4a2a;
+}
+.light .nx-admin-users-table th{background:rgba(71,137,219,.06);color:#53718f}
+.light .nx-admin-users-table td{color:#17304a}
+.light .nx-admin-users-table tbody tr:nth-child(odd) td{background:rgba(255,255,255,.92)}
+.light .nx-admin-users-table tbody tr:nth-child(even) td{background:rgba(240,246,252,.92)}
+.light .nx-admin-wallet-value{color:#9f6500}
+.light .nx-admin-credit-btn{color:#17304a;border-color:rgba(111,142,176,.24)}
+.light .nx-metric-v{color:#17304a;text-shadow:none}
 .light .nx-badge{
   border:1px solid rgba(102, 128, 160, .16);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.55);
