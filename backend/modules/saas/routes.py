@@ -375,6 +375,41 @@ def _send_welcome_email(user_email: str, full_name: str) -> None:
     _send_gmail_async(user_email, subject, html, text)
 
 
+def _send_managed_password_email(user_email: str, full_name: str, temporary_password: str, headline: str = "Your desk is ready") -> bool:
+    subject = f"{BRAND_NAME} account access"
+    html_body = f"""
+    <html><body style="font-family:Segoe UI,Arial,sans-serif;background:#07111d;color:#e5eefc;padding:24px">
+      <div style="max-width:640px;margin:auto;background:#0d1b31;border:1px solid #1f3657;border-radius:20px;padding:28px">
+        <div style="font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:#67e8f9">{html.escape(BRAND_NAME)}</div>
+        <h1 style="margin:14px 0 10px;font-size:28px;color:#f8fbff">{html.escape(headline)}</h1>
+        <p style="line-height:1.7;color:#b8cae6">Hi {html.escape(full_name or "Trader")}, your access has been prepared for the Nexus workspace.</p>
+        <div style="margin:18px 0;padding:16px;border-radius:16px;background:#112440;border:1px solid #24456d;color:#d7e7ff;line-height:1.8">
+          Login email: <b>{html.escape(user_email)}</b><br>
+          Temporary password: <b>{html.escape(temporary_password)}</b>
+        </div>
+        <p style="line-height:1.7;color:#b8cae6">Please sign in and change the password after first access.</p>
+      </div>
+    </body></html>
+    """
+    text_body = f"{BRAND_NAME} access ready. Email: {user_email}. Temporary password: {temporary_password}. Please change it after first login."
+    return _send_gmail(user_email, subject, html_body, text_body)
+
+
+def _send_user_lifecycle_email(user_email: str, full_name: str, headline: str, body_copy: str, accent: str = "#67e8f9") -> bool:
+    subject = f"{BRAND_NAME} account update"
+    html_body = f"""
+    <html><body style="font-family:Segoe UI,Arial,sans-serif;background:#07111d;color:#e5eefc;padding:24px">
+      <div style="max-width:640px;margin:auto;background:#0d1b31;border:1px solid #1f3657;border-radius:20px;padding:28px">
+        <div style="font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:{html.escape(accent)}">{html.escape(BRAND_NAME)}</div>
+        <h1 style="margin:14px 0 10px;font-size:28px;color:#f8fbff">{html.escape(headline)}</h1>
+        <p style="line-height:1.7;color:#b8cae6">Hi {html.escape(full_name or 'Trader')}, {html.escape(body_copy)}</p>
+      </div>
+    </body></html>
+    """
+    text_body = f"{BRAND_NAME}: {headline}. {body_copy}"
+    return _send_gmail(user_email, subject, html_body, text_body)
+
+
 def _admin_otp_generate() -> str:
     return f"{secrets.randbelow(1000000):06d}"
 
@@ -674,7 +709,10 @@ def init_saas_db() -> None:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 last_login_at TEXT,
-                last_token_reminder_at TEXT
+                last_token_reminder_at TEXT,
+                archived_at TEXT,
+                archived_by INTEGER,
+                archive_reason TEXT DEFAULT ''
             );
             CREATE TABLE IF NOT EXISTS saas_wallets (
                 user_id INTEGER PRIMARY KEY,
@@ -893,6 +931,18 @@ def init_saas_db() -> None:
                 FOREIGN KEY(user_id) REFERENCES saas_users(id) ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS idx_admin_otp_email_created ON saas_admin_otp(email, created_at DESC);
+            CREATE TABLE IF NOT EXISTS saas_user_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                actor_user_id INTEGER,
+                event_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                summary TEXT DEFAULT '',
+                payload_json TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES saas_users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_saas_user_history_user_created ON saas_user_history(user_id, created_at DESC);
             """
         )
         have = {str(r["name"] or "") for r in conn.execute("PRAGMA table_info(saas_users)").fetchall()}
@@ -905,6 +955,9 @@ def init_saas_db() -> None:
             "notify_whatsapp": "INTEGER NOT NULL DEFAULT 0",
             "notify_token_reminder": "INTEGER NOT NULL DEFAULT 1",
             "last_token_reminder_at": "TEXT",
+            "archived_at": "TEXT",
+            "archived_by": "INTEGER",
+            "archive_reason": "TEXT DEFAULT ''",
         }
         for name, spec in missing_user_cols.items():
             if name not in have:
@@ -1620,6 +1673,75 @@ def _queue_auto_execution(user_id: int, user_email: str, strategy_code: str, sig
     ).start()
 
 
+def _log_user_history(conn: sqlite3.Connection, user_id: int, event_type: str, title: str, summary: str = "", *, actor_user_id: Optional[int] = None, payload: Optional[dict[str, Any]] = None, created_at: Optional[str] = None) -> None:
+    conn.execute(
+        "INSERT INTO saas_user_history(user_id,actor_user_id,event_type,title,summary,payload_json,created_at) VALUES(?,?,?,?,?,?,?)",
+        (
+            int(user_id),
+            int(actor_user_id) if actor_user_id else None,
+            str(event_type or "USER_EVENT").strip().upper(),
+            str(title or "Account updated").strip()[:120],
+            str(summary or "").strip()[:400],
+            _dumps(payload or {}),
+            created_at or _utc_iso(),
+        ),
+    )
+
+
+def _admin_user_metrics(conn: sqlite3.Connection) -> dict[str, Any]:
+    row = conn.execute(
+        """
+        SELECT
+            SUM(CASE WHEN role='USER' THEN 1 ELSE 0 END) AS total_users,
+            SUM(CASE WHEN role='USER' AND archived_at IS NULL AND status IN ('ACTIVE','LIMITED') THEN 1 ELSE 0 END) AS active_users,
+            SUM(CASE WHEN role='USER' AND archived_at IS NOT NULL THEN 1 ELSE 0 END) AS archived_users,
+            SUM(CASE WHEN role='USER' AND archived_at IS NULL AND last_login_at IS NOT NULL THEN 1 ELSE 0 END) AS engaged_users
+        FROM saas_users
+        """
+    ).fetchone()
+    history_events = int(conn.execute("SELECT COUNT(*) FROM saas_user_history").fetchone()[0] or 0)
+    return {
+        "total_users": int((row["total_users"] if row else 0) or 0),
+        "active_users": int((row["active_users"] if row else 0) or 0),
+        "archived_users": int((row["archived_users"] if row else 0) or 0),
+        "engaged_users": int((row["engaged_users"] if row else 0) or 0),
+        "history_events": history_events,
+    }
+
+
+def _admin_history_items(conn: sqlite3.Connection, limit: int = 120) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT
+            h.*,
+            u.email AS user_email,
+            u.full_name AS user_full_name,
+            actor.email AS actor_email,
+            actor.full_name AS actor_full_name
+        FROM saas_user_history h
+        LEFT JOIN saas_users u ON u.id = h.user_id
+        LEFT JOIN saas_users actor ON actor.id = h.actor_user_id
+        ORDER BY h.id DESC
+        LIMIT ?
+        """,
+        (max(1, int(limit or 120)),),
+    ).fetchall()
+    return [
+        {
+            "id": int(r["id"]),
+            "user_id": int(r["user_id"]),
+            "event_type": r["event_type"],
+            "title": r["title"],
+            "summary": r["summary"] or "",
+            "payload": _loads(r["payload_json"], {}),
+            "created_at": r["created_at"],
+            "user": {"email": r["user_email"] or "", "full_name": r["user_full_name"] or ""},
+            "actor": {"email": r["actor_email"] or "", "full_name": r["actor_full_name"] or ""},
+        }
+        for r in rows
+    ]
+
+
 def _public_user(conn: sqlite3.Connection, user_id: int) -> dict[str, Any]:
     row = _user_row(conn, user_id)
     if row is None:
@@ -1656,8 +1778,17 @@ def _public_user(conn: sqlite3.Connection, user_id: int) -> dict[str, Any]:
         },
         "subscription": {"plan_code": sub["plan_code"] if sub else None, "status": sub["status"] if sub else "NONE", "expires_at": sub["expires_at"] if sub else None, "amount": float(sub["amount"] or 0) if sub else 0},
         "controls": {"daily_loss_limit": float(row["daily_loss_limit"] or 0), "max_trades_per_day": int(row["max_trades_per_day"] or 0), "max_open_signals": int(row["max_open_signals"] or 0), "profit_share_pct": float(row["profit_share_pct"] or 0), "auto_execute": bool(row["auto_execute"] or 0)},
+        "lifecycle": {
+            "is_archived": bool(str(row["archived_at"] or "").strip()),
+            "archived_at": row["archived_at"],
+            "archived_by": int(row["archived_by"] or 0) if row["archived_by"] is not None else None,
+            "archive_reason": row["archive_reason"] or "",
+        },
         "unread_signals": unread,
+        "notes": row["notes"] or "",
         "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "last_login_at": row["last_login_at"],
     }
 
 
@@ -1676,11 +1807,14 @@ def _require_user(auth: Optional[str]) -> dict[str, Any]:
     payload = _decode_token(_extract_token(auth))
     conn = get_conn()
     try:
-        row = conn.execute("SELECT id,email,role,status FROM saas_users WHERE id=?", (int(payload["sub"]),)).fetchone()
+        row = conn.execute("SELECT id,email,role,status,archived_at FROM saas_users WHERE id=?", (int(payload["sub"]),)).fetchone()
         if row is None:
             raise HTTPException(status_code=401, detail="User not found")
-        if str(row["status"] or "").upper() == "DISABLED":
+        state = str(row["status"] or "").upper()
+        if state == "DISABLED":
             raise HTTPException(status_code=403, detail="User disabled")
+        if state == "ARCHIVED" or str(row["archived_at"] or "").strip():
+            raise HTTPException(status_code=403, detail="User archived")
         return {"id": int(row["id"]), "email": row["email"], "role": row["role"], "status": row["status"]}
     finally:
         conn.close()
@@ -2102,6 +2236,7 @@ async def auth_signup(request: Request) -> dict[str, Any]:
                 _credit_wallet(conn, user_id, float(coupon["credit"] or 0), "COUPON", f"Coupon {coupon['code']} applied", reference_type="COUPON", reference_id=str(coupon["id"]))
             except sqlite3.IntegrityError:
                 pass
+        _log_user_history(conn, user_id, "USER_CREATED", "Account created", "Self-service signup completed", payload={"source": "signup"})
         conn.commit()
         row = conn.execute("SELECT * FROM saas_users WHERE id=?", (user_id,)).fetchone()
         token = _token_for(_auth_payload(row))
@@ -2122,10 +2257,15 @@ async def auth_login(request: Request) -> dict[str, Any]:
         row = conn.execute("SELECT * FROM saas_users WHERE email=?", (email,)).fetchone()
         if row is None or str(row["role"] or "").upper() != "USER":
             raise HTTPException(status_code=401, detail="Invalid credentials")
+        if str(row["status"] or "").upper() == "ARCHIVED" or str(row["archived_at"] or "").strip():
+            raise HTTPException(status_code=403, detail="User archived")
+        if str(row["status"] or "").upper() == "DISABLED":
+            raise HTTPException(status_code=403, detail="User disabled")
         if not _verify_password(password, row["password_hash"], row["password_salt"]):
             raise HTTPException(status_code=401, detail="Invalid credentials")
         now = _utc_iso()
         conn.execute("UPDATE saas_users SET last_login_at=?, updated_at=? WHERE id=?", (now, now, int(row["id"])))
+        _log_user_history(conn, int(row["id"]), "LOGIN", "User signed in", "User desk login completed", payload={"source": "user-login"}, created_at=now)
         conn.commit()
         token = _token_for(_auth_payload(row))
         return {"ok": True, "token": token, "user": _public_user(conn, int(row["id"]))}
@@ -2144,10 +2284,15 @@ async def admin_login(request: Request) -> dict[str, Any]:
         row = conn.execute("SELECT * FROM saas_users WHERE email=?", (email,)).fetchone()
         if row is None or str(row["role"] or "").upper() != "ADMIN":
             raise HTTPException(status_code=401, detail="Invalid admin credentials")
+        if str(row["status"] or "").upper() == "ARCHIVED" or str(row["archived_at"] or "").strip():
+            raise HTTPException(status_code=403, detail="Admin archived")
+        if str(row["status"] or "").upper() == "DISABLED":
+            raise HTTPException(status_code=403, detail="Admin disabled")
         if not _verify_password(password, row["password_hash"], row["password_salt"]):
             raise HTTPException(status_code=401, detail="Invalid admin credentials")
         now = _utc_iso()
         conn.execute("UPDATE saas_users SET last_login_at=?, updated_at=? WHERE id=?", (now, now, int(row["id"])))
+        _log_user_history(conn, int(row["id"]), "ADMIN_LOGIN", "Admin signed in", "Admin desk login completed", payload={"source": "admin-login"}, created_at=now)
         conn.commit()
         token = _token_for(_auth_payload(row))
         return {"ok": True, "token": token, "user": _public_user(conn, int(row["id"]))}
@@ -2814,60 +2959,161 @@ def admin_dashboard(authorization: Optional[str] = Header(None)) -> dict[str, An
     _require_admin(authorization)
     conn = get_conn()
     try:
-        total_users = int(conn.execute("SELECT COUNT(*) FROM saas_users WHERE role='USER'").fetchone()[0] or 0)
-        active_users = int(conn.execute("SELECT COUNT(*) FROM saas_users WHERE role='USER' AND status IN ('ACTIVE','LIMITED')").fetchone()[0] or 0)
+        metrics = _admin_user_metrics(conn)
         revenue = float(conn.execute("SELECT COALESCE(SUM(amount),0) FROM saas_payment_orders WHERE status='PAID'").fetchone()[0] or 0)
         signals_total = int(conn.execute("SELECT COUNT(*) FROM saas_signal_inbox").fetchone()[0] or 0)
+        metrics.update({"revenue": round(revenue, 2), "signals_total": signals_total})
         return {
             "ok": True,
-            "metrics": {"total_users": total_users, "active_users": active_users, "revenue": round(revenue, 2), "signals_total": signals_total},
-            "users": [_public_user(conn, int(r["id"])) for r in conn.execute("SELECT id FROM saas_users ORDER BY id DESC LIMIT 25").fetchall()],
+            "metrics": metrics,
+            "users": [_public_user(conn, int(r["id"])) for r in conn.execute("SELECT id FROM saas_users WHERE archived_at IS NULL ORDER BY updated_at DESC, id DESC LIMIT 40").fetchall()],
             "strategies": [dict(r) for r in conn.execute("SELECT * FROM saas_strategies ORDER BY id ASC").fetchall()],
             "payments": [{"id": int(r["id"]), "user_id": int(r["user_id"]), "amount": float(r["amount"] or 0), "status": r["status"], "provider": r["provider"], "plan_code": r["plan_code"], "created_at": r["created_at"]} for r in conn.execute("SELECT * FROM saas_payment_orders ORDER BY id DESC LIMIT 20").fetchall()],
             "signals": [{"strategy_code": r["strategy_code"], "headline": r["headline"], "confidence": float(r["confidence"] or 0), "created_at": r["created_at"]} for r in conn.execute("SELECT * FROM saas_signal_inbox ORDER BY id DESC LIMIT 20").fetchall()],
             "payment_profile": _public_payment_profile(conn),
+            "history": _admin_history_items(conn, limit=24),
         }
     finally:
         conn.close()
 
 
 @router.get("/api/admin/users")
-def admin_users(authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+def admin_users(view: str = "all", q: str = "", authorization: Optional[str] = Header(None)) -> dict[str, Any]:
     _require_admin(authorization)
     conn = get_conn()
     try:
-        return {"ok": True, "items": [_public_user(conn, int(r["id"])) for r in conn.execute("SELECT id FROM saas_users ORDER BY id DESC").fetchall()]}
+        where = []
+        params: list[Any] = []
+        mode = str(view or "all").strip().lower()
+        if mode == "active":
+            where.append("archived_at IS NULL")
+        elif mode == "archived":
+            where.append("archived_at IS NOT NULL")
+        query = str(q or "").strip().lower()
+        if query:
+            like = f"%{query}%"
+            where.append("(lower(email) LIKE ? OR lower(full_name) LIKE ? OR lower(COALESCE(whatsapp_phone,'')) LIKE ? OR lower(COALESCE(telegram_chat_id,'')) LIKE ?)")
+            params.extend([like, like, like, like])
+        sql = "SELECT id FROM saas_users"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += " ORDER BY CASE WHEN archived_at IS NULL THEN 0 ELSE 1 END ASC, updated_at DESC, id DESC"
+        rows = conn.execute(sql, params).fetchall()
+        return {"ok": True, "view": mode, "query": query, "counts": _admin_user_metrics(conn), "items": [_public_user(conn, int(r["id"])) for r in rows]}
     finally:
         conn.close()
 
+
+@router.get("/api/admin/users/history")
+def admin_users_history(q: str = "", limit: int = 160, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+    _require_admin(authorization)
+    conn = get_conn()
+    try:
+        items = _admin_history_items(conn, limit=max(1, min(int(limit or 160), 400)))
+        query = str(q or "").strip().lower()
+        if query:
+            items = [
+                item
+                for item in items
+                if query in str(item.get("event_type") or "").lower()
+                or query in str(item.get("title") or "").lower()
+                or query in str(item.get("summary") or "").lower()
+                or query in str(((item.get("user") or {}).get("email")) or "").lower()
+                or query in str(((item.get("user") or {}).get("full_name")) or "").lower()
+                or query in str(((item.get("actor") or {}).get("email")) or "").lower()
+            ]
+        return {"ok": True, "query": query, "items": items, "counts": _admin_user_metrics(conn)}
+    finally:
+        conn.close()
+
+
 @router.post("/api/admin/users")
 async def admin_create_user(request: Request, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
-    _require_admin(authorization)
+    admin = _require_admin(authorization)
     body = await request.json()
-    email = str(body.get("email") or "").strip().lower()
+    email = _normalize_login_email(body.get("email") or "")
     password = str(body.get("password") or "Welcome@123").strip()
-    full_name = str(body.get("full_name") or "Managed User").strip()
+    full_name = str(body.get("full_name") or "Managed User").strip()[:80]
     role = str(body.get("role") or "USER").upper()
+    status = str(body.get("status") or "ACTIVE").upper()
+    wallet_type = str(body.get("wallet_type") or ("PAID" if role == "ADMIN" else "COUPON")).upper()
+    whatsapp_phone = _normalize_whatsapp_phone(body.get("whatsapp_phone") or "")
+    telegram_chat_id = _normalize_telegram_chat_id(body.get("telegram_chat_id") or "")
+    notify_email = 1 if body.get("notify_email", True) else 0
+    notify_telegram = 1 if body.get("notify_telegram", bool(telegram_chat_id)) else 0
+    notify_whatsapp = 1 if body.get("notify_whatsapp", False) else 0
+    notify_token_reminder = 1 if body.get("notify_token_reminder", True) else 0
+    notes = str(body.get("notes") or "").strip()[:1000]
+    send_email = bool(body.get("send_email", True))
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Valid email required")
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Temporary password must be at least 6 characters")
+    if role not in {"USER", "ADMIN"}:
+        raise HTTPException(status_code=400, detail="Role must be USER or ADMIN")
+    if status not in {"ACTIVE", "LIMITED", "DISABLED"}:
+        raise HTTPException(status_code=400, detail="Status must be ACTIVE, LIMITED, or DISABLED")
     conn = get_conn()
     try:
         if conn.execute("SELECT 1 FROM saas_users WHERE email=?", (email,)).fetchone():
             raise HTTPException(status_code=409, detail="Email already exists")
         now = _utc_iso()
         pw_hash, salt = _hash_password(password)
-        cur = conn.execute("INSERT INTO saas_users(email,full_name,password_hash,password_salt,role,status,wallet_type,coupon_profit_cap,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)", (email, full_name, pw_hash, salt, role, "ACTIVE", "PAID" if role == "ADMIN" else "COUPON", COUPON_PROFIT_CAP, now, now))
+        cur = conn.execute(
+            """
+            INSERT INTO saas_users(
+                email,full_name,password_hash,password_salt,role,status,wallet_type,
+                whatsapp_phone,telegram_chat_id,notify_email,notify_telegram,notify_whatsapp,notify_token_reminder,
+                coupon_profit_cap,notes,created_at,updated_at
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                email,
+                full_name,
+                pw_hash,
+                salt,
+                role,
+                status,
+                "PAID" if role == "ADMIN" else wallet_type,
+                whatsapp_phone,
+                telegram_chat_id,
+                notify_email,
+                notify_telegram,
+                notify_whatsapp,
+                notify_token_reminder,
+                COUPON_PROFIT_CAP,
+                notes,
+                now,
+                now,
+            ),
+        )
         user_id = int(cur.lastrowid)
-        conn.execute("INSERT INTO saas_wallets(user_id,balance,reserved_balance,status,wallet_type,realized_profit,total_fees,updated_at) VALUES(?,?,?,?,?,?,?,?)", (user_id, 0, 0, "ACTIVE", "PAID" if role == "ADMIN" else "COUPON", 0, 0, now))
+        conn.execute(
+            "INSERT INTO saas_wallets(user_id,balance,reserved_balance,status,wallet_type,realized_profit,total_fees,updated_at) VALUES(?,?,?,?,?,?,?,?)",
+            (user_id, 0, 0, "BLOCKED" if status == "DISABLED" else "ACTIVE", "PAID" if role == "ADMIN" else wallet_type, 0, 0, now),
+        )
         _ensure_user_strategy_rows(conn, user_id)
         _ensure_broker_row(conn, user_id)
+        _log_user_history(
+            conn,
+            user_id,
+            "USER_CREATED",
+            "Account created",
+            f"Created by admin as {role}",
+            actor_user_id=int(admin["id"]),
+            payload={"role": role, "status": status, "send_email": send_email},
+            created_at=now,
+        )
         conn.commit()
-        return {"ok": True, "user": _public_user(conn, user_id), "temporary_password": password}
+        emailed = _send_managed_password_email(email, full_name, password, "Your desk is ready") if send_email else False
+        return {"ok": True, "user": _public_user(conn, user_id), "temporary_password": password, "emailed": bool(emailed)}
     finally:
         conn.close()
 
 
 @router.patch("/api/admin/users/{user_id}")
 async def admin_update_user(user_id: int, request: Request, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
-    _require_admin(authorization)
+    admin = _require_admin(authorization)
     body = await request.json()
     conn = get_conn()
     try:
@@ -2875,32 +3121,206 @@ async def admin_update_user(user_id: int, request: Request, authorization: Optio
         if row is None:
             raise HTTPException(status_code=404, detail="User not found")
         now = _utc_iso()
+        email = _normalize_login_email(body.get("email") if body.get("email") is not None else row["email"])
+        if email != str(row["email"] or "").strip().lower():
+            dup = conn.execute("SELECT 1 FROM saas_users WHERE email=? AND id<>?", (email, user_id)).fetchone()
+            if dup is not None:
+                raise HTTPException(status_code=409, detail="Email already exists")
+        role = str(body.get("role", row["role"]) or row["role"]).upper()
+        if role not in {"USER", "ADMIN"}:
+            raise HTTPException(status_code=400, detail="Role must be USER or ADMIN")
+        if str(row["role"] or "").upper() == "ADMIN" and role != "ADMIN":
+            admin_count = int(conn.execute("SELECT COUNT(*) FROM saas_users WHERE role='ADMIN' AND archived_at IS NULL AND status<>'DISABLED'").fetchone()[0] or 0)
+            if admin_count <= 1:
+                raise HTTPException(status_code=400, detail="Cannot remove the last active admin")
+        status = str(body.get("status", row["status"]) or row["status"]).upper()
+        if status not in {"ACTIVE", "LIMITED", "DISABLED"}:
+            raise HTTPException(status_code=400, detail="Status must be ACTIVE, LIMITED, or DISABLED")
+        wallet_type = str(body.get("wallet_type", row["wallet_type"]) or row["wallet_type"]).upper()
+        if role == "ADMIN":
+            wallet_type = "PAID"
         fields = {
-            "full_name": str(body.get("full_name", row["full_name"]) or row["full_name"]),
-            "status": str(body.get("status", row["status"]) or row["status"]).upper(),
-            "wallet_type": str(body.get("wallet_type", row["wallet_type"]) or row["wallet_type"]).upper(),
+            "email": email,
+            "full_name": str(body.get("full_name", row["full_name"]) or row["full_name"])[:80],
+            "role": role,
+            "status": status,
+            "wallet_type": wallet_type,
             "daily_loss_limit": float(body.get("daily_loss_limit", row["daily_loss_limit"]) or 0),
             "max_trades_per_day": int(body.get("max_trades_per_day", row["max_trades_per_day"]) or 0),
             "max_open_signals": int(body.get("max_open_signals", row["max_open_signals"]) or 0),
             "profit_share_pct": float(body.get("profit_share_pct", row["profit_share_pct"]) or 0),
             "coupon_profit_cap": float(body.get("coupon_profit_cap", row["coupon_profit_cap"]) or 0),
             "auto_execute": 1 if body.get("auto_execute", bool(row["auto_execute"])) else 0,
+            "whatsapp_phone": _normalize_whatsapp_phone(body.get("whatsapp_phone", row["whatsapp_phone"])),
+            "telegram_chat_id": _normalize_telegram_chat_id(body.get("telegram_chat_id", row["telegram_chat_id"])),
+            "notify_email": 1 if body.get("notify_email", bool(row["notify_email"])) else 0,
+            "notify_telegram": 1 if body.get("notify_telegram", bool(row["notify_telegram"])) else 0,
+            "notify_whatsapp": 1 if body.get("notify_whatsapp", bool(row["notify_whatsapp"])) else 0,
+            "notify_token_reminder": 1 if body.get("notify_token_reminder", bool(row["notify_token_reminder"])) else 0,
             "notes": str(body.get("notes", row["notes"]) or "")[:1000],
         }
         conn.execute(
-            "UPDATE saas_users SET full_name=?, status=?, wallet_type=?, daily_loss_limit=?, max_trades_per_day=?, max_open_signals=?, profit_share_pct=?, coupon_profit_cap=?, auto_execute=?, notes=?, updated_at=? WHERE id=?",
-            (fields["full_name"], fields["status"], fields["wallet_type"], fields["daily_loss_limit"], fields["max_trades_per_day"], fields["max_open_signals"], fields["profit_share_pct"], fields["coupon_profit_cap"], fields["auto_execute"], fields["notes"], now, user_id),
+            """
+            UPDATE saas_users
+            SET email=?, full_name=?, role=?, status=?, wallet_type=?, daily_loss_limit=?, max_trades_per_day=?, max_open_signals=?,
+                profit_share_pct=?, coupon_profit_cap=?, auto_execute=?, whatsapp_phone=?, telegram_chat_id=?, notify_email=?,
+                notify_telegram=?, notify_whatsapp=?, notify_token_reminder=?, notes=?, updated_at=?
+            WHERE id=?
+            """,
+            (
+                fields["email"],
+                fields["full_name"],
+                fields["role"],
+                fields["status"],
+                fields["wallet_type"],
+                fields["daily_loss_limit"],
+                fields["max_trades_per_day"],
+                fields["max_open_signals"],
+                fields["profit_share_pct"],
+                fields["coupon_profit_cap"],
+                fields["auto_execute"],
+                fields["whatsapp_phone"],
+                fields["telegram_chat_id"],
+                fields["notify_email"],
+                fields["notify_telegram"],
+                fields["notify_whatsapp"],
+                fields["notify_token_reminder"],
+                fields["notes"],
+                now,
+                user_id,
+            ),
         )
-        conn.execute("UPDATE saas_wallets SET wallet_type=?, status=?, updated_at=? WHERE user_id=?", (fields["wallet_type"], "BLOCKED" if fields["status"] == "DISABLED" else "ACTIVE", now, user_id))
+        conn.execute(
+            "UPDATE saas_wallets SET wallet_type=?, status=?, updated_at=? WHERE user_id=?",
+            (fields["wallet_type"], "BLOCKED" if fields["status"] == "DISABLED" else "ACTIVE", now, user_id),
+        )
+        _log_user_history(
+            conn,
+            user_id,
+            "USER_UPDATED",
+            "Account updated",
+            f"Updated by admin. Status: {fields['status']}, role: {fields['role']}",
+            actor_user_id=int(admin["id"]),
+            payload={"status": fields["status"], "role": fields["role"], "wallet_type": fields["wallet_type"]},
+            created_at=now,
+        )
         conn.commit()
         return {"ok": True, "user": _public_user(conn, user_id)}
     finally:
         conn.close()
 
 
+@router.post("/api/admin/users/{user_id}/password-reset")
+async def admin_reset_user_password(user_id: int, request: Request, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+    admin = _require_admin(authorization)
+    body = await request.json()
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT * FROM saas_users WHERE id=?", (user_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        temporary_password = str(body.get("password") or "").strip() or f"Desk@{secrets.randbelow(999999):06d}"
+        if len(temporary_password) < 6:
+            raise HTTPException(status_code=400, detail="Temporary password must be at least 6 characters")
+        now = _utc_iso()
+        pw_hash, salt = _hash_password(temporary_password)
+        conn.execute("UPDATE saas_users SET password_hash=?, password_salt=?, updated_at=? WHERE id=?", (pw_hash, salt, now, user_id))
+        _log_user_history(
+            conn,
+            user_id,
+            "PASSWORD_RESET",
+            "Temporary password reset",
+            "Admin issued a new temporary password",
+            actor_user_id=int(admin["id"]),
+            payload={"send_email": bool(body.get("send_email", True))},
+            created_at=now,
+        )
+        conn.commit()
+        send_email = bool(body.get("send_email", True))
+        emailed = _send_managed_password_email(str(row["email"] or "").strip(), str(row["full_name"] or "").strip(), temporary_password, "Your temporary password has been refreshed") if send_email else False
+        return {"ok": True, "user": _public_user(conn, user_id), "temporary_password": temporary_password, "emailed": bool(emailed)}
+    finally:
+        conn.close()
+
+
+@router.post("/api/admin/users/{user_id}/archive")
+async def admin_archive_user(user_id: int, request: Request, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+    admin = _require_admin(authorization)
+    body = await request.json()
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT * FROM saas_users WHERE id=?", (user_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        if str(row["role"] or "").upper() == "ADMIN":
+            raise HTTPException(status_code=400, detail="Archive is available for user desks only")
+        if str(row["archived_at"] or "").strip():
+            raise HTTPException(status_code=400, detail="User already archived")
+        reason = str(body.get("reason") or "Archived by admin").strip()[:240]
+        now = _utc_iso()
+        conn.execute(
+            "UPDATE saas_users SET status='ARCHIVED', archived_at=?, archived_by=?, archive_reason=?, auto_execute=0, updated_at=? WHERE id=?",
+            (now, int(admin["id"]), reason, now, user_id),
+        )
+        conn.execute("UPDATE saas_wallets SET status='BLOCKED', updated_at=? WHERE user_id=?", (now, user_id))
+        _log_user_history(
+            conn,
+            user_id,
+            "USER_ARCHIVED",
+            "User archived",
+            reason,
+            actor_user_id=int(admin["id"]),
+            payload={"reason": reason},
+            created_at=now,
+        )
+        conn.commit()
+        send_email = bool(body.get("send_email", True))
+        emailed = _send_user_lifecycle_email(str(row["email"] or "").strip(), str(row["full_name"] or "").strip(), "Your desk has been archived", f"your access has been moved to archived status. Reason: {reason}", accent="#ffbf5e") if send_email else False
+        return {"ok": True, "user": _public_user(conn, user_id), "emailed": bool(emailed)}
+    finally:
+        conn.close()
+
+
+@router.post("/api/admin/users/{user_id}/restore")
+async def admin_restore_user(user_id: int, request: Request, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+    admin = _require_admin(authorization)
+    body = await request.json()
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT * FROM saas_users WHERE id=?", (user_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        if not str(row["archived_at"] or "").strip():
+            raise HTTPException(status_code=400, detail="User is not archived")
+        note = str(body.get("note") or "Desk restored by admin").strip()[:240]
+        now = _utc_iso()
+        restored_status = "ACTIVE" if str(row["status"] or "").upper() == "ARCHIVED" else str(row["status"] or "ACTIVE").upper()
+        conn.execute(
+            "UPDATE saas_users SET status=?, archived_at=NULL, archived_by=NULL, archive_reason='', updated_at=? WHERE id=?",
+            (restored_status, now, user_id),
+        )
+        conn.execute("UPDATE saas_wallets SET status='ACTIVE', updated_at=? WHERE user_id=?", (now, user_id))
+        _log_user_history(
+            conn,
+            user_id,
+            "USER_RESTORED",
+            "User restored",
+            note,
+            actor_user_id=int(admin["id"]),
+            payload={"note": note},
+            created_at=now,
+        )
+        conn.commit()
+        send_email = bool(body.get("send_email", True))
+        emailed = _send_user_lifecycle_email(str(row["email"] or "").strip(), str(row["full_name"] or "").strip(), "Your desk is active again", "your archived desk has been restored and can be used again.", accent="#67e8f9") if send_email else False
+        return {"ok": True, "user": _public_user(conn, user_id), "emailed": bool(emailed)}
+    finally:
+        conn.close()
+
+
 @router.post("/api/admin/users/{user_id}/wallet/credit")
 async def admin_wallet_credit(user_id: int, request: Request, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
-    _require_admin(authorization)
+    admin = _require_admin(authorization)
     body = await request.json()
     amount = float(body.get("amount") or 0)
     note = str(body.get("note") or "Admin wallet credit")[:200]
@@ -2908,10 +3328,22 @@ async def admin_wallet_credit(user_id: int, request: Request, authorization: Opt
         raise HTTPException(status_code=400, detail="Amount required")
     conn = get_conn()
     try:
+        row = conn.execute("SELECT * FROM saas_users WHERE id=?", (user_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="User not found")
         if amount > 0:
             _credit_wallet(conn, user_id, amount, "ADMIN", note, reference_type="ADMIN", reference_id=str(user_id))
         else:
             _debit_wallet(conn, user_id, abs(amount), "ADMIN", note, reference_type="ADMIN", reference_id=str(user_id))
+        _log_user_history(
+            conn,
+            user_id,
+            "WALLET_CREDIT" if amount > 0 else "WALLET_DEBIT",
+            "Wallet adjusted",
+            f"{'Credited' if amount > 0 else 'Debited'} {amount:,.2f}. {note}",
+            actor_user_id=int(admin["id"]),
+            payload={"amount": float(amount), "note": note},
+        )
         conn.commit()
         return {"ok": True, "wallet": _wallet_snapshot(conn, user_id)}
     finally:

@@ -19,6 +19,9 @@
     selectedPaymentId: null,
     adminOtpPending: false,
     adminOtpEmail: '',
+    adminUserView: localStorage.getItem('nx_admin_user_view') || 'active',
+    adminUserQuery: localStorage.getItem('nx_admin_user_query') || '',
+    selectedAdminUserId: localStorage.getItem('nx_admin_selected_user_id') || '',
   };
   const NX_ADMIN_ONLY = String(window.location.pathname || '').toLowerCase() === '/admin';
   if(NX_ADMIN_ONLY) NX.authMode = 'admin';
@@ -221,9 +224,49 @@
       nxApi('/api/admin/dashboard', { method:'GET' }),
       nxApi('/api/admin/coupons', { method:'GET' }),
       nxApi('/api/admin/settings', { method:'GET' }),
-      nxApi('/api/admin/payments', { method:'GET' })
+      nxApi('/api/admin/payments', { method:'GET' }),
+      nxApi('/api/admin/users', { method:'GET' }),
+      nxApi('/api/admin/users/history', { method:'GET' })
     ]);
-    NX.admin = Object.assign({}, out[0], { coupons: out[1].items || [], settings: out[2].items || [], paymentsFull: out[3].items || [], payment_profile: out[0].payment_profile || out[3].payment_profile || null });
+    NX.admin = Object.assign({}, out[0], {
+      coupons: out[1].items || [],
+      settings: out[2].items || [],
+      paymentsFull: out[3].items || [],
+      payment_profile: out[0].payment_profile || out[3].payment_profile || null,
+      users: out[4].items || [],
+      history: out[5].items || out[0].history || []
+    });
+    var users = (NX.admin.users || []);
+    var selected = String(NX.selectedAdminUserId || '').trim();
+    if(selected && !users.some(function(u){ return String(u.id) === selected; })) selected = '';
+    if(!selected && users.length){
+      var preferred = users.find(function(u){ return !(((u.lifecycle || {}).is_archived)); }) || users[0];
+      selected = preferred ? String(preferred.id) : '';
+    }
+    NX.selectedAdminUserId = selected;
+    if(selected) localStorage.setItem('nx_admin_selected_user_id', selected);
+    else localStorage.removeItem('nx_admin_selected_user_id');
+  }
+
+  function adminAllUsers(){
+    return ((NX.admin || {}).users) || [];
+  }
+  function adminActiveUsers(){
+    return adminAllUsers().filter(function(u){ return !(((u.lifecycle || {}).is_archived)); });
+  }
+  function adminArchivedUsers(){
+    return adminAllUsers().filter(function(u){ return !!(((u.lifecycle || {}).is_archived)); });
+  }
+  function adminHistoryItems(){
+    return (((NX.admin || {}).history) || []);
+  }
+  function currentAdminManagedUser(){
+    var wanted = String(NX.selectedAdminUserId || '').trim();
+    var users = adminAllUsers();
+    for(var i=0;i<users.length;i+=1){
+      if(String(users[i].id) === wanted) return users[i];
+    }
+    return users[0] || null;
   }
 
   async function hydrate(){
@@ -601,30 +644,73 @@
     const a = NX.admin || { metrics:{}, users:[], strategies:[], coupons:[], paymentsFull:[], signals:[], settings:[] };
     const gmailReady = !!((NX.boot || {}).gmail_ready);
     const paymentProfile = a.payment_profile || adminSettingValue('payment_profile', ((NX.boot || {}).payment_profile) || {});
-    const userRows = (a.users||[]).slice(0,10).map(function(u){
-      const role = String(u.role || 'USER').toUpperCase();
-      const status = String(u.status || 'ACTIVE').toUpperCase();
-      const roleBadge = role === 'ADMIN' ? 'warn' : 'cool';
-      const statusBadge = status === 'ACTIVE' ? 'good' : (status === 'BLOCKED' ? 'bad' : 'warn');
-      return ''
-        + '<tr>'
-        + '<td><div class="nx-admin-user-id">'+escapeHtml(u.email)+'</div></td>'
-        + '<td><span class="nx-badge '+roleBadge+'">'+escapeHtml(role)+'</span></td>'
-        + '<td><span class="nx-badge '+statusBadge+'">'+escapeHtml(status)+'</span></td>'
-        + '<td><strong class="nx-admin-wallet-value">'+fmtMoney((((u.wallet||{}).balance)||0))+'</strong></td>'
-        + '<td><button class="nx-mini-btn nx-admin-credit-btn" onclick="nxAdminCredit('+u.id+')">Credit</button></td>'
-        + '</tr>';
-    }).join('');
+    const allUsers = adminAllUsers();
+    const activeUsers = adminActiveUsers();
+    const archivedUsers = adminArchivedUsers();
+    const historyItems = adminHistoryItems();
+    const search = String(NX.adminUserQuery || '').trim().toLowerCase();
+    const view = String(NX.adminUserView || 'active').toLowerCase();
+    function userMatches(u){
+      if(!search) return true;
+      const hay = [
+        u.email,
+        u.full_name,
+        u.role,
+        u.status,
+        ((u.contacts||{}).whatsapp_phone || ''),
+        ((u.contacts||{}).telegram_chat_id || ''),
+        (u.notes || ''),
+        ((((u.lifecycle||{}).archive_reason) || ''))
+      ].join(' ').toLowerCase();
+      return hay.indexOf(search) >= 0;
+    }
+    function historyMatches(item){
+      if(!search) return true;
+      const hay = [
+        item.event_type,
+        item.title,
+        item.summary,
+        (((item.user||{}).email) || ''),
+        (((item.user||{}).full_name) || ''),
+        (((item.actor||{}).email) || '')
+      ].join(' ').toLowerCase();
+      return hay.indexOf(search) >= 0;
+    }
+    const filteredActive = activeUsers.filter(userMatches);
+    const filteredArchived = archivedUsers.filter(userMatches);
+    const filteredHistory = historyItems.filter(historyMatches);
+    const selected = currentAdminManagedUser();
+    const selectedLifecycle = ((selected || {}).lifecycle) || {};
+    const selectedContacts = ((selected || {}).contacts) || {};
+    const selectedNotifications = ((selected || {}).notifications) || {};
+    const selectedControls = ((selected || {}).controls) || {};
+    const selectedWallet = ((selected || {}).wallet) || {};
+    const selectedIsArchived = !!selectedLifecycle.is_archived;
+    const visibleUsers = view === 'archived' ? filteredArchived : filteredActive;
     const stratCards = (a.strategies||[]).map(function(s){
       return '<div class="nx-strategy" style="--acc:'+(s.accent||'#58d6ff')+'"><div class="nx-acc-line"></div><h4>'+escapeHtml(s.name)+'</h4><p>'+escapeHtml(s.description||'')+'</p><div class="nx-row"><span>Type</span><span>'+escapeHtml(s.strategy_type)+'</span></div><div class="nx-row"><span>Active</span><span class="nx-badge '+(s.active?'good':'bad')+'">'+(s.active?'Live':'Paused')+'</span></div><div class="nx-actions" style="margin-top:12px"><button class="nx-mini-btn" onclick="nxAdminToggleStrategy(\''+s.code+'\','+(s.active?0:1)+')">'+(s.active?'Pause':'Enable')+'</button></div></div>';
     }).join('');
     const coupons = (a.coupons||[]).length ? '<table class="nx-mini-table"><thead><tr><th>Code</th><th>Credit</th><th>Used</th><th>Cap</th></tr></thead><tbody>'+(a.coupons||[]).slice(0,8).map(function(c){ return '<tr><td>'+escapeHtml(c.code)+'</td><td>'+fmtMoney(c.credit)+'</td><td>'+fmtNum(c.used_count)+' / '+fmtNum(c.usage_limit)+'</td><td>'+fmtMoney(c.max_profit)+'</td></tr>'; }).join('')+'</tbody></table>' : '<div class="nx-empty">No coupons yet.</div>';
     const payments = (a.paymentsFull||[]).length ? '<table class="nx-mini-table"><thead><tr><th>Order</th><th>Status</th><th>Plan</th><th>Action</th></tr></thead><tbody>'+(a.paymentsFull||[]).slice(0,8).map(function(p){ const st=String(p.status||'').toUpperCase(); const action=(st==='PAID'?'—':'<button class="nx-mini-btn" onclick="nxAdminMarkPaid('+p.id+')">'+(st==='PENDING_VALIDATION'?'Approve':'Mark Paid')+'</button>'); return '<tr><td>#'+fmtNum(p.id)+'</td><td>'+escapeHtml(p.status)+'</td><td>'+escapeHtml(p.plan_code || 'CUSTOM')+'</td><td>'+action+'</td></tr>'; }).join('')+'</tbody></table>' : '<div class="nx-empty">No orders yet.</div>';
     const signals = (a.signals||[]).length ? '<div class="nx-list">'+(a.signals||[]).slice(0,6).map(function(s){ return '<div class="nx-item"><div class="nx-item-top"><div><div class="nx-item-title">'+escapeHtml(s.headline)+'</div><div class="nx-item-sub">'+escapeHtml(s.strategy_code)+' · '+escapeHtml(fmtDate(s.created_at))+'</div></div><span class="nx-badge cool">'+fmtNum(s.confidence)+'%</span></div></div>'; }).join('')+'</div>' : '<div class="nx-empty">No routed events yet.</div>';
-    const overviewCard = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Admin Command Deck</div><div class="nx-card-sub">Monitor the SaaS layer without touching the existing trading panels</div></div></div><div class="nx-card-body"><div class="nx-metric-grid"><div class="nx-metric"><div class="nx-metric-k">Users</div><div class="nx-metric-v">'+fmtNum((a.metrics||{}).total_users||0)+'</div></div><div class="nx-metric"><div class="nx-metric-k">Active</div><div class="nx-metric-v">'+fmtNum((a.metrics||{}).active_users||0)+'</div></div><div class="nx-metric"><div class="nx-metric-k">Revenue</div><div class="nx-metric-v">'+fmtMoney((a.metrics||{}).revenue||0)+'</div></div><div class="nx-metric"><div class="nx-metric-k">Signals</div><div class="nx-metric-v">'+fmtNum((a.metrics||{}).signals_total||0)+'</div></div></div></div></div>';
+    const overviewCard = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Admin Command Deck</div><div class="nx-card-sub">Monitor the SaaS layer without touching the existing trading panels</div></div></div><div class="nx-card-body"><div class="nx-metric-grid"><div class="nx-metric"><div class="nx-metric-k">Users</div><div class="nx-metric-v">'+fmtNum((a.metrics||{}).total_users||0)+'</div></div><div class="nx-metric"><div class="nx-metric-k">Active</div><div class="nx-metric-v">'+fmtNum((a.metrics||{}).active_users||0)+'</div></div><div class="nx-metric"><div class="nx-metric-k">Archived</div><div class="nx-metric-v">'+fmtNum((a.metrics||{}).archived_users||0)+'</div></div><div class="nx-metric"><div class="nx-metric-k">Revenue</div><div class="nx-metric-v">'+fmtMoney((a.metrics||{}).revenue||0)+'</div></div></div></div></div>';
     const brandCard = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Brand & Mail</div><div class="nx-card-sub">STOCKR.IN identity and Gmail notification status</div></div><span class="nx-badge '+(gmailReady ? 'good' : 'warn')+'">'+(gmailReady ? 'Gmail Connected' : 'Gmail Pending')+'</span></div><div class="nx-card-body"><div class="nx-item"><div class="nx-item-title">'+escapeHtml((NX.boot||{}).brand || 'STOCKR.IN')+'</div><div class="nx-item-sub">Set <b>GMAIL_USERNAME</b>, <b>GMAIL_APP_PASSWORD</b>, and optional sender env vars in <b>backend/.env</b> to activate welcome, payment, and optional signal emails.</div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Test Email<input id="nx-admin-gmail-test-email" class="nx-input" placeholder="'+escapeHtml((((NX.user||{}).email)||((NX.boot||{}).admin||{}).email || 'admin@stockr.in'))+'"></label><div style="display:flex;align-items:flex-end"><button class="nx-btn '+(gmailReady ? 'nx-btn-primary' : 'nx-btn-ghost')+'" onclick="nxAdminSendTestEmail()" '+(gmailReady ? '' : 'disabled')+'>Send Gmail Test</button></div></div></div></div></div>';
     const paymentRailCard = '<div class="nx-card nx-payment-admin-card"><div class="nx-card-head"><div><div class="nx-card-title">Payment Rail</div><div class="nx-card-sub">Set the exact UPI destination that user QR codes should credit.</div></div><span class="nx-badge '+((paymentProfile.upi_id && paymentProfile.enabled)?'good':'warn')+'">'+((paymentProfile.upi_id && paymentProfile.enabled)?'Live UPI rail':'Setup needed')+'</span></div><div class="nx-card-body"><div class="nx-split"><div><div class="nx-item nx-pay-destination"><div class="nx-item-title">Settlement destination</div><div class="nx-item-sub">Save this once. Every new local payment QR in the user panel will point to this UPI ID and payee.</div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Payee Name<input id="nx-admin-upi-payee-name" class="nx-input" placeholder="STOCKR.IN" value="'+escapeHtml(paymentProfile.payee_name || '')+'"></label><label class="nx-form-label">UPI ID<input id="nx-admin-upi-id" class="nx-input" placeholder="stockrin@upi" value="'+escapeHtml(paymentProfile.upi_id || '')+'"></label></div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Merchant Code<input id="nx-admin-upi-merchant-code" class="nx-input" placeholder="Optional merchant code" value="'+escapeHtml(paymentProfile.merchant_code || '')+'"></label><label class="nx-form-label">Support Phone<input id="nx-admin-upi-support-phone" class="nx-input" placeholder="+91 9876543210" value="'+escapeHtml(paymentProfile.support_phone || '')+'"></label></div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Support Email<input id="nx-admin-upi-support-email" class="nx-input" placeholder="payments@stockr.in" value="'+escapeHtml(paymentProfile.support_email || '')+'"></label><label class="nx-form-label">Accent Color<input id="nx-admin-upi-theme" class="nx-input" placeholder="#5ec8ff" value="'+escapeHtml(paymentProfile.theme_color || '#5ec8ff')+'"></label></div><label class="nx-form-label" style="margin-top:12px">Instructions<textarea id="nx-admin-upi-instructions" class="nx-textarea" placeholder="Explain how the payment should be confirmed.">'+escapeHtml(paymentProfile.instructions || '')+'</textarea></label><div class="nx-toggle-grid" style="margin-top:12px"><label class="nx-check"><input id="nx-admin-upi-enabled" type="checkbox"'+checkedAttr(!!paymentProfile.enabled)+'><span>Enable direct UPI rail</span></label><div class="nx-pay-chip"><span>Mode</span><strong>'+(paymentProfile.can_auto_confirm ? 'Webhook-ready' : 'Direct UPI')+'</strong></div><div class="nx-pay-chip"><span>Status</span><strong>'+(paymentProfile.upi_id ? 'Configured' : 'Pending')+'</strong></div><div class="nx-pay-chip"><span>Stored UPI</span><strong>'+escapeHtml(paymentProfile.upi_id || 'Not saved')+'</strong></div></div><div class="nx-actions" style="margin-top:12px"><button class="nx-btn nx-btn-primary" onclick="nxAdminSavePaymentProfile()">Save Payment Rail</button><button class="nx-btn nx-btn-ghost" onclick="nxCopyText(\''+escapeHtml(paymentProfile.upi_id || '')+'\', \'UPI ID copied\')">Copy UPI ID</button></div><div class="nx-status info" style="margin-top:12px">'+(paymentProfile.can_auto_confirm ? 'Razorpay + webhook can auto-confirm gateway payments. Direct UPI QR still points to this exact destination.' : 'Direct UPI QR will send money to this saved UPI ID exactly. Payment status still needs in-app confirmation unless a gateway webhook is enabled.')+'</div></div></div><div><div class="nx-pay-panel nx-pay-preview"><div class="nx-pay-head"><div><div class="nx-item-title">Live preview</div><div class="nx-item-sub">This is what the user payment rail will use for new order QR codes.</div></div><span class="nx-badge cool">'+escapeHtml(paymentProfile.payee_name || 'Payee')+'</span></div><div class="nx-pay-bits"><div class="nx-pay-chip"><span>UPI ID</span><strong>'+escapeHtml(paymentProfile.upi_id || 'Not set')+'</strong></div><div class="nx-pay-chip"><span>Support</span><strong>'+escapeHtml([paymentProfile.support_phone, paymentProfile.support_email].filter(Boolean).join(' · ') || 'Not set')+'</strong></div><div class="nx-pay-chip"><span>Merchant</span><strong>'+escapeHtml(paymentProfile.merchant_code || 'Optional')+'</strong></div><div class="nx-pay-chip"><span>Brand</span><strong>'+escapeHtml((NX.boot||{}).brand || 'STOCKR.IN')+'</strong></div></div><div class="nx-inline-note" style="margin-top:12px">'+escapeHtml(paymentProfile.instructions || 'Instructions will appear to the user here.')+'</div></div></div></div></div>';
-    const usersCard = '<div class="nx-card nx-admin-users-shell"><div class="nx-card-head"><div><div class="nx-card-title">Users & Wallets</div><div class="nx-card-sub">Provision new users, top up accounts, and govern risk controls</div></div><span class="nx-badge cool">'+fmtNum((a.metrics||{}).total_users||0)+' users</span></div><div class="nx-card-body"><div class="nx-admin-users-hero"><div class="nx-admin-users-copy"><div class="nx-admin-users-kicker">Operator Flow</div><div class="nx-admin-users-title">Create desks fast, read the list instantly, and keep wallet actions obvious.</div><div class="nx-admin-users-sub">This panel now prioritizes clarity: brighter labels, stronger contrast, and a cleaner create-user flow before credit actions.</div></div><div class="nx-admin-users-stats"><div class="nx-pay-chip"><span>Active users</span><strong>'+fmtNum((a.metrics||{}).active_users||0)+'</strong></div><div class="nx-pay-chip"><span>Total revenue</span><strong>'+fmtMoney((a.metrics||{}).revenue||0)+'</strong></div><div class="nx-pay-chip"><span>Signals served</span><strong>'+fmtNum((a.metrics||{}).signals_total||0)+'</strong></div></div></div><div class="nx-admin-users-grid"><div class="nx-admin-create-panel"><div class="nx-admin-panel-top"><div><div class="nx-admin-panel-kicker">Create user</div><div class="nx-admin-panel-title">Add a new desk with clean defaults</div></div><div class="nx-admin-panel-note">Recommended: create as <b>USER</b>, fund later with <b>Credit</b>.</div></div><div class="nx-form-grid nx-admin-form-grid" style="margin-top:16px"><label class="nx-form-label nx-admin-form-label">Name<input id="nx-admin-user-name" class="nx-input nx-admin-input" placeholder="Desk User"></label><label class="nx-form-label nx-admin-form-label">Email<input id="nx-admin-user-email" class="nx-input nx-admin-input" placeholder="desk@client.com"></label></div><div class="nx-form-grid nx-admin-form-grid" style="margin-top:14px"><label class="nx-form-label nx-admin-form-label">Password<input id="nx-admin-user-password" class="nx-input nx-admin-input" placeholder="Welcome@123"></label><label class="nx-form-label nx-admin-form-label">Role<select id="nx-admin-user-role" class="nx-select nx-admin-input"><option>USER</option><option>ADMIN</option></select></label></div><div class="nx-admin-password-tip">Use a temporary password, then share updated credentials privately after first login.</div><div class="nx-actions" style="margin-top:16px"><button class="nx-btn nx-btn-primary nx-btn-wide" onclick="nxAdminCreateUser()">Create User</button></div></div><div class="nx-admin-table-panel"><div class="nx-admin-panel-top"><div><div class="nx-admin-panel-kicker">Live registry</div><div class="nx-admin-panel-title">Existing users and wallet state</div></div><div class="nx-admin-panel-note">Click <b>Credit</b> to top up an account immediately.</div></div><div class="nx-admin-table-wrap"><table class="nx-mini-table nx-admin-users-table"><thead><tr><th>Email</th><th>Role</th><th>Status</th><th>Wallet</th><th>Action</th></tr></thead><tbody>'+userRows+'</tbody></table></div></div></div></div></div>';
+    const createCard = '<div class="nx-admin-lifecycle-card nx-admin-create-card"><div class="nx-admin-panel-top"><div><div class="nx-admin-panel-kicker">Provision</div><div class="nx-admin-panel-title">Create a desk and mail access in one flow</div></div><div class="nx-admin-panel-note">Best practice: create with a temporary password, send it once, and move the desk to active operations immediately.</div></div><div class="nx-form-grid nx-admin-form-grid" style="margin-top:16px"><label class="nx-form-label nx-admin-form-label">Name<input id="nx-admin-user-name" class="nx-input nx-admin-input" placeholder="Desk User"></label><label class="nx-form-label nx-admin-form-label">Email<input id="nx-admin-user-email" class="nx-input nx-admin-input" placeholder="desk@client.com"></label></div><div class="nx-form-grid nx-admin-form-grid" style="margin-top:14px"><label class="nx-form-label nx-admin-form-label">Temporary Password<input id="nx-admin-user-password" class="nx-input nx-admin-input" placeholder="Welcome@123"></label><label class="nx-form-label nx-admin-form-label">Role<select id="nx-admin-user-role" class="nx-select nx-admin-input"><option>USER</option><option>ADMIN</option></select></label></div><div class="nx-admin-inline-toggle-row" style="margin-top:14px"><label class="nx-check"><input id="nx-admin-user-send-mail" type="checkbox" checked><span>Mail access immediately</span><span class="nx-check-hint">Sends the temporary password to the user via Gmail.</span></label><label class="nx-check"><input id="nx-admin-user-notify-email" type="checkbox" checked><span>Email alerts on</span></label></div><div class="nx-admin-password-tip">Search, archive, restore, credit, and reset passwords from the lifecycle panel on the right.</div><div class="nx-actions" style="margin-top:16px"><button class="nx-btn nx-btn-primary nx-btn-wide" onclick="nxAdminCreateUser()">Create & Mail Access</button></div></div>';
+    const selectedCard = selected ? (
+      '<div class="nx-admin-lifecycle-card nx-admin-detail-card"><div class="nx-admin-panel-top"><div><div class="nx-admin-panel-kicker">Selected Desk</div><div class="nx-admin-panel-title">'+escapeHtml(selected.full_name || selected.email)+'</div></div><div class="nx-admin-user-badges"><span class="nx-badge '+(String(selected.role||'').toUpperCase()==='ADMIN'?'warn':'cool')+'">'+escapeHtml(selected.role || 'USER')+'</span><span class="nx-badge '+(selectedIsArchived?'warn':(String(selected.status||'').toUpperCase()==='DISABLED'?'bad':'good'))+'">'+escapeHtml(selectedIsArchived ? 'ARCHIVED' : (selected.status || 'ACTIVE'))+'</span></div></div><div class="nx-admin-user-meta"><div class="nx-pay-chip"><span>Wallet</span><strong>'+fmtMoney(selectedWallet.balance || 0)+'</strong></div><div class="nx-pay-chip"><span>Last login</span><strong>'+escapeHtml(fmtDate(selected.last_login_at))+'</strong></div><div class="nx-pay-chip"><span>Updated</span><strong>'+escapeHtml(fmtDate(selected.updated_at))+'</strong></div><div class="nx-pay-chip"><span>Archive reason</span><strong>'+escapeHtml(selectedLifecycle.archive_reason || 'Active desk')+'</strong></div></div><div class="nx-admin-maint-grid"><label class="nx-form-label nx-admin-form-label">Full Name<input id="nx-admin-edit-name" class="nx-input nx-admin-input" value="'+escapeHtml(selected.full_name || '')+'"></label><label class="nx-form-label nx-admin-form-label">Email<input id="nx-admin-edit-email" class="nx-input nx-admin-input" value="'+escapeHtml(selected.email || '')+'"></label><label class="nx-form-label nx-admin-form-label">Role<select id="nx-admin-edit-role" class="nx-select nx-admin-input"><option'+(String(selected.role||'').toUpperCase()==='USER'?' selected':'')+'>USER</option><option'+(String(selected.role||'').toUpperCase()==='ADMIN'?' selected':'')+'>ADMIN</option></select></label><label class="nx-form-label nx-admin-form-label">Status<select id="nx-admin-edit-status" class="nx-select nx-admin-input"><option'+(String(selected.status||'').toUpperCase()==='ACTIVE'?' selected':'')+'>ACTIVE</option><option'+(String(selected.status||'').toUpperCase()==='LIMITED'?' selected':'')+'>LIMITED</option><option'+(String(selected.status||'').toUpperCase()==='DISABLED'?' selected':'')+'>DISABLED</option></select></label><label class="nx-form-label nx-admin-form-label">Wallet Type<select id="nx-admin-edit-wallet-type" class="nx-select nx-admin-input"><option'+(String(selectedWallet.type||'').toUpperCase()==='COUPON'?' selected':'')+'>COUPON</option><option'+(String(selectedWallet.type||'').toUpperCase()==='PAID'?' selected':'')+'>PAID</option></select></label><label class="nx-form-label nx-admin-form-label">WhatsApp<input id="nx-admin-edit-whatsapp" class="nx-input nx-admin-input" value="'+escapeHtml(selectedContacts.whatsapp_phone || '')+'" placeholder="+91 9876543210"></label><label class="nx-form-label nx-admin-form-label">Telegram<input id="nx-admin-edit-telegram" class="nx-input nx-admin-input" value="'+escapeHtml(selectedContacts.telegram_chat_id || '')+'" placeholder="123456789"></label><label class="nx-form-label nx-admin-form-label">Daily Loss<input id="nx-admin-edit-daily-loss" class="nx-input nx-admin-input" value="'+escapeHtml(String(selectedControls.daily_loss_limit || 0))+'"></label><label class="nx-form-label nx-admin-form-label">Max Trades / Day<input id="nx-admin-edit-max-trades" class="nx-input nx-admin-input" value="'+escapeHtml(String(selectedControls.max_trades_per_day || 0))+'"></label><label class="nx-form-label nx-admin-form-label">Max Open Signals<input id="nx-admin-edit-max-signals" class="nx-input nx-admin-input" value="'+escapeHtml(String(selectedControls.max_open_signals || 0))+'"></label><label class="nx-form-label nx-admin-form-label">Internal Notes<textarea id="nx-admin-edit-notes" class="nx-textarea nx-admin-input" placeholder="Relationship notes, desk state, archive reason, follow-up reminders">'+escapeHtml(selected.notes || '')+'</textarea></label></div><div class="nx-admin-inline-toggle-row"><label class="nx-check"><input id="nx-admin-edit-notify-email" type="checkbox"'+checkedAttr(!!selectedNotifications.email)+'><span>Email alerts</span></label><label class="nx-check"><input id="nx-admin-edit-notify-telegram" type="checkbox"'+checkedAttr(!!selectedNotifications.telegram)+'><span>Telegram alerts</span></label><label class="nx-check"><input id="nx-admin-edit-notify-whatsapp" type="checkbox"'+checkedAttr(!!selectedNotifications.whatsapp)+'><span>WhatsApp alerts</span></label><label class="nx-check"><input id="nx-admin-edit-token-reminder" type="checkbox"'+checkedAttr(!!selectedNotifications.token_reminder)+'><span>Token reminder</span></label><label class="nx-check"><input id="nx-admin-edit-send-mail" type="checkbox" checked><span>Notify via Gmail</span><span class="nx-check-hint">Used for password reset, archive, and restore actions.</span></label></div><div class="nx-actions" style="margin-top:16px"><button class="nx-btn nx-btn-primary" onclick="nxAdminSaveUser('+selected.id+')">Save User Changes</button><button class="nx-btn nx-btn-ghost" onclick="nxAdminCredit('+selected.id+')">Credit / Debit</button><button class="nx-btn nx-btn-gold" onclick="nxAdminResetUserPassword('+selected.id+')">Reset Password</button>'+(selectedIsArchived ? '<button class="nx-btn nx-btn-ghost" onclick="nxAdminRestoreUser('+selected.id+')">Restore User</button>' : '<button class="nx-btn nx-btn-ghost" onclick="nxAdminArchiveUser('+selected.id+')">Archive User</button>')+'</div></div>'
+    ) : '<div class="nx-admin-lifecycle-card nx-admin-detail-card"><div class="nx-empty">Select a desk on the right to edit details, reset passwords, archive users, or restore archived desks.</div></div>';
+    const listRows = visibleUsers.length ? visibleUsers.map(function(u){
+      const role = String(u.role || 'USER').toUpperCase();
+      const archived = !!(((u.lifecycle||{}).is_archived));
+      const statusLabel = archived ? 'ARCHIVED' : String(u.status || 'ACTIVE').toUpperCase();
+      const selectedRow = String(u.id) === String((selected||{}).id || '');
+      return '<button class="nx-admin-user-row'+(selectedRow?' on':'')+'" onclick="nxAdminSelectUser('+u.id+')"><div class="nx-admin-user-row-main"><div class="nx-admin-user-row-name">'+escapeHtml(u.full_name || u.email)+'</div><div class="nx-admin-user-row-email">'+escapeHtml(u.email)+'</div><div class="nx-admin-user-row-meta">Updated '+escapeHtml(fmtDate(u.updated_at))+' · Last login '+escapeHtml(fmtDate(u.last_login_at))+'</div></div><div class="nx-admin-user-row-side"><span class="nx-badge '+(role==='ADMIN'?'warn':'cool')+'">'+escapeHtml(role)+'</span><span class="nx-badge '+(archived?'warn':(statusLabel==='DISABLED'?'bad':'good'))+'">'+escapeHtml(statusLabel)+'</span><strong class="nx-admin-wallet-value">'+fmtMoney((((u.wallet||{}).balance)||0))+'</strong></div></button>';
+    }).join('') : '<div class="nx-empty">No desks match this search in the '+escapeHtml(view === 'archived' ? 'archived' : 'active')+' list.</div>';
+    const historyRows = filteredHistory.length ? filteredHistory.map(function(item){
+      return '<div class="nx-admin-history-row"><div class="nx-admin-history-top"><div><div class="nx-item-title">'+escapeHtml(item.title || item.event_type || 'History event')+'</div><div class="nx-item-sub">'+escapeHtml(((item.user||{}).email) || 'Unknown user')+' · '+escapeHtml(fmtDate(item.created_at))+'</div></div><span class="nx-badge cool">'+escapeHtml(item.event_type || 'EVENT')+'</span></div><div class="nx-admin-history-summary">'+escapeHtml(item.summary || 'Lifecycle activity logged from the admin desk.')+'</div><div class="nx-inline-note" style="margin-top:8px">Actor: '+escapeHtml((((item.actor||{}).full_name) || ((item.actor||{}).email) || 'System'))+'</div></div>';
+    }).join('') : '<div class="nx-empty">History will appear here as users are created, edited, credited, archived, restored, or mailed.</div>';
+    const usersCard = '<div class="nx-card nx-admin-lifecycle-shell"><div class="nx-card-head"><div><div class="nx-card-title">User Management</div><div class="nx-card-sub">End-to-end lifecycle desk for provisioning, search, archive, restore, wallet actions, and mailed credentials.</div></div><span class="nx-badge cool">'+fmtNum((a.metrics||{}).total_users||0)+' users</span></div><div class="nx-card-body"><div class="nx-admin-lifecycle-hero"><div class="nx-admin-users-copy"><div class="nx-admin-users-kicker">Lifecycle Desk</div><div class="nx-admin-users-title">Search fast, maintain clean active desks, and move old desks into archive without losing history.</div><div class="nx-admin-users-sub">Active and archived users live in separate lanes. The history tab records what happened, who acted, and when Gmail-backed account actions were triggered.</div></div><div class="nx-admin-users-stats"><div class="nx-pay-chip"><span>Active</span><strong>'+fmtNum((a.metrics||{}).active_users||activeUsers.length)+'</strong></div><div class="nx-pay-chip"><span>Archived</span><strong>'+fmtNum((a.metrics||{}).archived_users||archivedUsers.length)+'</strong></div><div class="nx-pay-chip"><span>History events</span><strong>'+fmtNum((a.metrics||{}).history_events||historyItems.length)+'</strong></div></div></div><div class="nx-admin-lifecycle-grid"><div class="nx-admin-lifecycle-left">'+createCard+selectedCard+'</div><div class="nx-admin-lifecycle-right"><div class="nx-admin-lifecycle-card nx-admin-registry-card"><div class="nx-admin-panel-top"><div><div class="nx-admin-panel-kicker">Registry</div><div class="nx-admin-panel-title">Searchable active, archived, and history views</div></div><div class="nx-admin-panel-note">Search across email, name, phone, telegram, notes, and archive reason. Tabs keep current users separate from old desks.</div></div><div class="nx-admin-registry-tools"><label class="nx-form-label nx-admin-form-label">Search<input id="nx-admin-user-search" class="nx-input nx-admin-input" placeholder="Search by email, name, phone, telegram, notes" value="'+escapeHtml(NX.adminUserQuery || '')+'" oninput="nxAdminSetUserSearch(this.value)"></label><div class="nx-admin-user-tabs"><button class="nx-tab-btn'+(view==='active'?' nx-btn-primary':'')+'" onclick="nxAdminSetUserView(\'active\')">Active <span>'+fmtNum(activeUsers.length)+'</span></button><button class="nx-tab-btn'+(view==='archived'?' nx-btn-primary':'')+'" onclick="nxAdminSetUserView(\'archived\')">Archived <span>'+fmtNum(archivedUsers.length)+'</span></button><button class="nx-tab-btn'+(view==='history'?' nx-btn-primary':'')+'" onclick="nxAdminSetUserView(\'history\')">History <span>'+fmtNum(historyItems.length)+'</span></button></div></div><div class="nx-admin-registry-meta">'+(view==='history' ? ('Showing '+fmtNum(filteredHistory.length)+' lifecycle events') : ('Showing '+fmtNum(visibleUsers.length)+' desks in '+escapeHtml(view)+' view'))+'</div><div class="nx-admin-registry-results">'+(view==='history' ? historyRows : listRows)+'</div></div></div></div></div></div>';
     const routingCard = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Strategies & Routing</div><div class="nx-card-sub">Turn engine streams on or off at the entitlement layer</div></div></div><div class="nx-card-body"><div class="nx-strategy-grid">'+stratCards+'</div></div></div>';
     const couponsCard = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Coupons & Payments</div><div class="nx-card-sub">Bootstrap offers, manual finance operations, and live webhook-ready orders</div></div></div><div class="nx-card-body"><div class="nx-admin-grid"><div><div class="nx-item"><div class="nx-item-title">Create coupon</div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Code<input id="nx-admin-coupon-code" class="nx-input" placeholder="DESK1000"></label><label class="nx-form-label">Credit<input id="nx-admin-coupon-credit" class="nx-input" placeholder="1000"></label></div><div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Max Profit<input id="nx-admin-coupon-cap" class="nx-input" placeholder="2000"></label><label class="nx-form-label">Usage Limit<input id="nx-admin-coupon-limit" class="nx-input" placeholder="25"></label></div><div class="nx-actions" style="margin-top:12px"><button class="nx-btn nx-btn-gold" onclick="nxAdminCreateCoupon()">Create Coupon</button></div></div><div class="nx-item" style="margin-top:12px">'+coupons+'</div></div><div><div class="nx-item">'+payments+'</div></div></div></div></div>';
     const signalsCard = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Recent Routed Signals</div><div class="nx-card-sub">Last delivered inbox events across all subscribed users</div></div></div><div class="nx-card-body">'+signals+'</div></div>';
@@ -641,10 +727,10 @@
       railTitle: (NX.user || {}).full_name || 'Admin',
       railSub: 'Each operational surface has its own lane, so user, routing, payment, and brand actions stay separated.',
       railCards: [
-        '<div class="nx-workspace-rail-card nx-workspace-rail-metric"><div class="nx-workspace-rail-kicker">Users</div><div class="nx-workspace-rail-title">'+fmtNum((a.metrics||{}).total_users||0)+'</div><div class="nx-workspace-rail-sub">Active '+fmtNum((a.metrics||{}).active_users||0)+' · Signals '+fmtNum((a.metrics||{}).signals_total||0)+'</div></div>',
+        '<div class="nx-workspace-rail-card nx-workspace-rail-metric"><div class="nx-workspace-rail-kicker">Users</div><div class="nx-workspace-rail-title">'+fmtNum((a.metrics||{}).total_users||0)+'</div><div class="nx-workspace-rail-sub">Active '+fmtNum((a.metrics||{}).active_users||0)+' · Archived '+fmtNum((a.metrics||{}).archived_users||0)+'</div></div>',
         '<div class="nx-workspace-rail-card nx-workspace-rail-metric"><div class="nx-workspace-rail-kicker">Payments</div><div class="nx-workspace-rail-title">'+((paymentProfile.upi_id && paymentProfile.enabled)?'UPI Live':'Setup')+'</div><div class="nx-workspace-rail-sub">'+escapeHtml(paymentProfile.upi_id || 'No UPI rail saved')+'</div></div>'
       ],
-      headRight: '<div class="nx-pill-row"><span class="nx-pill">Revenue '+fmtMoney((a.metrics||{}).revenue||0)+'</span><span class="nx-pill">'+(gmailReady ? 'Gmail Live' : 'Gmail Pending')+'</span></div>',
+      headRight: '<div class="nx-pill-row"><span class="nx-pill">Revenue '+fmtMoney((a.metrics||{}).revenue||0)+'</span><span class="nx-pill">Archive '+fmtNum((a.metrics||{}).archived_users||0)+'</span><span class="nx-pill">'+(gmailReady ? 'Gmail Live' : 'Gmail Pending')+'</span></div>',
       body: body
     });
   }
@@ -1141,8 +1227,121 @@
       toast('Order removed');
     }catch(err){ toast(err.message); }
   };
-  window.nxAdminCreateUser = async function(){ try{ const data = await nxApi('/api/admin/users', { method:'POST', body: JSON.stringify({ full_name:(el('nx-admin-user-name')||{}).value, email:(el('nx-admin-user-email')||{}).value, password:(el('nx-admin-user-password')||{}).value, role:(el('nx-admin-user-role')||{}).value }) }); await loadAdminData(); safeRender(); toast('User created: ' + ((data.user||{}).email || '')); }catch(err){ toast(err.message); } };
+  window.nxAdminSetUserView = function(view){
+    NX.adminUserView = String(view || 'active').trim().toLowerCase();
+    localStorage.setItem('nx_admin_user_view', NX.adminUserView);
+    safeRender();
+  };
+  window.nxAdminSetUserSearch = function(value){
+    NX.adminUserQuery = String(value || '');
+    localStorage.setItem('nx_admin_user_query', NX.adminUserQuery);
+    safeRender();
+  };
+  window.nxAdminSelectUser = function(userId){
+    NX.selectedAdminUserId = String(userId || '');
+    if(NX.selectedAdminUserId) localStorage.setItem('nx_admin_selected_user_id', NX.selectedAdminUserId);
+    else localStorage.removeItem('nx_admin_selected_user_id');
+    safeRender();
+  };
+  window.nxAdminCreateUser = async function(){
+    try{
+      const data = await nxApi('/api/admin/users', {
+        method:'POST',
+        body: JSON.stringify({
+          full_name:(el('nx-admin-user-name')||{}).value,
+          email:(el('nx-admin-user-email')||{}).value,
+          password:(el('nx-admin-user-password')||{}).value,
+          role:(el('nx-admin-user-role')||{}).value,
+          notify_email: !!((el('nx-admin-user-notify-email')||{}).checked),
+          send_email: !!((el('nx-admin-user-send-mail')||{}).checked)
+        })
+      });
+      NX.adminUserView = 'active';
+      localStorage.setItem('nx_admin_user_view', NX.adminUserView);
+      await loadAdminData();
+      NX.selectedAdminUserId = String(((data.user||{}).id) || '');
+      if(NX.selectedAdminUserId) localStorage.setItem('nx_admin_selected_user_id', NX.selectedAdminUserId);
+      safeRender();
+      toast((data.emailed ? 'Access mailed: ' : 'User created: ') + (((data.user||{}).email) || ''));
+      if(data.temporary_password) window.prompt('Temporary password for ' + (((data.user||{}).email) || 'user'), data.temporary_password);
+    }catch(err){ toast(err.message); }
+  };
+  window.nxAdminSaveUser = async function(userId){
+    try{
+      const data = await nxApi('/api/admin/users/'+userId, {
+        method:'PATCH',
+        body: JSON.stringify({
+          full_name:(el('nx-admin-edit-name')||{}).value,
+          email:(el('nx-admin-edit-email')||{}).value,
+          role:(el('nx-admin-edit-role')||{}).value,
+          status:(el('nx-admin-edit-status')||{}).value,
+          wallet_type:(el('nx-admin-edit-wallet-type')||{}).value,
+          whatsapp_phone:(el('nx-admin-edit-whatsapp')||{}).value,
+          telegram_chat_id:(el('nx-admin-edit-telegram')||{}).value,
+          daily_loss_limit:Number((el('nx-admin-edit-daily-loss')||{}).value||0),
+          max_trades_per_day:Number((el('nx-admin-edit-max-trades')||{}).value||0),
+          max_open_signals:Number((el('nx-admin-edit-max-signals')||{}).value||0),
+          notes:(el('nx-admin-edit-notes')||{}).value,
+          notify_email: !!((el('nx-admin-edit-notify-email')||{}).checked),
+          notify_telegram: !!((el('nx-admin-edit-notify-telegram')||{}).checked),
+          notify_whatsapp: !!((el('nx-admin-edit-notify-whatsapp')||{}).checked),
+          notify_token_reminder: !!((el('nx-admin-edit-token-reminder')||{}).checked)
+        })
+      });
+      await loadAdminData();
+      NX.selectedAdminUserId = String(((data.user||{}).id) || userId || '');
+      safeRender();
+      toast('User changes saved');
+    }catch(err){ toast(err.message); }
+  };
   window.nxAdminCredit = async function(userId){ const amount = window.prompt('Credit amount (use negative to debit)', '500'); if(amount===null) return; try{ await nxApi('/api/admin/users/'+userId+'/wallet/credit', { method:'POST', body: JSON.stringify({ amount: Number(amount||0), note:'Admin control hub adjustment' }) }); await loadAdminData(); safeRender(); toast('Wallet updated'); }catch(err){ toast(err.message); } };
+  window.nxAdminResetUserPassword = async function(userId){
+    const sendMail = !!((el('nx-admin-edit-send-mail')||{}).checked);
+    const password = window.prompt('Temporary password (leave blank to auto-generate)', '');
+    if(password===null) return;
+    try{
+      const data = await nxApi('/api/admin/users/'+userId+'/password-reset', {
+        method:'POST',
+        body: JSON.stringify({ password: password, send_email: sendMail })
+      });
+      await loadAdminData();
+      safeRender();
+      if(data.temporary_password) window.prompt('Temporary password ready', data.temporary_password);
+      toast(data.emailed ? 'Password reset and mailed' : 'Temporary password reset');
+    }catch(err){ toast(err.message); }
+  };
+  window.nxAdminArchiveUser = async function(userId){
+    const reason = window.prompt('Archive reason', 'Client inactive / old desk');
+    if(reason===null) return;
+    try{
+      const data = await nxApi('/api/admin/users/'+userId+'/archive', {
+        method:'POST',
+        body: JSON.stringify({ reason: reason, send_email: !!((el('nx-admin-edit-send-mail')||{}).checked) })
+      });
+      NX.adminUserView = 'archived';
+      localStorage.setItem('nx_admin_user_view', NX.adminUserView);
+      await loadAdminData();
+      NX.selectedAdminUserId = String(((data.user||{}).id) || userId || '');
+      safeRender();
+      toast(data.emailed ? 'User archived and notified' : 'User archived');
+    }catch(err){ toast(err.message); }
+  };
+  window.nxAdminRestoreUser = async function(userId){
+    const note = window.prompt('Restore note', 'Reactivating desk');
+    if(note===null) return;
+    try{
+      const data = await nxApi('/api/admin/users/'+userId+'/restore', {
+        method:'POST',
+        body: JSON.stringify({ note: note, send_email: !!((el('nx-admin-edit-send-mail')||{}).checked) })
+      });
+      NX.adminUserView = 'active';
+      localStorage.setItem('nx_admin_user_view', NX.adminUserView);
+      await loadAdminData();
+      NX.selectedAdminUserId = String(((data.user||{}).id) || userId || '');
+      safeRender();
+      toast(data.emailed ? 'User restored and notified' : 'User restored');
+    }catch(err){ toast(err.message); }
+  };
   window.nxAdminToggleStrategy = async function(code, active){ try{ await nxApi('/api/admin/strategies/'+code, { method:'PATCH', body: JSON.stringify({ active: !!active }) }); await loadAdminData(); safeRender(); toast('Strategy status saved'); }catch(err){ toast(err.message); } };
   window.nxAdminCreateCoupon = async function(){ try{ await nxApi('/api/admin/coupons', { method:'POST', body: JSON.stringify({ code:(el('nx-admin-coupon-code')||{}).value, credit:Number((el('nx-admin-coupon-credit')||{}).value||0), max_profit:Number((el('nx-admin-coupon-cap')||{}).value||0), usage_limit:Number((el('nx-admin-coupon-limit')||{}).value||1) }) }); await loadAdminData(); safeRender(); toast('Coupon created'); }catch(err){ toast(err.message); } };
   window.nxAdminMarkPaid = async function(orderId){ try{ await nxApi('/api/admin/payments/'+orderId+'/mark-paid', { method:'POST', body: JSON.stringify({ source:'admin-validation' }) }); await loadAdminData(); safeRender(); toast('Payment approved and reflected to user account'); }catch(err){ toast(err.message); } };
