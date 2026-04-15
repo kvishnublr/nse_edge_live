@@ -16,9 +16,28 @@ Fully automated TOTP (no browser): set KITE_USER_ID, KITE_PASSWORD, KITE_TOTP_SE
 """
 
 import os
+import subprocess
 import sys
 import webbrowser
 from urllib.parse import urlparse, parse_qs
+
+
+def _open_login_url(url: str) -> None:
+    """Prefer Google Chrome on Windows so the Kite login matches your daily browser."""
+    if sys.platform == "win32":
+        candidates = [
+            os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
+            os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
+            os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
+        ]
+        for exe in candidates:
+            if exe and os.path.isfile(exe):
+                try:
+                    subprocess.Popen([exe, url], shell=False)
+                    return
+                except OSError:
+                    continue
+    webbrowser.open(url)
 
 try:
     from kiteconnect import KiteConnect
@@ -79,7 +98,7 @@ def main():
     print("\n  In the browser: User ID â†’ Password â†’ 6-digit TOTP from your authenticator app.")
     print("  Kite app redirect must match (e.g. https://127.0.0.1/ in developer settings).\n")
     print(f"Opening: {login_url}\n")
-    webbrowser.open(login_url)
+    _open_login_url(login_url)
 
     print("After login you should be redirected to a URL like:")
     print("  https://127.0.0.1/?request_token=XXXX&action=login&status=success")

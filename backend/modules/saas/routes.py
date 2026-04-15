@@ -1076,7 +1076,14 @@ def _start_interactive_kite_login(user_id: int, payload: dict[str, Any]) -> dict
     api_key = str(payload.get("api_key") or "").strip()
     api_secret = str(payload.get("api_secret") or "").strip()
     if not api_key or not api_secret:
-        raise HTTPException(status_code=400, detail="API key and API secret are required for interactive Kite login")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "One-time Kite login needs your Kite Connect API key and secret. "
+                "Either save them on this desk once (Advanced → API key/secret → Validate & Save), "
+                "or set KITE_API_KEY and KITE_API_SECRET in backend/.env on the server."
+            ),
+        )
     login_url = ""
     try:
         from kiteconnect import KiteConnect

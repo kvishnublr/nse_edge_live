@@ -355,6 +355,18 @@
       + '</div>';
   }
 
+  /** Broker dropdown (unsaved) vs last-saved dashboard broker — drives Zerodha tools visibility. */
+  function nxEffectiveBrokerCode(broker){
+    var b = broker || {};
+    try{
+      var bcEl = document.getElementById('nx-broker-code');
+      if(bcEl && bcEl.value){
+        return String(bcEl.value || 'PAPER').toUpperCase();
+      }
+    }catch(_){ }
+    return String(b.broker_code || 'PAPER').toUpperCase();
+  }
+
   function renderSignalItems(items){
     if(!items || !items.length) return '<div class="nx-empty">No routed signals yet. Once live engines emit SPIKE, INDEX, or SWING ideas, they will appear here automatically.</div>';
     return '<div class="nx-list">' + items.map(function(item){
@@ -380,9 +392,11 @@
       + '<div class="nx-inline-note" style="margin-top:10px">Last reminder: '+escapeHtml(fmtDate(notifications.last_token_reminder_at))+'</div></div></div>';
   }
 
-  function renderKiteExecutionHub(user, broker, brokerOptions, brokerProfileBits, brokerTestHtml, executionOrders, liveLocked){
-    const code = String(broker.broker_code || 'PAPER').toUpperCase();
+  function renderKiteExecutionHub(user, broker, brokerOptions, brokerProfileBits, brokerTestHtml, executionOrders, effectiveBrokerCode){
+    const code = String(effectiveBrokerCode || broker.broker_code || 'PAPER').toUpperCase();
     const paper = code === 'PAPER';
+    const liveLocked = code === 'PAPER';
+    const paperRouteOn = !!broker.paper_mode;
     const sessOk = broker.status === 'CONNECTED' || broker.status === 'READY';
     const engineReady = !!broker.enabled && sessOk && !paper;
     const assist = NX.brokerAssist || null;
@@ -403,16 +417,17 @@
     const sampling = NX.loadingAction === 'broker-sample';
     const kiteBrand = '<div class="nx-kite-brand"><span class="nx-kite-z">Z</span><span>Zerodha Kite</span></div>';
     const steps = paper
-      ? '<div class="nx-z-paper-callout"><div class="nx-z-paper-title">Paper routing</div><div class="nx-z-paper-sub">No broker login needed. Orders are simulated while you test the full routing path.</div></div>'
-      : '<div class="nx-z-steps-wrap"><div class="nx-z-steps-head">Simple Zerodha flow</div><ol class="nx-z-steps">'
-        + '<li><span class="nx-z-sn">1</span><div><strong>Fast lane</strong><span>Use the server session if backend/.env already has a valid token.</span></div></li>'
-        + '<li><span class="nx-z-sn">2</span><div><strong>Login</strong><span>Otherwise open Kite, approve the app, and copy the final address.</span></div></li>'
-        + '<li><span class="nx-z-sn">3</span><div><strong>Save</strong><span>Paste the URL or request_token and we validate it instantly.</span></div></li>'
-        + '</ol></div>';
+      ? '<div class="nx-z-paper-callout"><div class="nx-z-paper-title">Desk type: Paper</div><div class="nx-z-paper-sub">No Zerodha session on this desk. To connect Kite, open the <b>Broker</b> menu above and choose <b>Zerodha Kite</b>, then click <b>Validate &amp; Save</b> after you connect. <b>Paper route</b> (below) is separate: it only simulates orders once Zerodha is connected.</div></div>'
+      : '<div class="nx-z-steps-wrap"><div class="nx-z-steps-head">Connect Zerodha (three options)</div><ol class="nx-z-steps">'
+        + '<li><span class="nx-z-sn">1</span><div><strong>Server session</strong><span>If this server already has <code>backend/.env</code> Kite credentials, click <b>Use Server Session</b>.</span></div></li>'
+        + '<li><span class="nx-z-sn">2</span><div><strong>One-time login</strong><span>Opens Zerodha in your browser. Log in once; Nexus captures the redirect and saves the desk (needs API secret on file or in the form).</span></div></li>'
+        + '<li><span class="nx-z-sn">3</span><div><strong>Manual paste</strong><span>Paste the full redirect URL or <code>request_token</code>, then <b>Validate &amp; Save</b>.</span></div></li>'
+        + '</ol></div>'
+        + (paperRouteOn ? '<div class="nx-z-paper-route-note"><b>Paper route is ON</b> — orders stay simulated, but you still need a valid Kite session above for live quotes and session checks.</div>' : '');
     const quickLane = paper ? '' : ''
       + '<div class="nx-z-command-grid">'
       + '<div class="nx-z-command-card nx-z-command-card-primary"><div class="nx-z-fast-kicker">Quick connect</div><div class="nx-z-fast-title">Use server session</div><div class="nx-z-fast-sub">Fastest option. If this machine already has a valid Kite token in <b>backend/.env</b>, connect in one click.</div><div class="nx-actions" style="margin-top:14px"><button type="button" class="nx-btn nx-btn-primary" onclick="nxImportEnvBrokerToken()" '+(importing?'disabled':'')+'>'+(importing?'Importing...':'Use Server Session')+'</button><button type="button" class="nx-btn nx-btn-ghost" onclick="nxCheckServerTokenStatus()" '+(checking?'disabled':'')+'>'+(checking?'Checking...':'Check Status')+'</button></div></div>'
-      + '<div class="nx-z-command-card nx-z-command-card-lite"><div class="nx-z-fast-kicker">One-time login</div><div class="nx-z-fast-title">Open official Kite</div><div class="nx-z-fast-sub">Nexus opens the official Zerodha page. The user types credentials only there, and Nexus completes the connection automatically after login.</div><div class="nx-actions" style="margin-top:14px"><button type="button" class="nx-btn nx-btn-gold" onclick="nxKiteInteractiveLogin()" '+(interactiveStarting?'disabled':'')+'>'+(interactiveStarting?'Opening...':'One-Time Kite Login')+'</button></div></div>'
+      + '<div class="nx-z-command-card nx-z-command-card-lite"><div class="nx-z-fast-kicker">One-time login</div><div class="nx-z-fast-title">Open official Kite</div><div class="nx-z-fast-sub">Opens Zerodha in <b>Chrome or Edge</b> on the server. Log in there; Nexus reads the redirect and saves this desk. Requires API <b>key</b> + <b>secret</b> (saved on this desk, or in <code>backend/.env</code> on the server).</div><div class="nx-actions" style="margin-top:14px"><button type="button" class="nx-btn nx-btn-gold" onclick="nxKiteInteractiveLogin()" '+(interactiveStarting?'disabled':'')+'>'+(interactiveStarting?'Opening...':'One-Time Kite Login')+'</button></div></div>'
       + '<div class="nx-z-command-card"><div class="nx-z-fast-kicker">Auto refresh</div><div class="nx-z-fast-title">Refresh and use</div><div class="nx-z-fast-sub">If user ID, password, TOTP, API key, and secret are saved in <b>backend/.env</b>, refresh the session automatically.</div><div class="nx-actions" style="margin-top:14px"><button type="button" class="nx-btn nx-btn-ghost" onclick="nxRefreshEnvBrokerToken()" '+(refreshing?'disabled':'')+'>'+(refreshing?'Refreshing...':'Auto Refresh & Use')+'</button></div></div>'
       + '</div>'
       + '<div class="nx-status '+tokenClass+'" style="margin-top:12px"><b>'+tokenTitle+'</b>'+(tokenMessage ? '<div style="margin-top:6px">'+tokenMessage+'</div>' : '')+tokenDetail+'</div>';
@@ -426,14 +441,14 @@
     const simpleForm = ''
       + '<div class="nx-z-simple">'
       + '<div class="nx-form-grid nx-z-topline"><label class="nx-form-label">Broker<select id="nx-broker-code" class="nx-select" onchange="nxBrokerCodeSync()">'+brokerOptions+'</select></label><label class="nx-form-label">Desk label<input id="nx-broker-label" class="nx-input" placeholder="Primary desk" value="'+escapeHtml(broker.account_label || '')+'"></label></div>'
-      + '<div id="nx-paper-fields" class="nx-z-toggle" style="display:'+(paper?'block':'none')+'"><p class="nx-z-lead">Paper mode rehearses routing without a live broker. Switch to <b>Zerodha Kite</b> when you want real fills.</p></div>'
+      + '<div id="nx-paper-fields" class="nx-z-toggle" style="display:'+(paper?'block':'none')+'"><p class="nx-z-lead">You have <b>Paper</b> selected as the broker <em>type</em>. Pick <b>Zerodha Kite</b> in the Broker menu to show login tools. After Kite is connected, use <b>Paper route</b> in Advanced to keep orders simulated.</p></div>'
       + '<div id="nx-zerodha-fields" class="nx-z-toggle" style="display:'+(paper?'none':'block')+'">'
       + quickLane
       + manualCard
       + '</div></div>';
     let readiness = '';
     if(paper){
-      readiness = '<div class="nx-z-ready nx-z-ready-paper"><div class="nx-z-ready-title">Paper desk</div><div class="nx-z-ready-sub">Simulated orders only. Select Zerodha and validate to go live.</div></div>';
+      readiness = '<div class="nx-z-ready nx-z-ready-paper"><div class="nx-z-ready-title">Paper desk type</div><div class="nx-z-ready-sub">Choose <b>Zerodha Kite</b> in the Broker menu to connect. <b>Paper route</b> (Advanced) is optional and only affects whether orders are sent live.</div></div>';
     }else if(sessOk && broker.enabled){
       readiness = '<div class="nx-z-ready nx-z-ready-on"><div class="nx-z-ready-title">Ready for execution</div><div class="nx-z-ready-sub">Kite session verified. Enable <b>Live mode</b> only when you want real orders.</div></div>';
     }else if(sessOk && !broker.enabled){
@@ -445,7 +460,7 @@
       + '<div class="nx-card nx-kite-dock">'
       + '<div class="nx-kite-dock-head">'
       + '<div class="nx-kite-dock-title-row">'
-      + '<div><div class="nx-card-title nx-kite-dock-title">Trading execution</div><div class="nx-card-sub">Cleaner Zerodha onboarding with quick import, manual fallback, and routing controls in one place.</div></div>'
+      + '<div><div class="nx-card-title nx-kite-dock-title">Trading execution</div><div class="nx-card-sub">Pick your broker type first. Zerodha tools appear only when <b>Zerodha Kite</b> is selected — then connect, validate, and tune routing below.</div></div>'
       + '<div class="nx-kite-dock-badges"><span class="nx-badge '+statusClass+'">'+escapeHtml(broker.status || 'Idle')+'</span><span class="nx-badge '+modeBadge+'">'+modeLabel+'</span><span class="nx-badge '+(engineReady ? 'good' : 'warn')+'">'+(engineReady ? 'Engine ready' : (paper ? 'Paper' : 'Awaiting validation'))+'</span></div>'
       + '</div>'
       + '<div class="nx-kite-dock-hero">'+(paper ? '' : kiteBrand)+steps+'</div>'
@@ -457,7 +472,7 @@
       + '<div class="nx-form-grid"><label class="nx-form-label">Broker user ID<input id="nx-broker-user-id" class="nx-input" placeholder="AB1234" value="'+escapeHtml(broker.broker_user_id || '')+'"></label><label class="nx-form-label">Default qty<input id="nx-broker-qty" class="nx-input" placeholder="1" value="'+escapeHtml(String(broker.default_quantity || 1))+'"></label></div>'
       + '<div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Manual access token<input id="nx-broker-access-token" class="nx-input" placeholder="'+escapeHtml(broker.access_token_masked || 'Only if not using login URL')+'" value=""></label><label class="nx-form-label">Intraday product<select id="nx-broker-intraday-product" class="nx-select"><option '+((broker.intraday_product||'MIS')==='MIS'?'selected':'')+'>MIS</option><option '+((broker.intraday_product||'MIS')==='CNC'?'selected':'')+'>CNC</option><option '+((broker.intraday_product||'MIS')==='NRML'?'selected':'')+'>NRML</option></select></label></div>'
       + '<div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Positional product<select id="nx-broker-positional-product" class="nx-select"><option '+((broker.positional_product||'CNC')==='CNC'?'selected':'')+'>CNC</option><option '+((broker.positional_product||'CNC')==='NRML'?'selected':'')+'>NRML</option><option '+((broker.positional_product||'CNC')==='MIS'?'selected':'')+'>MIS</option></select></label><label class="nx-form-label">&nbsp;</label></div>'
-      + '<div class="nx-toggle-grid" style="margin-top:14px"><label class="nx-check"><input id="nx-broker-enabled" type="checkbox"'+checkedAttr(!!broker.enabled)+'><span>Broker enabled</span></label><label class="nx-check"><input id="nx-broker-paper-mode" type="checkbox"'+checkedAttr(!!broker.paper_mode)+'><span>Paper route</span></label><label class="nx-check"><input id="nx-broker-live-mode" type="checkbox"'+checkedAttr(!!broker.live_mode)+' '+(liveLocked ? 'disabled' : '')+'><span>Live mode</span></label><label class="nx-check"><input id="nx-user-auto-execute" type="checkbox"'+checkedAttr(!!((user.controls||{}).auto_execute))+'><span>Auto execute</span></label></div>'
+      + '<div class="nx-toggle-grid" style="margin-top:14px"><label class="nx-check"><input id="nx-broker-enabled" type="checkbox"'+checkedAttr(!!broker.enabled)+'><span>Broker enabled</span><span class="nx-check-hint">Allow routing to this desk</span></label><label class="nx-check"><input id="nx-broker-paper-mode" type="checkbox"'+checkedAttr(!!broker.paper_mode || paper)+'><span>Paper route</span><span class="nx-check-hint">Simulate orders (Kite session can still be real)</span></label><label class="nx-check"><input id="nx-broker-live-mode" type="checkbox"'+checkedAttr(!!broker.live_mode && !paper)+' '+(liveLocked ? 'disabled' : '')+'><span>Live mode</span><span class="nx-check-hint">Real broker orders when off paper route</span></label><label class="nx-check"><input id="nx-user-auto-execute" type="checkbox"'+checkedAttr(!!((user.controls||{}).auto_execute))+'><span>Auto execute</span></label></div>'
       + '<div class="nx-form-grid-3" style="margin-top:12px"><label class="nx-form-label">Daily loss<input id="nx-user-daily-loss" class="nx-input" placeholder="2500" value="'+escapeHtml(String((user.controls||{}).daily_loss_limit || 0))+'"></label><label class="nx-form-label">Max trades / day<input id="nx-user-max-trades" class="nx-input" placeholder="6" value="'+escapeHtml(String((user.controls||{}).max_trades_per_day || 0))+'"></label><label class="nx-form-label">Max open signals<input id="nx-user-max-open" class="nx-input" placeholder="3" value="'+escapeHtml(String((user.controls||{}).max_open_signals || 0))+'"></label></div>'
       + '</div></details>'
       + '<div class="nx-z-cta">'
@@ -471,6 +486,7 @@
       + '<div class="nx-kite-dock-side">'
       + readiness
       + '<div class="nx-item nx-kite-health"><div class="nx-item-title">Session</div><div class="nx-item-sub">'+profileLine+'</div>'
+      + '<div class="nx-inline-note" style="margin-top:8px">Key / Secret / Token show what is <b>saved on this desk</b> after Validate. Dashes mean not stored yet — use Quick connect, One-time login, or paste in Advanced.</div>'
       + '<div class="nx-broker-chips" style="margin-top:12px"><span class="nx-badge cool">Key '+escapeHtml(broker.api_key_masked || '—')+'</span><span class="nx-badge warn">Secret '+escapeHtml(broker.api_secret_masked || '—')+'</span><span class="nx-badge cool">Token '+escapeHtml(broker.access_token_masked || '—')+'</span></div>'
       + (broker.last_error ? '<div class="nx-status error" style="margin-top:12px">'+escapeHtml(broker.last_error)+'</div>' : '<div class="nx-status success" style="margin-top:12px">No blocking errors. Use <b>Test session</b> after market opens if needed.</div>')
       + '</div>'
@@ -519,8 +535,9 @@
     ) : '<div class="nx-empty">Select a plan to generate a payment order and scanner.</div>';
     const tradeHtml = NX.trades.length ? '<table class="nx-mini-table"><thead><tr><th>Symbol</th><th>Strategy</th><th>Status</th><th>PnL</th></tr></thead><tbody>'+NX.trades.slice(0,8).map(function(t){ return '<tr><td>'+escapeHtml(t.symbol)+'</td><td>'+escapeHtml(t.strategy_code)+'</td><td>'+escapeHtml(t.status)+'</td><td>'+fmtMoney(t.pnl)+'</td></tr>'; }).join('')+'</tbody></table>' : '<div class="nx-empty">Manual or synced trade journal entries will appear here.</div>';
     const brokerOptions = brokerCatalog.length ? brokerCatalog.map(function(b){
-      return '<option value="'+escapeHtml(b.code)+'" '+(String(broker.broker_code||'').toUpperCase()===String(b.code||'').toUpperCase() ? 'selected' : '')+'>'+escapeHtml(b.name)+' • '+escapeHtml(b.tagline || '')+'</option>';
-    }).join('') : '<option value="PAPER">Paper Router</option><option value="ZERODHA">Zerodha Kite</option>';
+      var bc = String(b.code||'').toUpperCase();
+      return '<option value="'+escapeHtml(b.code)+'" '+(effectiveBrokerCode===bc ? 'selected' : '')+'>'+escapeHtml(b.name)+' • '+escapeHtml(b.tagline || '')+'</option>';
+    }).join('') : '<option value="PAPER"'+(effectiveBrokerCode==='PAPER'?' selected':'')+'>Paper Router</option><option value="ZERODHA"'+(effectiveBrokerCode==='ZERODHA'?' selected':'')+'>Zerodha Kite</option>';
     const executionOrders = (broker.recent_orders||[]).length ? '<table class="nx-mini-table"><thead><tr><th>When</th><th>Strategy</th><th>Symbol</th><th>Status</th><th>Mode</th></tr></thead><tbody>'+(broker.recent_orders||[]).slice(0,8).map(function(o){
       return '<tr><td>'+escapeHtml(fmtDate(o.created_at))+'</td><td>'+escapeHtml(o.strategy_code)+'</td><td>'+escapeHtml(o.symbol || o.tradingsymbol)+'</td><td><span class="nx-badge '+(/FAILED|ERROR/.test(String(o.status||'')) ? 'bad' : (/SKIPPED/.test(String(o.status||'')) ? 'warn' : 'good'))+'">'+escapeHtml(o.status || 'PENDING')+'</span>'+(o.error_text ? '<div class="nx-inline-note" style="margin-top:6px">'+escapeHtml(o.error_text)+'</div>' : '')+'</td><td>'+(o.live_mode ? 'Live' : 'Paper')+'</td></tr>';
     }).join('')+'</tbody></table>' : '<div class="nx-empty">No broker execution attempts yet. Once auto-routing is enabled, placed or simulated orders will show here.</div>';
@@ -528,10 +545,10 @@
     if((broker.profile||{}).name) brokerProfileBits.push(escapeHtml(broker.profile.name));
     if((broker.profile||{}).user_id) brokerProfileBits.push('ID ' + escapeHtml(broker.profile.user_id));
     if((broker.profile||{}).email) brokerProfileBits.push(escapeHtml(broker.profile.email));
-    const liveLocked = String(broker.broker_code || '').toUpperCase() === 'PAPER';
+    const effectiveBrokerCode = nxEffectiveBrokerCode(broker);
     const brokerTest = NX.brokerTest || null;
     const brokerTestHtml = brokerTest ? '<div class="nx-status '+escapeHtml(brokerTest.type === 'error' ? 'error' : 'success')+'" style="margin-top:12px"><b>'+(brokerTest.type === 'error' ? 'Validation issue' : 'Session OK')+'</b>'+(brokerTest.message ? ' · ' + escapeHtml(brokerTest.message) : '')+(brokerTest.detail ? '<div style="margin-top:6px">'+escapeHtml(brokerTest.detail)+'</div>' : '')+'</div>' : '';
-    const kiteDeskHtml = renderKiteExecutionHub(user, broker, brokerOptions, brokerProfileBits, brokerTestHtml, executionOrders, liveLocked);
+    const kiteDeskHtml = renderKiteExecutionHub(user, broker, brokerOptions, brokerProfileBits, brokerTestHtml, executionOrders, effectiveBrokerCode);
     const notifyCardHtml = renderUserNotifyCard(contacts, notifications);
     const overviewCard = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Overview</div><div class="nx-card-sub">Wallet, signals, and performance snapshot</div></div><span class="nx-badge cool">'+escapeHtml((user.subscription||{}).plan_code || 'No Plan')+'</span></div><div class="nx-card-body"><div class="nx-metric-grid"><div class="nx-metric"><div class="nx-metric-k">Balance</div><div class="nx-metric-v">'+fmtMoney((((user.wallet||{}).balance)||0))+'</div></div><div class="nx-metric"><div class="nx-metric-k">Unread</div><div class="nx-metric-v">'+fmtNum(metrics.signals_unread||0)+'</div></div><div class="nx-metric"><div class="nx-metric-k">Closed Trades</div><div class="nx-metric-v">'+fmtNum((perf.summary||{}).closed_trades||0)+'</div></div><div class="nx-metric"><div class="nx-metric-k">Total PnL</div><div class="nx-metric-v">'+fmtMoney((perf.summary||{}).total_pnl||0)+'</div></div></div><div class="nx-inline-note" style="margin-top:14px">Controls: daily loss '+fmtMoney(((user.controls||{}).daily_loss_limit)||0)+' · max trades '+fmtNum(((user.controls||{}).max_trades_per_day)||0)+' · profit share '+fmtNum(((user.controls||{}).profit_share_pct)||0)+'%</div></div></div>';
     const statusStrip = '<div class="nx-card"><div class="nx-card-head"><div><div class="nx-card-title">Workspace status</div><div class="nx-card-sub">Live access posture for your desk, broker, and payments.</div></div></div><div class="nx-card-body"><div class="nx-workspace-mini-grid"><div class="nx-item"><div class="nx-item-title">Subscription</div><div class="nx-item-sub">'+escapeHtml((user.subscription||{}).plan_code || 'No active plan')+' · '+escapeHtml((user.subscription||{}).status || 'NONE')+'</div></div><div class="nx-item"><div class="nx-item-title">Broker</div><div class="nx-item-sub">'+escapeHtml(broker.broker_name || 'Paper Router')+' · '+escapeHtml(broker.status || 'Idle')+'</div></div><div class="nx-item"><div class="nx-item-title">Notifications</div><div class="nx-item-sub">'+escapeHtml((notifications.email ? 'Email ' : '') + (notifications.telegram ? 'Telegram ' : '') + (notifications.whatsapp ? 'WhatsApp ' : '') || 'All disabled')+'</div></div></div></div></div>';
@@ -618,9 +635,6 @@
     const mount = el('nx-root');
     if(!mount) return;
     mount.innerHTML = renderHero() + renderBody();
-    if(NX.user && NX.user.role !== 'ADMIN'){
-      setTimeout(function(){ if(window.nxBrokerCodeSync) window.nxBrokerCodeSync(); }, 0);
-    }
   }
 
   function safeRender(){
@@ -764,19 +778,7 @@
     };
   }
   window.nxBrokerCodeSync = function(){
-    const code = String(((el('nx-broker-code')||{}).value || 'PAPER')).toUpperCase();
-    const liveEl = el('nx-broker-live-mode');
-    const paperEl = el('nx-broker-paper-mode');
-    const z = el('nx-zerodha-fields');
-    const p = el('nx-paper-fields');
-    if(z) z.style.display = code === 'PAPER' ? 'none' : 'block';
-    if(p) p.style.display = code === 'PAPER' ? 'block' : 'none';
-    if(code === 'PAPER'){
-      if(liveEl){ liveEl.checked = false; liveEl.disabled = true; }
-      if(paperEl) paperEl.checked = true;
-    }else if(liveEl){
-      liveEl.disabled = false;
-    }
+    safeRender();
   };
   function stopKiteInteractivePoll(){
     if(window._nxKiteInteractiveTimer){

@@ -778,6 +778,13 @@ def log_swing_radar_triggers(
         return 0
 
     now = datetime.now(IST)
+    try:
+        from config import is_market_session_day
+
+        if not is_market_session_day(now.date()):
+            return 0
+    except Exception:
+        pass
     now_ts = time.time()
     trade_date = now.strftime("%Y-%m-%d")
     signal_time = now.strftime("%H:%M")
@@ -849,6 +856,13 @@ def log_live_spikes(spikes: list, gates: dict, verdict: str, pass_count: int, in
     if not spikes:
         return 0
     now = datetime.now(IST)
+    try:
+        from config import is_market_session_day
+
+        if not is_market_session_day(now.date()):
+            return 0
+    except Exception:
+        pass
     now_ts = time.time()
     trade_date = now.strftime("%Y-%m-%d")
     signal_time = now.strftime("%H:%M")

@@ -2922,6 +2922,155 @@ async def token_status():
         })
 
 
+async def _apply_live_kite_token():
+    """Apply the current env token to the live process and return the Kite profile."""
+    from scheduler import _apply_new_token
+
+    _apply_new_token()
+
+    from feed import get_kite
+    profile = get_kite().profile()
+
+    try:
+        from feed import fetch_quotes_rest
+
+        fetch_quotes_rest()
+    except Exception as exc:
+        logger.warning("token-live-apply: fetch_quotes_rest: %s", exc)
+
+    try:
+        await refresh_state()
+    except Exception as exc:
+        logger.warning("token-live-apply: refresh_state: %s", exc)
+
+    return profile
+
+
+@app.get("/api/token-login-url")
+async def token_login_url():
+    """Return the Zerodha login URL for manual one-time token refresh."""
+    from pathlib import Path
+    from dotenv import load_dotenv
+
+    _envp = Path(__file__).resolve().parent / ".env"
+    if _envp.is_file():
+        load_dotenv(_envp, override=True)
+
+    api_key = os.getenv("KITE_API_KEY", "").strip()
+    if not api_key:
+        return JSONResponse(
+            {"ok": False, "msg": "KITE_API_KEY missing in backend/.env"},
+            status_code=400,
+        )
+
+    return JSONResponse(
+        {
+            "ok": True,
+            "login_url": f"https://kite.zerodha.com/connect/login?v=3&api_key={api_key}",
+        }
+    )
+
+
+@app.post("/api/token-exchange")
+async def token_exchange_manual(request: Request):
+    """
+    Accept a pasted redirect URL (or raw request_token), exchange it for an
+    access token, persist it to .env, and apply it live without a restart.
+    """
+    from pathlib import Path
+    from urllib.parse import parse_qs, urlparse
+    from dotenv import load_dotenv, set_key
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    raw = str(body.get("redirect_url") or body.get("request_token") or "").strip()
+    if not raw:
+        return JSONResponse(
+            {"ok": False, "msg": "Paste the full redirect URL or a request_token."},
+            status_code=400,
+        )
+
+    if "request_token=" in raw or "://" in raw:
+        try:
+            parsed = urlparse(raw)
+            params = parse_qs(parsed.query)
+            token_list = params.get("request_token")
+            if not token_list and parsed.fragment:
+                params = parse_qs(parsed.fragment)
+                token_list = params.get("request_token")
+            if not token_list:
+                raise ValueError("request_token not found in pasted URL")
+            request_token = str(token_list[0] or "").strip()
+        except Exception as exc:
+            return JSONResponse({"ok": False, "msg": str(exc)}, status_code=400)
+    else:
+        request_token = raw
+
+    if not request_token:
+        return JSONResponse(
+            {"ok": False, "msg": "request_token is empty."},
+            status_code=400,
+        )
+
+    _envp = Path(__file__).resolve().parent / ".env"
+    if _envp.is_file():
+        load_dotenv(_envp, override=True)
+
+    api_key = os.getenv("KITE_API_KEY", "").strip()
+    api_secret = os.getenv("KITE_API_SECRET", "").strip()
+    if not api_key or not api_secret:
+        return JSONResponse(
+            {"ok": False, "msg": "KITE_API_KEY or KITE_API_SECRET missing in backend/.env"},
+            status_code=400,
+        )
+
+    try:
+        from kiteconnect import KiteConnect
+
+        kite = KiteConnect(api_key=api_key)
+        sess = kite.generate_session(request_token, api_secret=api_secret)
+        access_token = str(sess.get("access_token") or "").strip()
+        user_name = sess.get("user_name", "")
+    except Exception as exc:
+        return JSONResponse({"ok": False, "msg": str(exc)}, status_code=400)
+
+    if not access_token:
+        return JSONResponse(
+            {"ok": False, "msg": "Kite session did not return an access_token."},
+            status_code=500,
+        )
+
+    try:
+        if _envp.is_file():
+            set_key(str(_envp), "KITE_ACCESS_TOKEN", access_token)
+        os.environ["KITE_ACCESS_TOKEN"] = access_token
+
+        _root_env = _envp.parent.parent / ".env"
+        if _root_env.is_file():
+            set_key(str(_root_env), "KITE_ACCESS_TOKEN", access_token)
+
+        profile = await _apply_live_kite_token()
+        return JSONResponse(
+            {
+                "ok": True,
+                "msg": "Token exchanged and applied live",
+                "user": profile.get("user_name", "") or user_name,
+            }
+        )
+    except Exception as exc:
+        logger.error("token-exchange: %s", exc, exc_info=True)
+        return JSONResponse(
+            {
+                "ok": False,
+                "msg": f"Token saved but live apply failed: {exc}",
+            },
+            status_code=500,
+        )
+
+
 @app.post("/api/token-refresh")
 async def token_refresh_manual():
     """Manually trigger a Kite token refresh with a bounded subprocess."""
@@ -2986,17 +3135,9 @@ async def token_refresh_manual():
     result, errmsg = await loop.run_in_executor(None, _do)
     if result:
         try:
-            from feed import fetch_quotes_rest
-            from scheduler import _apply_new_token
-
-            _apply_new_token()
-            fetch_quotes_rest()
+            await _aio.wait_for(_apply_live_kite_token(), timeout=20)
         except Exception as exc:
-            logger.warning("token-refresh: fetch_quotes_rest: %s", exc)
-        try:
-            await _aio.wait_for(refresh_state(), timeout=20)
-        except Exception as exc:
-            logger.warning("token-refresh: refresh_state: %s", exc)
+            logger.warning("token-refresh: live apply: %s", exc)
         return JSONResponse({"ok": True, "msg": "Token refreshed and applied live"})
     return JSONResponse({"ok": False, "msg": errmsg}, status_code=500)
 
@@ -3021,19 +3162,7 @@ async def token_reload_from_env():
             status_code=400,
         )
     try:
-        from scheduler import _apply_new_token
-
-        _apply_new_token()
-        from feed import get_kite
-
-        profile = get_kite().profile()
-        try:
-            from feed import fetch_quotes_rest
-
-            fetch_quotes_rest()
-        except Exception as _qe:
-            logger.warning("token-reload-env: fetch_quotes_rest: %s", _qe)
-        await refresh_state()
+        profile = await _apply_live_kite_token()
         return JSONResponse(
             {
                 "ok": True,
