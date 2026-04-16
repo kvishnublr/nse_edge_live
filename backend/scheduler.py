@@ -1259,6 +1259,38 @@ def _apply_new_token():
         logger.error(f"_apply_new_token error: {e}")
 
 
+def apply_kite_session_live(access_token: str, api_key: str | None = None) -> dict:
+    """
+    Apply a Kite access token (and optional API key) to the running feed without reloading .env.
+    Used when a SaaS desk token should drive the main Trading OS quotes (local dev only; gated by env).
+    """
+    import os as _os
+
+    import config as cfg
+
+    tok = str(access_token or "").strip()
+    if not tok:
+        raise ValueError("access_token is empty")
+    cfg.KITE_ACCESS_TOKEN = tok
+    _os.environ["KITE_ACCESS_TOKEN"] = tok
+    ak = str(api_key or "").strip()
+    if ak:
+        cfg.KITE_API_KEY = ak
+        _os.environ["KITE_API_KEY"] = ak
+    import feed as _feed
+
+    _feed._kite = None
+    _feed._kite_bound_token = None
+    _feed.restart_ticker_with_new_token()
+    from feed import get_kite
+
+    kite = get_kite()
+    prof = kite.profile()
+    global _kite
+    _kite = kite
+    return {"user_name": str(prof.get("user_name", "")), "user_id": str(prof.get("user_id", ""))}
+
+
 def job_morning_briefing():
     """9:00 IST Monâ€“Fri: global/India context, movement checklist, watchlist â†’ Telegram."""
     try:

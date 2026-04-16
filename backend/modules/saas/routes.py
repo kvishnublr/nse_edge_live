@@ -21,16 +21,19 @@ import time
 from pathlib import Path
 from email.message import EmailMessage
 from typing import Any, Optional
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 
 import requests
 from fastapi import APIRouter, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from dotenv import load_dotenv
 from config import is_market_open, get_market_status
 
 logger = logging.getLogger("saas")
 router = APIRouter(tags=["saas-platform"])
+
+# Zerodha Kite Connect redirect target (register this exact URL on the Kite app).
+KITE_OAUTH_RETURN_PATH = "/kite-oauth-return"
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = BASE_DIR / "data"
@@ -52,6 +55,16 @@ GMAIL_FROM_NAME = (os.getenv("GMAIL_FROM_NAME", BRAND_NAME) or BRAND_NAME).strip
 GMAIL_NOTIFY_ON_SIGNUP = str(os.getenv("GMAIL_NOTIFY_ON_SIGNUP", "1") or "1").strip().lower() not in {"0", "false", "off", "no"}
 GMAIL_NOTIFY_ON_PAYMENT = str(os.getenv("GMAIL_NOTIFY_ON_PAYMENT", "1") or "1").strip().lower() not in {"0", "false", "off", "no"}
 GMAIL_NOTIFY_ON_SIGNAL = str(os.getenv("GMAIL_NOTIFY_ON_SIGNAL", "0") or "0").strip().lower() not in {"0", "false", "off", "no"}
+GMAIL_OAUTH_CLIENT_ID = (os.getenv("GMAIL_OAUTH_CLIENT_ID", "") or "").strip()
+GMAIL_OAUTH_CLIENT_SECRET = (os.getenv("GMAIL_OAUTH_CLIENT_SECRET", "") or "").strip()
+GMAIL_OAUTH_REDIRECT_URI = (os.getenv("GMAIL_OAUTH_REDIRECT_URI", "") or "").strip()
+GMAIL_OAUTH_SCOPES = str(
+    os.getenv(
+        "GMAIL_OAUTH_SCOPES",
+        "https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email",
+    )
+    or "https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email"
+).strip()
 UPI_PAYEE = (os.getenv("UPI_PAYEE", "stockrin@upi") or "stockrin@upi").strip()
 ADMIN_OTP_TTL_MINUTES = max(2, int(os.getenv("SAAS_ADMIN_OTP_TTL_MINUTES", "5") or 5))
 ADMIN_OTP_MAX_ATTEMPTS = max(1, int(os.getenv("SAAS_ADMIN_OTP_MAX_ATTEMPTS", "5") or 5))
@@ -108,6 +121,61 @@ def _utc_iso(value: Optional[dt.datetime] = None) -> str:
 
 def _today_ist() -> dt.date:
     return dt.datetime.now(dt.timezone(dt.timedelta(hours=5, minutes=30))).date()
+
+
+def _env_flag_true(key: str) -> bool:
+    return str(os.getenv(key, "") or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _browser_session_expiry_iso() -> str:
+    """UTC instant = start of next calendar day in IST (session valid for the full IST day)."""
+    ist = dt.timezone(dt.timedelta(hours=5, minutes=30))
+    now_ist = dt.datetime.now(ist)
+    next_midnight_ist = dt.datetime.combine(now_ist.date() + dt.timedelta(days=1), dt.time.min, tzinfo=ist)
+    return _utc_iso(next_midnight_ist.astimezone(dt.timezone.utc))
+
+
+def _hash_browser_session_token(raw: str) -> str:
+    return hashlib.sha256(str(raw).encode("utf-8")).hexdigest()
+
+
+def _prune_expired_browser_sessions(conn: sqlite3.Connection) -> None:
+    conn.execute("DELETE FROM saas_auth_sessions WHERE expires_at < ?", (_utc_iso(),))
+
+
+def _issue_browser_session(conn: sqlite3.Connection, user_id: int) -> str:
+    _prune_expired_browser_sessions(conn)
+    raw = "nxa_" + secrets.token_urlsafe(36)
+    th = _hash_browser_session_token(raw)
+    now = _utc_iso()
+    exp = _browser_session_expiry_iso()
+    conn.execute(
+        "INSERT INTO saas_auth_sessions(user_id,token_hash,created_at,expires_at,last_seen_at) VALUES(?,?,?,?,?)",
+        (int(user_id), th, now, exp, now),
+    )
+    return raw
+
+
+def _resolve_browser_session_user_id(conn: sqlite3.Connection, raw: str) -> Optional[int]:
+    if not str(raw or "").startswith("nxa_"):
+        return None
+    th = _hash_browser_session_token(raw)
+    now = _utc_iso()
+    row = conn.execute(
+        "SELECT user_id FROM saas_auth_sessions WHERE token_hash=? AND expires_at > ?",
+        (th, now),
+    ).fetchone()
+    if row is None:
+        return None
+    conn.execute("UPDATE saas_auth_sessions SET last_seen_at=? WHERE token_hash=?", (now, th))
+    return int(row["user_id"])
+
+
+def _revoke_browser_session(conn: sqlite3.Connection, raw: str) -> None:
+    if not str(raw or "").startswith("nxa_"):
+        return
+    th = _hash_browser_session_token(raw)
+    conn.execute("DELETE FROM saas_auth_sessions WHERE token_hash=?", (th,))
 
 
 def _normalize_login_email(value: str) -> str:
@@ -285,9 +353,145 @@ def _strip_html_text(value: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def _gmail_ready() -> bool:
-    cfg = _gmail_cfg()
-    return bool(cfg["username"] and cfg["app_password"] and cfg["from_email"])
+def _gmail_oauth_cfg() -> dict[str, Any]:
+    return {
+        "client_id": (os.getenv("GMAIL_OAUTH_CLIENT_ID", GMAIL_OAUTH_CLIENT_ID) or "").strip(),
+        "client_secret": (os.getenv("GMAIL_OAUTH_CLIENT_SECRET", GMAIL_OAUTH_CLIENT_SECRET) or "").strip(),
+        "redirect_uri": (os.getenv("GMAIL_OAUTH_REDIRECT_URI", GMAIL_OAUTH_REDIRECT_URI) or "").strip(),
+        "scopes": [s for s in str(os.getenv("GMAIL_OAUTH_SCOPES", GMAIL_OAUTH_SCOPES) or GMAIL_OAUTH_SCOPES).split() if s],
+    }
+
+
+def _gmail_oauth_ready() -> bool:
+    cfg = _gmail_oauth_cfg()
+    return bool(cfg["client_id"] and cfg["client_secret"] and cfg["redirect_uri"] and cfg["scopes"])
+
+
+def _gmail_oauth_state_sign(payload: dict[str, Any]) -> str:
+    body = _dumps(payload).encode()
+    sig = hmac.new(TOKEN_SECRET.encode(), body, hashlib.sha256).hexdigest()
+    return _b64(body) + "." + sig
+
+
+def _gmail_oauth_state_verify(token: str) -> dict[str, Any]:
+    parts = str(token or "").split(".", 1)
+    if len(parts) != 2:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+    body_b64, sig = parts
+    try:
+        body = _b64d(body_b64)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state") from exc
+    expected = hmac.new(TOKEN_SECRET.encode(), body, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, str(sig or "")):
+        raise HTTPException(status_code=400, detail="Invalid OAuth state signature")
+    data = _loads(body.decode("utf-8", errors="ignore"), {})
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="Invalid OAuth state payload")
+    exp = _safe_int(data.get("exp"), default=0)
+    if exp <= int(time.time()):
+        raise HTTPException(status_code=400, detail="OAuth state expired")
+    return data
+
+
+def _gmail_oauth_row(conn: sqlite3.Connection) -> dict[str, Any]:
+    return _setting_get(
+        conn,
+        "gmail_oauth",
+        {
+            "connected": False,
+            "email": "",
+            "access_token": "",
+            "refresh_token": "",
+            "token_type": "Bearer",
+            "scope": "",
+            "expires_at": 0,
+            "updated_at": "",
+            "error": "",
+        },
+    )
+
+
+def _gmail_oauth_save(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
+    now_ts = int(time.time())
+    payload = {
+        "connected": bool(data.get("connected", False)),
+        "email": str(data.get("email") or "").strip().lower(),
+        "access_token": str(data.get("access_token") or "").strip(),
+        "refresh_token": str(data.get("refresh_token") or "").strip(),
+        "token_type": str(data.get("token_type") or "Bearer").strip() or "Bearer",
+        "scope": str(data.get("scope") or "").strip(),
+        "expires_at": _safe_int(data.get("expires_at") or 0, default=0),
+        "updated_at": str(data.get("updated_at") or _utc_iso()),
+        "error": str(data.get("error") or "")[:500],
+    }
+    if payload["expires_at"] <= 0 and payload["access_token"]:
+        payload["expires_at"] = now_ts + 3000
+    _setting_put(conn, "gmail_oauth", payload)
+
+
+def _gmail_oauth_refresh_if_needed(conn: sqlite3.Connection) -> dict[str, Any]:
+    row = _gmail_oauth_row(conn)
+    now_ts = int(time.time())
+    if not row.get("connected") or not row.get("refresh_token"):
+        return row
+    if str(row.get("access_token") or "").strip() and _safe_int(row.get("expires_at"), default=0) > (now_ts + 90):
+        return row
+    cfg = _gmail_oauth_cfg()
+    if not (cfg["client_id"] and cfg["client_secret"]):
+        return row
+    try:
+        resp = requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "client_id": cfg["client_id"],
+                "client_secret": cfg["client_secret"],
+                "refresh_token": str(row.get("refresh_token") or ""),
+                "grant_type": "refresh_token",
+            },
+            timeout=20,
+        )
+        data = resp.json() if resp.content else {}
+        if not resp.ok or not data.get("access_token"):
+            row["error"] = str(data.get("error_description") or data.get("error") or f"OAuth refresh failed ({resp.status_code})")
+            row["updated_at"] = _utc_iso()
+            _gmail_oauth_save(conn, row)
+            conn.commit()
+            return row
+        row["access_token"] = str(data.get("access_token") or "").strip()
+        row["token_type"] = str(data.get("token_type") or row.get("token_type") or "Bearer")
+        expires_in = max(300, _safe_int(data.get("expires_in"), default=3600))
+        row["expires_at"] = now_ts + expires_in
+        row["scope"] = str(data.get("scope") or row.get("scope") or "")
+        row["connected"] = True
+        row["error"] = ""
+        row["updated_at"] = _utc_iso()
+        _gmail_oauth_save(conn, row)
+        conn.commit()
+    except Exception as exc:
+        row["error"] = str(exc)[:500]
+        row["updated_at"] = _utc_iso()
+        _gmail_oauth_save(conn, row)
+        conn.commit()
+    return row
+
+
+def _gmail_oauth_user_email(access_token: str) -> str:
+    token = str(access_token or "").strip()
+    if not token:
+        return ""
+    try:
+        resp = requests.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=15,
+        )
+        data = resp.json() if resp.content else {}
+        if not resp.ok:
+            return ""
+        return str(data.get("email") or "").strip().lower()
+    except Exception:
+        return ""
 
 
 def _gmail_cfg() -> dict[str, Any]:
@@ -317,9 +521,102 @@ def _gmail_cfg() -> dict[str, Any]:
     }
 
 
+def _gmail_runtime_status(conn: Optional[sqlite3.Connection] = None) -> dict[str, Any]:
+    close_conn = False
+    work_conn = conn
+    if work_conn is None:
+        work_conn = get_conn()
+        close_conn = True
+    try:
+        oauth_row = _gmail_oauth_refresh_if_needed(work_conn)
+        oauth_ready = bool(
+            _gmail_oauth_ready()
+            and oauth_row.get("connected")
+            and str(oauth_row.get("access_token") or "").strip()
+        )
+        smtp_cfg = _gmail_cfg()
+        smtp_ready = bool(smtp_cfg["username"] and smtp_cfg["app_password"] and smtp_cfg["from_email"])
+        mode = "oauth" if oauth_ready else ("smtp" if smtp_ready else "none")
+        return {
+            "ready": bool(oauth_ready or smtp_ready),
+            "mode": mode,
+            "oauth_ready": bool(oauth_ready),
+            "oauth_connected": bool(oauth_row.get("connected")),
+            "oauth_email": str(oauth_row.get("email") or ""),
+            "oauth_error": str(oauth_row.get("error") or ""),
+            "smtp_ready": bool(smtp_ready),
+            "smtp_from": smtp_cfg["from_email"],
+            "smtp_host": smtp_cfg["smtp_host"],
+            "smtp_port": smtp_cfg["smtp_port"],
+        }
+    finally:
+        if close_conn:
+            work_conn.close()
+
+
+def _gmail_ready() -> bool:
+    return bool(_gmail_runtime_status().get("ready"))
+
+
+def _send_gmail_oauth(conn: sqlite3.Connection, to_email: str, subject: str, html_body: str, text_body: str = "") -> bool:
+    row = _gmail_oauth_refresh_if_needed(conn)
+    token = str(row.get("access_token") or "").strip()
+    if not token:
+        return False
+    sender = str(row.get("email") or "").strip() or _gmail_cfg().get("from_email") or GMAIL_FROM_EMAIL
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = f"{GMAIL_FROM_NAME} <{sender}>"
+    msg["To"] = to_email
+    msg.set_content(text_body or subject)
+    msg.add_alternative(html_body, subtype="html")
+    try:
+        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode().rstrip("=")
+        resp = requests.post(
+            "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={"raw": raw},
+            timeout=25,
+        )
+        if resp.ok:
+            if row.get("error"):
+                row["error"] = ""
+                row["updated_at"] = _utc_iso()
+                _gmail_oauth_save(conn, row)
+                conn.commit()
+            return True
+        body = {}
+        try:
+            body = resp.json() if resp.content else {}
+        except Exception:
+            body = {}
+        row["error"] = str((body.get("error") or {}).get("message") or f"Gmail API send failed ({resp.status_code})")[:500]
+        row["updated_at"] = _utc_iso()
+        _gmail_oauth_save(conn, row)
+        conn.commit()
+        return False
+    except Exception as exc:
+        row["error"] = str(exc)[:500]
+        row["updated_at"] = _utc_iso()
+        _gmail_oauth_save(conn, row)
+        conn.commit()
+        return False
+
+
 def _send_gmail(to_email: str, subject: str, html_body: str, text_body: str = "") -> bool:
+    if not to_email:
+        return False
+    conn = get_conn()
+    try:
+        status = _gmail_runtime_status(conn)
+        if status.get("oauth_ready"):
+            return _send_gmail_oauth(conn, to_email, subject, html_body, text_body)
+    except Exception as exc:
+        logger.warning("gmail oauth send failed, fallback smtp: %s", exc)
+    finally:
+        conn.close()
     cfg = _gmail_cfg()
-    if not (cfg["username"] and cfg["app_password"] and cfg["from_email"]) or not to_email:
+    if not (cfg["username"] and cfg["app_password"] and cfg["from_email"]):
         return False
     msg = EmailMessage()
     msg["Subject"] = subject
@@ -375,39 +672,80 @@ def _send_welcome_email(user_email: str, full_name: str) -> None:
     _send_gmail_async(user_email, subject, html, text)
 
 
-def _send_managed_password_email(user_email: str, full_name: str, temporary_password: str, headline: str = "Your desk is ready") -> bool:
-    subject = f"{BRAND_NAME} account access"
+def _send_managed_password_email(user_email: str, full_name: str, temporary_password: str, role: str = "USER") -> bool:
+    subject = f"{BRAND_NAME} desk access is ready"
     html_body = f"""
     <html><body style="font-family:Segoe UI,Arial,sans-serif;background:#07111d;color:#e5eefc;padding:24px">
-      <div style="max-width:640px;margin:auto;background:#0d1b31;border:1px solid #1f3657;border-radius:20px;padding:28px">
+      <div style="max-width:700px;margin:auto;background:#0d1b31;border:1px solid #1f3657;border-radius:22px;padding:30px">
         <div style="font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:#67e8f9">{html.escape(BRAND_NAME)}</div>
-        <h1 style="margin:14px 0 10px;font-size:28px;color:#f8fbff">{html.escape(headline)}</h1>
-        <p style="line-height:1.7;color:#b8cae6">Hi {html.escape(full_name or "Trader")}, your access has been prepared for the Nexus workspace.</p>
-        <div style="margin:18px 0;padding:16px;border-radius:16px;background:#112440;border:1px solid #24456d;color:#d7e7ff;line-height:1.8">
+        <h1 style="margin:14px 0 10px;font-size:30px;color:#f8fbff">Your desk is ready</h1>
+        <p style="line-height:1.7;color:#b8cae6">Hi {html.escape(full_name or "Trader")}, your account has been provisioned by the admin desk.</p>
+        <div style="margin:18px 0;padding:18px;border-radius:18px;background:#112440;border:1px solid #24456d;color:#d7e7ff;line-height:1.9">
           Login email: <b>{html.escape(user_email)}</b><br>
-          Temporary password: <b>{html.escape(temporary_password)}</b>
+          Temporary password: <b>{html.escape(temporary_password)}</b><br>
+          Role: <b>{html.escape(role)}</b>
         </div>
-        <p style="line-height:1.7;color:#b8cae6">Please sign in and change the password after first access.</p>
+        <div style="margin:18px 0;padding:16px;border-radius:16px;background:rgba(103,232,249,.08);border:1px solid rgba(103,232,249,.2)">
+          <div style="font-weight:700;color:#9deeff">Next steps</div>
+          <div style="margin-top:8px;color:#d7e7ff;line-height:1.7">Sign in, change your password, review wallet access, and confirm your notification channels inside Nexus.</div>
+        </div>
       </div>
     </body></html>
     """
-    text_body = f"{BRAND_NAME} access ready. Email: {user_email}. Temporary password: {temporary_password}. Please change it after first login."
+    text_body = f"{BRAND_NAME} desk access is ready. Email: {user_email}. Temporary password: {temporary_password}. Role: {role}. Please change the password after first login."
     return _send_gmail(user_email, subject, html_body, text_body)
 
 
-def _send_user_lifecycle_email(user_email: str, full_name: str, headline: str, body_copy: str, accent: str = "#67e8f9") -> bool:
-    subject = f"{BRAND_NAME} account update"
+def _send_user_account_summary_email(user: dict[str, Any], *, headline: str, intro: str, wallet_note: str = "", extra_lines: Optional[list[str]] = None) -> bool:
+    email = str(user.get("email") or "").strip()
+    if not email:
+        return False
+    contacts = user.get("contacts") or {}
+    wallet = user.get("wallet") or {}
+    controls = user.get("controls") or {}
+    notifications = user.get("notifications") or {}
+    lines = [
+        f"Role: {user.get('role') or 'USER'}",
+        f"Status: {user.get('status') or 'ACTIVE'}",
+        f"Wallet type: {wallet.get('type') or 'COUPON'}",
+        f"Wallet balance: Rs {float(wallet.get('balance') or 0):,.2f}",
+        f"Daily loss limit: Rs {float(controls.get('daily_loss_limit') or 0):,.2f}",
+        f"Max trades / day: {int(controls.get('max_trades_per_day') or 0)}",
+        f"Max open signals: {int(controls.get('max_open_signals') or 0)}",
+        "Notifications: "
+        + ", ".join(
+            [name for enabled, name in [
+                (notifications.get("email"), "Email"),
+                (notifications.get("telegram"), "Telegram"),
+                (notifications.get("whatsapp"), "WhatsApp"),
+                (notifications.get("token_reminder"), "Token reminders"),
+            ] if enabled]
+        ) if any([notifications.get("email"), notifications.get("telegram"), notifications.get("whatsapp"), notifications.get("token_reminder")]) else "Notifications: none",
+        f"WhatsApp: {contacts.get('whatsapp_phone') or 'Not set'}",
+        f"Telegram: {contacts.get('telegram_chat_id') or 'Not set'}",
+    ]
+    if wallet_note:
+        lines.append(wallet_note)
+    for line in (extra_lines or []):
+        if line:
+            lines.append(str(line))
+    html_lines = "".join(f"<li style='margin:0 0 8px'>{html.escape(str(line))}</li>" for line in lines)
     html_body = f"""
     <html><body style="font-family:Segoe UI,Arial,sans-serif;background:#07111d;color:#e5eefc;padding:24px">
-      <div style="max-width:640px;margin:auto;background:#0d1b31;border:1px solid #1f3657;border-radius:20px;padding:28px">
-        <div style="font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:{html.escape(accent)}">{html.escape(BRAND_NAME)}</div>
-        <h1 style="margin:14px 0 10px;font-size:28px;color:#f8fbff">{html.escape(headline)}</h1>
-        <p style="line-height:1.7;color:#b8cae6">Hi {html.escape(full_name or 'Trader')}, {html.escape(body_copy)}</p>
+      <div style="max-width:760px;margin:auto;background:#0d1b31;border:1px solid #1f3657;border-radius:22px;padding:30px">
+        <div style="font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:#67e8f9">{html.escape(BRAND_NAME)}</div>
+        <h1 style="margin:14px 0 10px;font-size:30px;color:#f8fbff">{html.escape(headline)}</h1>
+        <p style="line-height:1.7;color:#b8cae6">Hi {html.escape(user.get('full_name') or 'Trader')}, {html.escape(intro)}</p>
+        <div style="margin:18px 0;padding:18px;border-radius:18px;background:#112440;border:1px solid #24456d">
+          <div style="font-weight:700;color:#9deeff;margin-bottom:10px">Your account details</div>
+          <ul style="margin:0;padding-left:20px;color:#d7e7ff;line-height:1.75">{html_lines}</ul>
+        </div>
+        <p style="margin:0;color:#94a8c6">If anything looks incorrect, reply to the admin or support contact configured for {html.escape(BRAND_NAME)}.</p>
       </div>
     </body></html>
     """
-    text_body = f"{BRAND_NAME}: {headline}. {body_copy}"
-    return _send_gmail(user_email, subject, html_body, text_body)
+    text_body = headline + "\n" + intro + "\n" + "\n".join(lines)
+    return _send_gmail(email, f"{BRAND_NAME} account update", html_body, text_body)
 
 
 def _admin_otp_generate() -> str:
@@ -484,6 +822,8 @@ def _send_signal_email(user_email: str, headline: str, excerpt: str, strategy_co
 
 def _send_admin_test_email(to_email: str) -> bool:
     cfg = _gmail_cfg()
+    runtime = _gmail_runtime_status()
+    mode = str(runtime.get("mode") or "none").upper()
     subject = f"{BRAND_NAME} Gmail test"
     html = f"""
     <html><body style="font-family:Segoe UI,Arial,sans-serif;background:#07111d;color:#e5eefc;padding:24px">
@@ -492,12 +832,12 @@ def _send_admin_test_email(to_email: str) -> bool:
         <h1 style="margin:14px 0 10px;font-size:26px;color:#f8fbff">Mailer is live</h1>
         <p style="line-height:1.7;color:#b8cae6">This is a manual Gmail verification sent from the {BRAND_NAME} Nexus admin deck.</p>
         <div style="margin:18px 0;padding:16px;border-radius:16px;background:#112440;border:1px solid #24456d;color:#d7e7ff;line-height:1.7">
-          SMTP host: {cfg["smtp_host"]}<br>Sender: {cfg["from_name"]} &lt;{cfg["from_email"]}&gt;
+          Delivery mode: {html.escape(mode)}<br>SMTP host: {cfg["smtp_host"]}<br>Sender: {cfg["from_name"]} &lt;{cfg["from_email"]}&gt;
         </div>
       </div>
     </body></html>
     """
-    text = f"{BRAND_NAME} Gmail test. Sender: {cfg['from_name']} <{cfg['from_email']}> via {cfg['smtp_host']}."
+    text = f"{BRAND_NAME} Gmail test. Mode {mode}. Sender: {cfg['from_name']} <{cfg['from_email']}> via {cfg['smtp_host']}."
     return _send_gmail(to_email, subject, html, text)
 
 
@@ -709,10 +1049,7 @@ def init_saas_db() -> None:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 last_login_at TEXT,
-                last_token_reminder_at TEXT,
-                archived_at TEXT,
-                archived_by INTEGER,
-                archive_reason TEXT DEFAULT ''
+                last_token_reminder_at TEXT
             );
             CREATE TABLE IF NOT EXISTS saas_wallets (
                 user_id INTEGER PRIMARY KEY,
@@ -931,18 +1268,17 @@ def init_saas_db() -> None:
                 FOREIGN KEY(user_id) REFERENCES saas_users(id) ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS idx_admin_otp_email_created ON saas_admin_otp(email, created_at DESC);
-            CREATE TABLE IF NOT EXISTS saas_user_history (
+            CREATE TABLE IF NOT EXISTS saas_auth_sessions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
-                actor_user_id INTEGER,
-                event_type TEXT NOT NULL,
-                title TEXT NOT NULL,
-                summary TEXT DEFAULT '',
-                payload_json TEXT,
+                token_hash TEXT NOT NULL UNIQUE,
                 created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                last_seen_at TEXT,
                 FOREIGN KEY(user_id) REFERENCES saas_users(id) ON DELETE CASCADE
             );
-            CREATE INDEX IF NOT EXISTS idx_saas_user_history_user_created ON saas_user_history(user_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_saas_auth_sessions_token_hash ON saas_auth_sessions(token_hash);
+            CREATE INDEX IF NOT EXISTS idx_saas_auth_sessions_expires ON saas_auth_sessions(expires_at);
             """
         )
         have = {str(r["name"] or "") for r in conn.execute("PRAGMA table_info(saas_users)").fetchall()}
@@ -955,9 +1291,6 @@ def init_saas_db() -> None:
             "notify_whatsapp": "INTEGER NOT NULL DEFAULT 0",
             "notify_token_reminder": "INTEGER NOT NULL DEFAULT 1",
             "last_token_reminder_at": "TEXT",
-            "archived_at": "TEXT",
-            "archived_by": "INTEGER",
-            "archive_reason": "TEXT DEFAULT ''",
         }
         for name, spec in missing_user_cols.items():
             if name not in have:
@@ -995,7 +1328,25 @@ def seed_defaults() -> None:
             _ensure_broker_row(conn, int(admin_row["id"]))
         conn.execute("INSERT OR REPLACE INTO saas_app_settings(key,value_json,updated_at) VALUES(?,?,?)", ("bootstrap_admin", _dumps({"email": DEFAULT_ADMIN_EMAIL, "password": DEFAULT_ADMIN_PASSWORD}), now))
         conn.execute("INSERT OR REPLACE INTO saas_app_settings(key,value_json,updated_at) VALUES(?,?,?)", ("brand", _dumps({"name": BRAND_NAME}), now))
-        conn.execute("INSERT OR REPLACE INTO saas_app_settings(key,value_json,updated_at) VALUES(?,?,?)", ("gmail", _dumps({"ready": _gmail_ready(), "from": GMAIL_FROM_EMAIL, "host": GMAIL_SMTP_HOST, "port": GMAIL_SMTP_PORT}), now))
+        gmail_status = _gmail_runtime_status(conn)
+        conn.execute(
+            "INSERT OR REPLACE INTO saas_app_settings(key,value_json,updated_at) VALUES(?,?,?)",
+            (
+                "gmail",
+                _dumps(
+                    {
+                        "ready": bool(gmail_status.get("ready")),
+                        "mode": gmail_status.get("mode"),
+                        "oauth_connected": bool(gmail_status.get("oauth_connected")),
+                        "oauth_email": gmail_status.get("oauth_email"),
+                        "from": gmail_status.get("smtp_from") or GMAIL_FROM_EMAIL,
+                        "host": gmail_status.get("smtp_host") or GMAIL_SMTP_HOST,
+                        "port": gmail_status.get("smtp_port") or GMAIL_SMTP_PORT,
+                    }
+                ),
+                now,
+            ),
+        )
         conn.execute("INSERT OR IGNORE INTO saas_app_settings(key,value_json,updated_at) VALUES(?,?,?)", ("payment_profile", _dumps(_default_payment_profile()), now))
         conn.execute("INSERT OR IGNORE INTO saas_coupons(code,credit,max_profit,active,usage_limit,used_count,expires_at,strategy_bundle,created_at,updated_at,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?)", ("WELCOME500", 500, COUPON_PROFIT_CAP, 1, 9999, 0, None, "SPIKE,INDEX,SWING", now, now, "Default onboarding coupon"))
         conn.commit()
@@ -1044,6 +1395,37 @@ def _ensure_broker_row(conn: sqlite3.Connection, user_id: int) -> None:
 def _broker_row(conn: sqlite3.Connection, user_id: int) -> sqlite3.Row | None:
     _ensure_broker_row(conn, user_id)
     return conn.execute("SELECT * FROM saas_broker_accounts WHERE user_id=?", (user_id,)).fetchone()
+
+
+def _row_int_bool(col: Any) -> bool:
+    try:
+        return int(col or 0) != 0
+    except (TypeError, ValueError):
+        s = str(col or "").strip().lower()
+        return s in ("1", "true", "yes", "on")
+
+
+def _body_mode_int(body: dict[str, Any], key: str, row_col: Any) -> int:
+    """1/0 from JSON when key is present, else from DB (SQLite may return int or str)."""
+    if key in body:
+        v = body.get(key)
+        if v is True:
+            return 1
+        if v is False or v is None:
+            return 0
+        try:
+            return 1 if int(v) != 0 else 0
+        except (TypeError, ValueError):
+            s = str(v).strip().lower()
+            return 1 if s in ("1", "true", "yes", "on") else 0
+    return 1 if _row_int_bool(row_col) else 0
+
+
+def _broker_effective_live(broker: Any) -> bool:
+    """True only when this desk may send real exchange orders (live on and paper route off)."""
+    if str(broker["broker_code"] or "").upper() == "PAPER":
+        return False
+    return _row_int_bool(broker["live_mode"]) and not _row_int_bool(broker["paper_mode"])
 
 
 def _parse_kite_request_token(raw: str) -> str:
@@ -1128,6 +1510,17 @@ def _start_interactive_kite_login(user_id: int, payload: dict[str, Any]) -> dict
     session_id = secrets.token_urlsafe(10)
     api_key = str(payload.get("api_key") or "").strip()
     api_secret = str(payload.get("api_secret") or "").strip()
+    existing = _get_kite_interactive_session(user_id)
+    ex_st = str(existing.get("status") or "").upper()
+    if existing.get("active") and ex_st in {"STARTING", "WAITING"}:
+        login_dup = ""
+        try:
+            from kiteconnect import KiteConnect
+
+            login_dup = str(KiteConnect(api_key=api_key).login_url() or "")
+        except Exception:
+            pass
+        return _public_kite_interactive_session(user_id) | {"login_url": login_dup, "session_reused": True}
     if not api_key or not api_secret:
         raise HTTPException(
             status_code=400,
@@ -1273,6 +1666,8 @@ def _start_interactive_kite_login(user_id: int, payload: dict[str, Any]) -> dict
             save_payload = dict(payload or {})
             save_payload["request_token"] = request_token
             save_payload["broker_code"] = "ZERODHA"
+            # Interactive login implies an active desk; omit enabled so CONNECTED save can default routing on.
+            save_payload.pop("enabled", None)
             conn = get_conn()
             try:
                 broker = _save_broker_connection(conn, int(user_id), save_payload, test_only=False)
@@ -1317,6 +1712,7 @@ def _public_broker(conn: sqlite3.Connection, user_id: int) -> dict[str, Any]:
             "enabled": False,
             "paper_mode": True,
             "live_mode": False,
+            "effective_live": False,
             "default_quantity": 1,
             "intraday_product": "MIS",
             "positional_product": "CNC",
@@ -1337,8 +1733,9 @@ def _public_broker(conn: sqlite3.Connection, user_id: int) -> dict[str, Any]:
         "help": info.get("help", ""),
         "status": row["status"],
         "enabled": bool(row["enabled"] or 0),
-        "paper_mode": bool(row["paper_mode"] or 0),
-        "live_mode": bool(row["live_mode"] or 0),
+        "paper_mode": _row_int_bool(row["paper_mode"]),
+        "live_mode": _row_int_bool(row["live_mode"]),
+        "effective_live": _broker_effective_live(row),
         "default_quantity": int(row["default_quantity"] or 1),
         "intraday_product": row["intraday_product"] or "MIS",
         "positional_product": row["positional_product"] or "CNC",
@@ -1594,21 +1991,43 @@ def _auto_execute_signal_worker(user_id: int, user_email: str, strategy_code: st
             open_positions = int(conn.execute("SELECT COUNT(*) FROM saas_trade_journal WHERE user_id=? AND status='OPEN'", (user_id,)).fetchone()[0] or 0)
             if open_positions >= max_open:
                 spec = {"symbol": _signal_symbol(payload), "tradingsymbol": _signal_symbol(payload), "exchange": "NSE", "transaction_type": "BUY", "product": "MIS", "order_type": "LIMIT", "quantity": 1}
-                _upsert_broker_order_log(conn, user_id=user_id, broker_account_id=int(broker["id"]), strategy_code=strategy_code, signal_key=signal_key, spec=spec, status="SKIPPED", live_mode=bool(broker["live_mode"] or 0), broker_status="max-open-signals", error_text="Open position limit reached")
+                _upsert_broker_order_log(
+                    conn,
+                    user_id=user_id,
+                    broker_account_id=int(broker["id"]),
+                    strategy_code=strategy_code,
+                    signal_key=signal_key,
+                    spec=spec,
+                    status="SKIPPED",
+                    live_mode=_broker_effective_live(broker),
+                    broker_status="max-open-signals",
+                    error_text="Open position limit reached",
+                )
                 conn.execute("UPDATE saas_signal_inbox SET status='AUTO_SKIPPED' WHERE user_id=? AND strategy_code=? AND signal_key=?", (user_id, strategy_code, signal_key))
                 conn.commit()
                 return
         spec, message = _build_order_spec(strategy_code, payload, broker)
         if not spec:
             fallback = {"symbol": _signal_symbol(payload) or strategy_code, "tradingsymbol": _signal_symbol(payload) or strategy_code, "exchange": "NSE", "transaction_type": "BUY", "product": "MIS", "order_type": "LIMIT", "quantity": 1}
-            _upsert_broker_order_log(conn, user_id=user_id, broker_account_id=int(broker["id"]), strategy_code=strategy_code, signal_key=signal_key, spec=fallback, status="SKIPPED", live_mode=bool(broker["live_mode"] or 0), broker_status="unsupported", error_text=message)
+            _upsert_broker_order_log(
+                conn,
+                user_id=user_id,
+                broker_account_id=int(broker["id"]),
+                strategy_code=strategy_code,
+                signal_key=signal_key,
+                spec=fallback,
+                status="SKIPPED",
+                live_mode=_broker_effective_live(broker),
+                broker_status="unsupported",
+                error_text=message,
+            )
             conn.execute("UPDATE saas_signal_inbox SET status='AUTO_SKIPPED' WHERE user_id=? AND strategy_code=? AND signal_key=?", (user_id, strategy_code, signal_key))
             conn.commit()
             return
         existing = conn.execute("SELECT id FROM saas_broker_order_log WHERE user_id=? AND signal_key=? AND strategy_code=?", (user_id, signal_key, strategy_code)).fetchone()
         if existing is not None:
             return
-        live_mode = bool(broker["live_mode"] or 0) and str(broker["broker_code"] or "").upper() != "PAPER"
+        live_mode = _broker_effective_live(broker)
         now = _utc_iso()
         if live_mode:
             try:
@@ -1673,75 +2092,6 @@ def _queue_auto_execution(user_id: int, user_email: str, strategy_code: str, sig
     ).start()
 
 
-def _log_user_history(conn: sqlite3.Connection, user_id: int, event_type: str, title: str, summary: str = "", *, actor_user_id: Optional[int] = None, payload: Optional[dict[str, Any]] = None, created_at: Optional[str] = None) -> None:
-    conn.execute(
-        "INSERT INTO saas_user_history(user_id,actor_user_id,event_type,title,summary,payload_json,created_at) VALUES(?,?,?,?,?,?,?)",
-        (
-            int(user_id),
-            int(actor_user_id) if actor_user_id else None,
-            str(event_type or "USER_EVENT").strip().upper(),
-            str(title or "Account updated").strip()[:120],
-            str(summary or "").strip()[:400],
-            _dumps(payload or {}),
-            created_at or _utc_iso(),
-        ),
-    )
-
-
-def _admin_user_metrics(conn: sqlite3.Connection) -> dict[str, Any]:
-    row = conn.execute(
-        """
-        SELECT
-            SUM(CASE WHEN role='USER' THEN 1 ELSE 0 END) AS total_users,
-            SUM(CASE WHEN role='USER' AND archived_at IS NULL AND status IN ('ACTIVE','LIMITED') THEN 1 ELSE 0 END) AS active_users,
-            SUM(CASE WHEN role='USER' AND archived_at IS NOT NULL THEN 1 ELSE 0 END) AS archived_users,
-            SUM(CASE WHEN role='USER' AND archived_at IS NULL AND last_login_at IS NOT NULL THEN 1 ELSE 0 END) AS engaged_users
-        FROM saas_users
-        """
-    ).fetchone()
-    history_events = int(conn.execute("SELECT COUNT(*) FROM saas_user_history").fetchone()[0] or 0)
-    return {
-        "total_users": int((row["total_users"] if row else 0) or 0),
-        "active_users": int((row["active_users"] if row else 0) or 0),
-        "archived_users": int((row["archived_users"] if row else 0) or 0),
-        "engaged_users": int((row["engaged_users"] if row else 0) or 0),
-        "history_events": history_events,
-    }
-
-
-def _admin_history_items(conn: sqlite3.Connection, limit: int = 120) -> list[dict[str, Any]]:
-    rows = conn.execute(
-        """
-        SELECT
-            h.*,
-            u.email AS user_email,
-            u.full_name AS user_full_name,
-            actor.email AS actor_email,
-            actor.full_name AS actor_full_name
-        FROM saas_user_history h
-        LEFT JOIN saas_users u ON u.id = h.user_id
-        LEFT JOIN saas_users actor ON actor.id = h.actor_user_id
-        ORDER BY h.id DESC
-        LIMIT ?
-        """,
-        (max(1, int(limit or 120)),),
-    ).fetchall()
-    return [
-        {
-            "id": int(r["id"]),
-            "user_id": int(r["user_id"]),
-            "event_type": r["event_type"],
-            "title": r["title"],
-            "summary": r["summary"] or "",
-            "payload": _loads(r["payload_json"], {}),
-            "created_at": r["created_at"],
-            "user": {"email": r["user_email"] or "", "full_name": r["user_full_name"] or ""},
-            "actor": {"email": r["actor_email"] or "", "full_name": r["actor_full_name"] or ""},
-        }
-        for r in rows
-    ]
-
-
 def _public_user(conn: sqlite3.Connection, user_id: int) -> dict[str, Any]:
     row = _user_row(conn, user_id)
     if row is None:
@@ -1778,12 +2128,6 @@ def _public_user(conn: sqlite3.Connection, user_id: int) -> dict[str, Any]:
         },
         "subscription": {"plan_code": sub["plan_code"] if sub else None, "status": sub["status"] if sub else "NONE", "expires_at": sub["expires_at"] if sub else None, "amount": float(sub["amount"] or 0) if sub else 0},
         "controls": {"daily_loss_limit": float(row["daily_loss_limit"] or 0), "max_trades_per_day": int(row["max_trades_per_day"] or 0), "max_open_signals": int(row["max_open_signals"] or 0), "profit_share_pct": float(row["profit_share_pct"] or 0), "auto_execute": bool(row["auto_execute"] or 0)},
-        "lifecycle": {
-            "is_archived": bool(str(row["archived_at"] or "").strip()),
-            "archived_at": row["archived_at"],
-            "archived_by": int(row["archived_by"] or 0) if row["archived_by"] is not None else None,
-            "archive_reason": row["archive_reason"] or "",
-        },
         "unread_signals": unread,
         "notes": row["notes"] or "",
         "created_at": row["created_at"],
@@ -1804,18 +2148,30 @@ def _extract_token(auth: Optional[str]) -> str:
 
 
 def _require_user(auth: Optional[str]) -> dict[str, Any]:
-    payload = _decode_token(_extract_token(auth))
+    token = _extract_token(auth)
     conn = get_conn()
     try:
-        row = conn.execute("SELECT id,email,role,status,archived_at FROM saas_users WHERE id=?", (int(payload["sub"]),)).fetchone()
+        user_id: Optional[int] = None
+        if token.count(".") == 2:
+            payload = _decode_token(token)
+            user_id = int(payload["sub"])
+        else:
+            user_id = _resolve_browser_session_user_id(conn, token)
+            if user_id is None:
+                raise HTTPException(status_code=401, detail="Invalid or expired session")
+        row = conn.execute("SELECT id,email,role,status FROM saas_users WHERE id=?", (int(user_id),)).fetchone()
         if row is None:
             raise HTTPException(status_code=401, detail="User not found")
-        state = str(row["status"] or "").upper()
-        if state == "DISABLED":
+        if str(row["status"] or "").upper() == "DISABLED":
             raise HTTPException(status_code=403, detail="User disabled")
-        if state == "ARCHIVED" or str(row["archived_at"] or "").strip():
-            raise HTTPException(status_code=403, detail="User archived")
+        conn.commit()
         return {"id": int(row["id"]), "email": row["email"], "role": row["role"], "status": row["status"]}
+    except HTTPException:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
     finally:
         conn.close()
 
@@ -2061,8 +2417,8 @@ def _save_broker_connection(conn: sqlite3.Connection, user_id: int, body: dict[s
     intraday_product = str(body.get("intraday_product", row["intraday_product"] or "MIS") or "MIS").upper()
     positional_product = str(body.get("positional_product", row["positional_product"] or "CNC") or "CNC").upper()
     order_variety = str(body.get("order_variety", row["order_variety"] or "regular") or "regular").lower()
-    live_mode = 1 if body.get("live_mode", bool(row["live_mode"] or 0)) else 0
-    paper_mode = 1 if body.get("paper_mode", bool(row["paper_mode"] or 0)) else 0
+    live_mode = _body_mode_int(body, "live_mode", row["live_mode"])
+    paper_mode = _body_mode_int(body, "paper_mode", row["paper_mode"])
     now = _utc_iso()
     profile: dict[str, Any]
     capabilities = catalog[broker_code].copy()
@@ -2096,33 +2452,45 @@ def _save_broker_connection(conn: sqlite3.Connection, user_id: int, body: dict[s
         if not access_token:
             access_token = _unpack_secret(row["access_token_enc"])
         if not access_token:
-            raise HTTPException(
-                status_code=400,
-                detail="Complete Zerodha login (paste redirect URL) or provide an access token",
-            )
-        try:
-            test_result = _zerodha_test_connection(api_key, access_token)
-            profile = {
-                "name": str(((test_result.get("profile") or {}).get("user_name")) or broker_user_id or "Zerodha User"),
-                "email": str(((test_result.get("profile") or {}).get("email")) or ""),
-                "user_id": str(((test_result.get("profile") or {}).get("user_id")) or broker_user_id or ""),
-                "balance_hint": test_result.get("balance_hint"),
-            }
-            broker_user_id = profile["user_id"] or broker_user_id
-            status = "CONNECTED"
-            connected_at = now
-            if "paper_mode" not in body and not test_only:
-                paper_mode = 0
-        except Exception as exc:
-            profile = _loads(row["profile_json"], {})
-            status = "ERROR"
-            last_error = str(exc)
             if test_only:
-                raise HTTPException(status_code=400, detail=f"Broker test failed: {exc}") from exc
+                raise HTTPException(
+                    status_code=400,
+                    detail="Complete Zerodha login (paste redirect URL) or provide an access token",
+                )
+            profile = _loads(row["profile_json"], {}) or {}
+            status = "DISCONNECTED"
+            last_error = "Credentials saved. Complete Zerodha login (paste redirect URL) or add access token to finish connection."
+        else:
+            try:
+                test_result = _zerodha_test_connection(api_key, access_token)
+                profile = {
+                    "name": str(((test_result.get("profile") or {}).get("user_name")) or broker_user_id or "Zerodha User"),
+                    "email": str(((test_result.get("profile") or {}).get("email")) or ""),
+                    "user_id": str(((test_result.get("profile") or {}).get("user_id")) or broker_user_id or ""),
+                    "balance_hint": test_result.get("balance_hint"),
+                }
+                broker_user_id = profile["user_id"] or broker_user_id
+                status = "CONNECTED"
+                connected_at = now
+                if "paper_mode" not in body and not test_only:
+                    paper_mode = 0
+            except Exception as exc:
+                profile = _loads(row["profile_json"], {})
+                status = "ERROR"
+                last_error = str(exc)
+                if test_only:
+                    raise HTTPException(status_code=400, detail=f"Broker test failed: {exc}") from exc
+    if broker_code != "PAPER":
+        if live_mode:
+            paper_mode = 0
+        elif paper_mode:
+            live_mode = 0
     if "auto_execute" in body:
         conn.execute("UPDATE saas_users SET auto_execute=?, updated_at=? WHERE id=?", (1 if body.get("auto_execute") else 0, now, user_id))
     if live_mode and broker_code == "PAPER":
         live_mode = 0
+    if broker_code != "PAPER" and status == "CONNECTED" and body.get("enabled") is not False:
+        enabled = 1
     conn.execute(
         """
         UPDATE saas_broker_accounts
@@ -2165,26 +2533,100 @@ def saas_ping() -> dict[str, Any]:
     conn = get_conn()
     try:
         total_users = int(conn.execute("SELECT COUNT(*) FROM saas_users").fetchone()[0] or 0)
-        return {"ok": True, "brand": BRAND_NAME, "gmail_ready": _gmail_ready(), "db_path": str(DB_PATH), "users": total_users, "plans": PLAN_CATALOG, "payment_profile": _public_payment_profile(conn)}
+        gmail_status = _gmail_runtime_status(conn)
+        return {
+            "ok": True,
+            "brand": BRAND_NAME,
+            "gmail_ready": bool(gmail_status.get("ready")),
+            "gmail": gmail_status,
+            "db_path": str(DB_PATH),
+            "users": total_users,
+            "plans": PLAN_CATALOG,
+            "payment_profile": _public_payment_profile(conn),
+        }
     finally:
         conn.close()
 
 
+@router.get(KITE_OAUTH_RETURN_PATH, response_class=HTMLResponse)
+def kite_oauth_return_page() -> HTMLResponse:
+    """
+    After Kite login, Zerodha redirects the browser here with ?request_token=…&status=success.
+    This page notifies the opener (Nexus popup flow) and closes itself.
+    """
+    brand_esc = html.escape(BRAND_NAME, quote=True)
+    body = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Kite login — {brand_esc}</title>
+  <style>body{{font-family:system-ui,-apple-system,sans-serif;margin:24px;color:#0f172a;background:#f1f5f9}}</style>
+</head>
+<body>
+  <p id="kite-done">Finishing Zerodha login…</p>
+  <p id="kite-hint" style="display:none;font-size:14px;color:#334155">You can close this tab. Return to Nexus — your desk should update in a few seconds.</p>
+  <script>
+(function(){{
+  var q = new URLSearchParams(location.search || "");
+  var rt = (q.get("request_token") || "").trim();
+  var st = (q.get("status") || "").trim();
+  var act = (q.get("action") || "").trim();
+  if (!rt && location.hash && location.hash.indexOf("request_token=") !== -1) {{
+    var qh = new URLSearchParams(location.hash.replace(/^#/, ""));
+    rt = (qh.get("request_token") || rt).trim();
+    st = (qh.get("status") || st).trim();
+    act = (qh.get("action") || act).trim();
+  }}
+  var payload = {{
+    type: "stockr_kite_oauth",
+    request_token: rt,
+    redirect_url: location.href,
+    status: st,
+    action: act
+  }};
+  try{{
+    if (window.opener && !window.opener.closed) {{
+      window.opener.postMessage(payload, "*");
+    }}
+  }} catch (e) {{}}
+  try{{
+    var bc = new BroadcastChannel("stockr_kite_oauth_v1");
+    bc.postMessage(payload);
+    bc.close();
+  }} catch (e3) {{}}
+  var hint = document.getElementById("kite-hint");
+  var done = document.getElementById("kite-done");
+  if (hint) hint.style.display = "block";
+  if (done && rt) done.textContent = "Login data sent to Nexus. Closing…";
+  setTimeout(function(){{ try {{ window.close(); }} catch (e2) {{}} }}, 500);
+}})();
+  </script>
+</body>
+</html>"""
+    return HTMLResponse(content=body, status_code=200)
+
+
 @router.get("/api/saas/bootstrap")
-def saas_bootstrap() -> dict[str, Any]:
+def saas_bootstrap(request: Request) -> dict[str, Any]:
     init_saas_db()
     conn = get_conn()
     try:
         admin = conn.execute("SELECT email, created_at FROM saas_users WHERE role='ADMIN' ORDER BY id ASC LIMIT 1").fetchone()
+        gmail_status = _gmail_runtime_status(conn)
+        public_base = str(request.base_url).rstrip("/")
         return {
             "ok": True,
             "brand": BRAND_NAME,
-            "gmail_ready": _gmail_ready(),
+            "gmail_ready": bool(gmail_status.get("ready")),
+            "gmail": gmail_status,
             "admin": {"email": admin["email"] if admin else DEFAULT_ADMIN_EMAIL, "created_at": admin["created_at"] if admin else None},
             "strategies": [dict(r) for r in conn.execute("SELECT code,name,strategy_type,description,active,theme,accent,default_confidence,default_max_trades FROM saas_strategies ORDER BY id ASC").fetchall()],
             "plans": PLAN_CATALOG,
             "coupon_code": "WELCOME500",
             "payment_profile": _public_payment_profile(conn),
+            "kite_oauth_return_url": public_base + KITE_OAUTH_RETURN_PATH,
+            "desk_feed_sync_enabled": _env_flag_true("ALLOW_DESK_TOKEN_TO_MAIN_FEED"),
         }
     finally:
         conn.close()
@@ -2236,10 +2678,10 @@ async def auth_signup(request: Request) -> dict[str, Any]:
                 _credit_wallet(conn, user_id, float(coupon["credit"] or 0), "COUPON", f"Coupon {coupon['code']} applied", reference_type="COUPON", reference_id=str(coupon["id"]))
             except sqlite3.IntegrityError:
                 pass
-        _log_user_history(conn, user_id, "USER_CREATED", "Account created", "Self-service signup completed", payload={"source": "signup"})
         conn.commit()
         row = conn.execute("SELECT * FROM saas_users WHERE id=?", (user_id,)).fetchone()
-        token = _token_for(_auth_payload(row))
+        token = _issue_browser_session(conn, user_id)
+        conn.commit()
         _send_welcome_email(email, full_name or "Trader")
         return {"ok": True, "token": token, "user": _public_user(conn, user_id)}
     finally:
@@ -2257,17 +2699,12 @@ async def auth_login(request: Request) -> dict[str, Any]:
         row = conn.execute("SELECT * FROM saas_users WHERE email=?", (email,)).fetchone()
         if row is None or str(row["role"] or "").upper() != "USER":
             raise HTTPException(status_code=401, detail="Invalid credentials")
-        if str(row["status"] or "").upper() == "ARCHIVED" or str(row["archived_at"] or "").strip():
-            raise HTTPException(status_code=403, detail="User archived")
-        if str(row["status"] or "").upper() == "DISABLED":
-            raise HTTPException(status_code=403, detail="User disabled")
         if not _verify_password(password, row["password_hash"], row["password_salt"]):
             raise HTTPException(status_code=401, detail="Invalid credentials")
         now = _utc_iso()
         conn.execute("UPDATE saas_users SET last_login_at=?, updated_at=? WHERE id=?", (now, now, int(row["id"])))
-        _log_user_history(conn, int(row["id"]), "LOGIN", "User signed in", "User desk login completed", payload={"source": "user-login"}, created_at=now)
+        token = _issue_browser_session(conn, int(row["id"]))
         conn.commit()
-        token = _token_for(_auth_payload(row))
         return {"ok": True, "token": token, "user": _public_user(conn, int(row["id"]))}
     finally:
         conn.close()
@@ -2284,17 +2721,12 @@ async def admin_login(request: Request) -> dict[str, Any]:
         row = conn.execute("SELECT * FROM saas_users WHERE email=?", (email,)).fetchone()
         if row is None or str(row["role"] or "").upper() != "ADMIN":
             raise HTTPException(status_code=401, detail="Invalid admin credentials")
-        if str(row["status"] or "").upper() == "ARCHIVED" or str(row["archived_at"] or "").strip():
-            raise HTTPException(status_code=403, detail="Admin archived")
-        if str(row["status"] or "").upper() == "DISABLED":
-            raise HTTPException(status_code=403, detail="Admin disabled")
         if not _verify_password(password, row["password_hash"], row["password_salt"]):
             raise HTTPException(status_code=401, detail="Invalid admin credentials")
         now = _utc_iso()
         conn.execute("UPDATE saas_users SET last_login_at=?, updated_at=? WHERE id=?", (now, now, int(row["id"])))
-        _log_user_history(conn, int(row["id"]), "ADMIN_LOGIN", "Admin signed in", "Admin desk login completed", payload={"source": "admin-login"}, created_at=now)
+        token = _issue_browser_session(conn, int(row["id"]))
         conn.commit()
-        token = _token_for(_auth_payload(row))
         return {"ok": True, "token": token, "user": _public_user(conn, int(row["id"]))}
     finally:
         conn.close()
@@ -2382,9 +2814,26 @@ async def admin_login_verify_otp(request: Request) -> dict[str, Any]:
         now = _utc_iso()
         conn.execute("UPDATE saas_admin_otp SET used_at=?, attempts=attempts+1 WHERE id=?", (now, int(otp_row["id"])))
         conn.execute("UPDATE saas_users SET last_login_at=?, updated_at=? WHERE id=?", (now, now, int(row["id"])))
+        token = _issue_browser_session(conn, int(row["id"]))
         conn.commit()
-        token = _token_for(_auth_payload(row))
         return {"ok": True, "token": token, "user": _public_user(conn, int(row["id"]))}
+    finally:
+        conn.close()
+
+
+@router.post("/api/auth/logout")
+def auth_logout(authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+    """Revoke DB-backed session (nxa_…). JWT sessions are cleared client-side only."""
+    try:
+        token = _extract_token(authorization)
+    except HTTPException:
+        return {"ok": True}
+    conn = get_conn()
+    try:
+        if token.count(".") != 2:
+            _revoke_browser_session(conn, token)
+        conn.commit()
+        return {"ok": True}
     finally:
         conn.close()
 
@@ -2562,6 +3011,59 @@ async def user_broker_import_env_token(request: Request, authorization: Optional
         conn.close()
 
 
+@router.post("/api/user/broker/sync-main-feed-token")
+async def user_broker_sync_main_feed_token(authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+    """
+    Copy this desk's Zerodha access token into the main Trading OS Kite feed process (quotes / WS).
+    Off by default — enable ALLOW_DESK_TOKEN_TO_MAIN_FEED=1 for local single-desk setups.
+    """
+    if not _env_flag_true("ALLOW_DESK_TOKEN_TO_MAIN_FEED"):
+        raise HTTPException(
+            status_code=403,
+            detail="Disabled. Set ALLOW_DESK_TOKEN_TO_MAIN_FEED=1 in backend/.env and restart the server.",
+        )
+    user = _require_user(authorization)
+    conn = get_conn()
+    try:
+        row = _broker_row(conn, int(user["id"]))
+        if row is None:
+            raise HTTPException(status_code=404, detail="Broker workspace unavailable")
+        if str(row["broker_code"] or "").upper() != "ZERODHA":
+            raise HTTPException(status_code=400, detail="Select Zerodha and connect this desk first")
+        st = str(row["status"] or "").upper()
+        if st not in {"CONNECTED", "READY"}:
+            raise HTTPException(status_code=400, detail="Desk Kite session is not connected yet")
+        access_token = _unpack_secret(row["access_token_enc"])
+        if not access_token:
+            raise HTTPException(status_code=400, detail="No access token stored on this desk")
+        api_key = str(row["api_key"] or "").strip()
+        if not api_key:
+            raise HTTPException(status_code=400, detail="No API key stored on this desk")
+        try:
+            from scheduler import apply_kite_session_live
+
+            prof = apply_kite_session_live(access_token, api_key)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Could not apply token to live feed: {exc}") from exc
+        if _env_flag_true("DESK_SYNC_WRITE_DOTENV"):
+            try:
+                from dotenv import set_key
+
+                env_path = BASE_DIR / ".env"
+                if env_path.is_file():
+                    set_key(str(env_path), "KITE_ACCESS_TOKEN", access_token)
+                    set_key(str(env_path), "KITE_API_KEY", api_key)
+            except Exception:
+                logger.warning("sync-main-feed-token: could not write .env", exc_info=True)
+        return {
+            "ok": True,
+            "kite_profile": prof,
+            "msg": "Main Trading OS feed now uses this desk token. Hard-refresh the dashboard (Ctrl+F5) if widgets stay empty.",
+        }
+    finally:
+        conn.close()
+
+
 @router.post("/api/user/broker/sample-order")
 async def user_broker_sample_order(request: Request, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
     user = _require_user(authorization)
@@ -2577,7 +3079,11 @@ async def user_broker_sample_order(request: Request, authorization: Optional[str
         if status not in {"CONNECTED", "READY"}:
             raise HTTPException(status_code=400, detail="Broker not connected")
         symbol = str(body.get("symbol") or "SBIN").upper().strip()
+        if not re.fullmatch(r"[A-Z][A-Z0-9\-]{1,19}", symbol):
+            raise HTTPException(status_code=400, detail="Invalid NSE symbol format for test trade")
         qty = max(1, _safe_int(body.get("quantity") or broker["default_quantity"] or 1, default=1))
+        if qty > 5000:
+            raise HTTPException(status_code=400, detail="Quantity too high for sample order")
         auto_cancel = bool(body.get("auto_cancel", True))
         now = _utc_iso()
         signal_key = f"SAMPLE-{int(_utc_now().timestamp())}-{int(user['id'])}"
@@ -2593,15 +3099,58 @@ async def user_broker_sample_order(request: Request, authorization: Optional[str
             "trigger_price": None,
             "direction": "LONG",
         }
-        live_mode = bool(broker["live_mode"] or 0) and str(broker["broker_code"] or "").upper() != "PAPER"
+        live_mode = _broker_effective_live(broker)
         if not live_mode:
             order_id = f"PAPER-SAMPLE-{int(_utc_now().timestamp())}-{int(user['id'])}"
-            broker_status = "PAPER_CANCELLED" if auto_cancel else "PAPER_OPEN"
-            final_status = "CANCELLED" if auto_cancel else "OPEN"
-            response_data = {"mode": "paper", "order_id": order_id, "auto_cancel": auto_cancel, "status": final_status}
-            _upsert_broker_order_log(conn, user_id=int(user["id"]), broker_account_id=int(broker["id"]), strategy_code="SAMPLE", signal_key=signal_key, spec=spec, status=("SIMULATED_CANCELLED" if auto_cancel else "SIMULATED"), live_mode=False, broker_status=broker_status, broker_order_id=order_id, request_data=spec, response_data=response_data)
+            broker_status = "PAPER_DRILL" if auto_cancel else "PAPER_OPEN"
+            # Not a failure: paper route never hits NSE; we simulate then clear by design.
+            final_status = "SIMULATED_OK" if auto_cancel else "OPEN"
+            log_status = "SIMULATED_OK" if auto_cancel else "SIMULATED"
+            response_data = {
+                "mode": "paper",
+                "order_id": order_id,
+                "auto_cancel": auto_cancel,
+                "status": final_status,
+                "note": "Desk routing check only — no exchange order. Simulated fill then cleared when auto_cancel is on.",
+            }
+            _upsert_broker_order_log(
+                conn,
+                user_id=int(user["id"]),
+                broker_account_id=int(broker["id"]),
+                strategy_code="SAMPLE",
+                signal_key=signal_key,
+                spec=spec,
+                status=log_status,
+                live_mode=False,
+                broker_status=broker_status,
+                broker_order_id=order_id,
+                request_data=spec,
+                response_data=response_data,
+            )
             conn.commit()
-            return {"ok": True, "sample": {"mode": "paper", "order_id": order_id, "symbol": symbol, "quantity": qty, "status": final_status}, "broker": _public_broker(conn, int(user["id"]))}
+            paper_msg = (
+                "Paper sample succeeded: routing verified (simulated market BUY then cleared; nothing was sent to NSE)."
+                if auto_cancel
+                else "Paper sample: simulated order left OPEN for inspection (still no NSE order)."
+            )
+            route_hint = (
+                "Real Kite orders need Live under Order firing and Paper route OFF (Advanced checkboxes sync when you save)."
+                if _row_int_bool(broker["paper_mode"]) or not _row_int_bool(broker["live_mode"])
+                else ""
+            )
+            return {
+                "ok": True,
+                "sample": {
+                    "mode": "paper",
+                    "order_id": order_id,
+                    "symbol": symbol,
+                    "quantity": qty,
+                    "status": final_status,
+                    "message": paper_msg,
+                    "hint": route_hint,
+                },
+                "broker": _public_broker(conn, int(user["id"])),
+            }
         market_open_now = bool(is_market_open())
         broker_variety = "regular" if market_open_now else "amo"
         session_hint = "market-open" if market_open_now else get_market_status()
@@ -2636,7 +3185,27 @@ async def user_broker_sample_order(request: Request, authorization: Optional[str
                 response_data={"placed": placed, "order_before": snapshot_before, "order_after": snapshot_after, "cancelled": cancelled, "session_hint": session_hint},
             )
             conn.commit()
-            return {"ok": True, "sample": {"mode": "live", "order_id": order_id, "symbol": symbol, "quantity": qty, "status": final_state, "cancelled": cancelled, "cancel_error": cancel_error, "variety": broker_variety, "session_hint": session_hint}, "broker": _public_broker(conn, int(user["id"]))}
+            live_msg = f"Live test trade submitted ({broker_variety.upper()}, {session_hint})"
+            if cancelled and not cancel_error:
+                live_msg += " — then auto-cancelled (sample drill; check order id in Kite console)."
+            elif cancelled and cancel_error:
+                live_msg += f" — cancel step reported: {cancel_error}"
+            return {
+                "ok": True,
+                "sample": {
+                    "mode": "live",
+                    "order_id": order_id,
+                    "symbol": symbol,
+                    "quantity": qty,
+                    "status": final_state,
+                    "cancelled": cancelled,
+                    "cancel_error": cancel_error,
+                    "variety": broker_variety,
+                    "session_hint": session_hint,
+                    "message": live_msg,
+                },
+                "broker": _public_broker(conn, int(user["id"])),
+            }
         except Exception as exc:
             error_text = str(exc)
             _upsert_broker_order_log(
@@ -2959,100 +3528,42 @@ def admin_dashboard(authorization: Optional[str] = Header(None)) -> dict[str, An
     _require_admin(authorization)
     conn = get_conn()
     try:
-        metrics = _admin_user_metrics(conn)
+        total_users = int(conn.execute("SELECT COUNT(*) FROM saas_users WHERE role='USER'").fetchone()[0] or 0)
+        active_users = int(conn.execute("SELECT COUNT(*) FROM saas_users WHERE role='USER' AND status IN ('ACTIVE','LIMITED')").fetchone()[0] or 0)
         revenue = float(conn.execute("SELECT COALESCE(SUM(amount),0) FROM saas_payment_orders WHERE status='PAID'").fetchone()[0] or 0)
         signals_total = int(conn.execute("SELECT COUNT(*) FROM saas_signal_inbox").fetchone()[0] or 0)
-        metrics.update({"revenue": round(revenue, 2), "signals_total": signals_total})
         return {
             "ok": True,
-            "metrics": metrics,
-            "users": [_public_user(conn, int(r["id"])) for r in conn.execute("SELECT id FROM saas_users WHERE archived_at IS NULL ORDER BY updated_at DESC, id DESC LIMIT 40").fetchall()],
+            "metrics": {"total_users": total_users, "active_users": active_users, "revenue": round(revenue, 2), "signals_total": signals_total},
+            "users": [_public_user(conn, int(r["id"])) for r in conn.execute("SELECT id FROM saas_users ORDER BY id DESC LIMIT 25").fetchall()],
             "strategies": [dict(r) for r in conn.execute("SELECT * FROM saas_strategies ORDER BY id ASC").fetchall()],
             "payments": [{"id": int(r["id"]), "user_id": int(r["user_id"]), "amount": float(r["amount"] or 0), "status": r["status"], "provider": r["provider"], "plan_code": r["plan_code"], "created_at": r["created_at"]} for r in conn.execute("SELECT * FROM saas_payment_orders ORDER BY id DESC LIMIT 20").fetchall()],
             "signals": [{"strategy_code": r["strategy_code"], "headline": r["headline"], "confidence": float(r["confidence"] or 0), "created_at": r["created_at"]} for r in conn.execute("SELECT * FROM saas_signal_inbox ORDER BY id DESC LIMIT 20").fetchall()],
             "payment_profile": _public_payment_profile(conn),
-            "history": _admin_history_items(conn, limit=24),
         }
     finally:
         conn.close()
 
 
 @router.get("/api/admin/users")
-def admin_users(view: str = "all", q: str = "", authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+def admin_users(authorization: Optional[str] = Header(None)) -> dict[str, Any]:
     _require_admin(authorization)
     conn = get_conn()
     try:
-        where = []
-        params: list[Any] = []
-        mode = str(view or "all").strip().lower()
-        if mode == "active":
-            where.append("archived_at IS NULL")
-        elif mode == "archived":
-            where.append("archived_at IS NOT NULL")
-        query = str(q or "").strip().lower()
-        if query:
-            like = f"%{query}%"
-            where.append("(lower(email) LIKE ? OR lower(full_name) LIKE ? OR lower(COALESCE(whatsapp_phone,'')) LIKE ? OR lower(COALESCE(telegram_chat_id,'')) LIKE ?)")
-            params.extend([like, like, like, like])
-        sql = "SELECT id FROM saas_users"
-        if where:
-            sql += " WHERE " + " AND ".join(where)
-        sql += " ORDER BY CASE WHEN archived_at IS NULL THEN 0 ELSE 1 END ASC, updated_at DESC, id DESC"
-        rows = conn.execute(sql, params).fetchall()
-        return {"ok": True, "view": mode, "query": query, "counts": _admin_user_metrics(conn), "items": [_public_user(conn, int(r["id"])) for r in rows]}
+        return {"ok": True, "items": [_public_user(conn, int(r["id"])) for r in conn.execute("SELECT id FROM saas_users ORDER BY id DESC").fetchall()]}
     finally:
         conn.close()
-
-
-@router.get("/api/admin/users/history")
-def admin_users_history(q: str = "", limit: int = 160, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
-    _require_admin(authorization)
-    conn = get_conn()
-    try:
-        items = _admin_history_items(conn, limit=max(1, min(int(limit or 160), 400)))
-        query = str(q or "").strip().lower()
-        if query:
-            items = [
-                item
-                for item in items
-                if query in str(item.get("event_type") or "").lower()
-                or query in str(item.get("title") or "").lower()
-                or query in str(item.get("summary") or "").lower()
-                or query in str(((item.get("user") or {}).get("email")) or "").lower()
-                or query in str(((item.get("user") or {}).get("full_name")) or "").lower()
-                or query in str(((item.get("actor") or {}).get("email")) or "").lower()
-            ]
-        return {"ok": True, "query": query, "items": items, "counts": _admin_user_metrics(conn)}
-    finally:
-        conn.close()
-
 
 @router.post("/api/admin/users")
 async def admin_create_user(request: Request, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
-    admin = _require_admin(authorization)
+    _require_admin(authorization)
     body = await request.json()
-    email = _normalize_login_email(body.get("email") or "")
+    email = str(body.get("email") or "").strip().lower()
     password = str(body.get("password") or "Welcome@123").strip()
-    full_name = str(body.get("full_name") or "Managed User").strip()[:80]
+    full_name = str(body.get("full_name") or "Managed User").strip()
     role = str(body.get("role") or "USER").upper()
-    status = str(body.get("status") or "ACTIVE").upper()
-    wallet_type = str(body.get("wallet_type") or ("PAID" if role == "ADMIN" else "COUPON")).upper()
-    whatsapp_phone = _normalize_whatsapp_phone(body.get("whatsapp_phone") or "")
-    telegram_chat_id = _normalize_telegram_chat_id(body.get("telegram_chat_id") or "")
     notify_email = 1 if body.get("notify_email", True) else 0
-    notify_telegram = 1 if body.get("notify_telegram", bool(telegram_chat_id)) else 0
-    notify_whatsapp = 1 if body.get("notify_whatsapp", False) else 0
-    notify_token_reminder = 1 if body.get("notify_token_reminder", True) else 0
-    notes = str(body.get("notes") or "").strip()[:1000]
     send_email = bool(body.get("send_email", True))
-    if not email or "@" not in email:
-        raise HTTPException(status_code=400, detail="Valid email required")
-    if len(password) < 6:
-        raise HTTPException(status_code=400, detail="Temporary password must be at least 6 characters")
-    if role not in {"USER", "ADMIN"}:
-        raise HTTPException(status_code=400, detail="Role must be USER or ADMIN")
-    if status not in {"ACTIVE", "LIMITED", "DISABLED"}:
-        raise HTTPException(status_code=400, detail="Status must be ACTIVE, LIMITED, or DISABLED")
     conn = get_conn()
     try:
         if conn.execute("SELECT 1 FROM saas_users WHERE email=?", (email,)).fetchone():
@@ -3060,60 +3571,24 @@ async def admin_create_user(request: Request, authorization: Optional[str] = Hea
         now = _utc_iso()
         pw_hash, salt = _hash_password(password)
         cur = conn.execute(
-            """
-            INSERT INTO saas_users(
-                email,full_name,password_hash,password_salt,role,status,wallet_type,
-                whatsapp_phone,telegram_chat_id,notify_email,notify_telegram,notify_whatsapp,notify_token_reminder,
-                coupon_profit_cap,notes,created_at,updated_at
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """,
-            (
-                email,
-                full_name,
-                pw_hash,
-                salt,
-                role,
-                status,
-                "PAID" if role == "ADMIN" else wallet_type,
-                whatsapp_phone,
-                telegram_chat_id,
-                notify_email,
-                notify_telegram,
-                notify_whatsapp,
-                notify_token_reminder,
-                COUPON_PROFIT_CAP,
-                notes,
-                now,
-                now,
-            ),
+            "INSERT INTO saas_users(email,full_name,password_hash,password_salt,role,status,wallet_type,notify_email,coupon_profit_cap,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            (email, full_name, pw_hash, salt, role, "ACTIVE", "PAID" if role == "ADMIN" else "COUPON", notify_email, COUPON_PROFIT_CAP, now, now),
         )
         user_id = int(cur.lastrowid)
-        conn.execute(
-            "INSERT INTO saas_wallets(user_id,balance,reserved_balance,status,wallet_type,realized_profit,total_fees,updated_at) VALUES(?,?,?,?,?,?,?,?)",
-            (user_id, 0, 0, "BLOCKED" if status == "DISABLED" else "ACTIVE", "PAID" if role == "ADMIN" else wallet_type, 0, 0, now),
-        )
+        conn.execute("INSERT INTO saas_wallets(user_id,balance,reserved_balance,status,wallet_type,realized_profit,total_fees,updated_at) VALUES(?,?,?,?,?,?,?,?)", (user_id, 0, 0, "ACTIVE", "PAID" if role == "ADMIN" else "COUPON", 0, 0, now))
         _ensure_user_strategy_rows(conn, user_id)
         _ensure_broker_row(conn, user_id)
-        _log_user_history(
-            conn,
-            user_id,
-            "USER_CREATED",
-            "Account created",
-            f"Created by admin as {role}",
-            actor_user_id=int(admin["id"]),
-            payload={"role": role, "status": status, "send_email": send_email},
-            created_at=now,
-        )
         conn.commit()
-        emailed = _send_managed_password_email(email, full_name, password, "Your desk is ready") if send_email else False
-        return {"ok": True, "user": _public_user(conn, user_id), "temporary_password": password, "emailed": bool(emailed)}
+        user_public = _public_user(conn, user_id)
+        emailed = _send_managed_password_email(email, full_name, password, role=role) if send_email else False
+        return {"ok": True, "user": user_public, "temporary_password": password, "emailed": bool(emailed)}
     finally:
         conn.close()
 
 
 @router.patch("/api/admin/users/{user_id}")
 async def admin_update_user(user_id: int, request: Request, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
-    admin = _require_admin(authorization)
+    _require_admin(authorization)
     body = await request.json()
     conn = get_conn()
     try:
@@ -3121,206 +3596,90 @@ async def admin_update_user(user_id: int, request: Request, authorization: Optio
         if row is None:
             raise HTTPException(status_code=404, detail="User not found")
         now = _utc_iso()
-        email = _normalize_login_email(body.get("email") if body.get("email") is not None else row["email"])
-        if email != str(row["email"] or "").strip().lower():
-            dup = conn.execute("SELECT 1 FROM saas_users WHERE email=? AND id<>?", (email, user_id)).fetchone()
-            if dup is not None:
-                raise HTTPException(status_code=409, detail="Email already exists")
-        role = str(body.get("role", row["role"]) or row["role"]).upper()
-        if role not in {"USER", "ADMIN"}:
-            raise HTTPException(status_code=400, detail="Role must be USER or ADMIN")
-        if str(row["role"] or "").upper() == "ADMIN" and role != "ADMIN":
-            admin_count = int(conn.execute("SELECT COUNT(*) FROM saas_users WHERE role='ADMIN' AND archived_at IS NULL AND status<>'DISABLED'").fetchone()[0] or 0)
-            if admin_count <= 1:
-                raise HTTPException(status_code=400, detail="Cannot remove the last active admin")
-        status = str(body.get("status", row["status"]) or row["status"]).upper()
-        if status not in {"ACTIVE", "LIMITED", "DISABLED"}:
-            raise HTTPException(status_code=400, detail="Status must be ACTIVE, LIMITED, or DISABLED")
-        wallet_type = str(body.get("wallet_type", row["wallet_type"]) or row["wallet_type"]).upper()
-        if role == "ADMIN":
-            wallet_type = "PAID"
         fields = {
-            "email": email,
-            "full_name": str(body.get("full_name", row["full_name"]) or row["full_name"])[:80],
-            "role": role,
-            "status": status,
-            "wallet_type": wallet_type,
+            "full_name": str(body.get("full_name", row["full_name"]) or row["full_name"]),
+            "status": str(body.get("status", row["status"]) or row["status"]).upper(),
+            "wallet_type": str(body.get("wallet_type", row["wallet_type"]) or row["wallet_type"]).upper(),
             "daily_loss_limit": float(body.get("daily_loss_limit", row["daily_loss_limit"]) or 0),
             "max_trades_per_day": int(body.get("max_trades_per_day", row["max_trades_per_day"]) or 0),
             "max_open_signals": int(body.get("max_open_signals", row["max_open_signals"]) or 0),
             "profit_share_pct": float(body.get("profit_share_pct", row["profit_share_pct"]) or 0),
             "coupon_profit_cap": float(body.get("coupon_profit_cap", row["coupon_profit_cap"]) or 0),
             "auto_execute": 1 if body.get("auto_execute", bool(row["auto_execute"])) else 0,
-            "whatsapp_phone": _normalize_whatsapp_phone(body.get("whatsapp_phone", row["whatsapp_phone"])),
-            "telegram_chat_id": _normalize_telegram_chat_id(body.get("telegram_chat_id", row["telegram_chat_id"])),
             "notify_email": 1 if body.get("notify_email", bool(row["notify_email"])) else 0,
             "notify_telegram": 1 if body.get("notify_telegram", bool(row["notify_telegram"])) else 0,
             "notify_whatsapp": 1 if body.get("notify_whatsapp", bool(row["notify_whatsapp"])) else 0,
             "notify_token_reminder": 1 if body.get("notify_token_reminder", bool(row["notify_token_reminder"])) else 0,
+            "whatsapp_phone": _normalize_whatsapp_phone(body.get("whatsapp_phone", row["whatsapp_phone"])),
+            "telegram_chat_id": _normalize_telegram_chat_id(body.get("telegram_chat_id", row["telegram_chat_id"])),
             "notes": str(body.get("notes", row["notes"]) or "")[:1000],
         }
         conn.execute(
-            """
-            UPDATE saas_users
-            SET email=?, full_name=?, role=?, status=?, wallet_type=?, daily_loss_limit=?, max_trades_per_day=?, max_open_signals=?,
-                profit_share_pct=?, coupon_profit_cap=?, auto_execute=?, whatsapp_phone=?, telegram_chat_id=?, notify_email=?,
-                notify_telegram=?, notify_whatsapp=?, notify_token_reminder=?, notes=?, updated_at=?
-            WHERE id=?
-            """,
-            (
-                fields["email"],
-                fields["full_name"],
-                fields["role"],
-                fields["status"],
-                fields["wallet_type"],
-                fields["daily_loss_limit"],
-                fields["max_trades_per_day"],
-                fields["max_open_signals"],
-                fields["profit_share_pct"],
-                fields["coupon_profit_cap"],
-                fields["auto_execute"],
-                fields["whatsapp_phone"],
-                fields["telegram_chat_id"],
-                fields["notify_email"],
-                fields["notify_telegram"],
-                fields["notify_whatsapp"],
-                fields["notify_token_reminder"],
-                fields["notes"],
-                now,
-                user_id,
-            ),
+            "UPDATE saas_users SET full_name=?, status=?, wallet_type=?, daily_loss_limit=?, max_trades_per_day=?, max_open_signals=?, profit_share_pct=?, coupon_profit_cap=?, auto_execute=?, notify_email=?, notify_telegram=?, notify_whatsapp=?, notify_token_reminder=?, whatsapp_phone=?, telegram_chat_id=?, notes=?, updated_at=? WHERE id=?",
+            (fields["full_name"], fields["status"], fields["wallet_type"], fields["daily_loss_limit"], fields["max_trades_per_day"], fields["max_open_signals"], fields["profit_share_pct"], fields["coupon_profit_cap"], fields["auto_execute"], fields["notify_email"], fields["notify_telegram"], fields["notify_whatsapp"], fields["notify_token_reminder"], fields["whatsapp_phone"], fields["telegram_chat_id"], fields["notes"], now, user_id),
         )
-        conn.execute(
-            "UPDATE saas_wallets SET wallet_type=?, status=?, updated_at=? WHERE user_id=?",
-            (fields["wallet_type"], "BLOCKED" if fields["status"] == "DISABLED" else "ACTIVE", now, user_id),
-        )
-        _log_user_history(
-            conn,
-            user_id,
-            "USER_UPDATED",
-            "Account updated",
-            f"Updated by admin. Status: {fields['status']}, role: {fields['role']}",
-            actor_user_id=int(admin["id"]),
-            payload={"status": fields["status"], "role": fields["role"], "wallet_type": fields["wallet_type"]},
-            created_at=now,
-        )
+        conn.execute("UPDATE saas_wallets SET wallet_type=?, status=?, updated_at=? WHERE user_id=?", (fields["wallet_type"], "BLOCKED" if fields["status"] == "DISABLED" else "ACTIVE", now, user_id))
         conn.commit()
-        return {"ok": True, "user": _public_user(conn, user_id)}
+        user_public = _public_user(conn, user_id)
+        emailed = False
+        if body.get("send_email", False):
+            emailed = _send_user_account_summary_email(
+                user_public,
+                headline="Your account details were updated",
+                intro="your admin updated your desk settings. Here is the latest snapshot of your account.",
+            )
+        return {"ok": True, "user": user_public, "emailed": bool(emailed)}
     finally:
         conn.close()
 
 
 @router.post("/api/admin/users/{user_id}/password-reset")
 async def admin_reset_user_password(user_id: int, request: Request, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
-    admin = _require_admin(authorization)
+    _require_admin(authorization)
     body = await request.json()
+    temporary_password = str(body.get("password") or "").strip() or f"Desk@{secrets.randbelow(999999):06d}"
+    if len(temporary_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     conn = get_conn()
     try:
         row = conn.execute("SELECT * FROM saas_users WHERE id=?", (user_id,)).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="User not found")
-        temporary_password = str(body.get("password") or "").strip() or f"Desk@{secrets.randbelow(999999):06d}"
-        if len(temporary_password) < 6:
-            raise HTTPException(status_code=400, detail="Temporary password must be at least 6 characters")
         now = _utc_iso()
         pw_hash, salt = _hash_password(temporary_password)
         conn.execute("UPDATE saas_users SET password_hash=?, password_salt=?, updated_at=? WHERE id=?", (pw_hash, salt, now, user_id))
-        _log_user_history(
-            conn,
-            user_id,
-            "PASSWORD_RESET",
-            "Temporary password reset",
-            "Admin issued a new temporary password",
-            actor_user_id=int(admin["id"]),
-            payload={"send_email": bool(body.get("send_email", True))},
-            created_at=now,
-        )
         conn.commit()
-        send_email = bool(body.get("send_email", True))
-        emailed = _send_managed_password_email(str(row["email"] or "").strip(), str(row["full_name"] or "").strip(), temporary_password, "Your temporary password has been refreshed") if send_email else False
-        return {"ok": True, "user": _public_user(conn, user_id), "temporary_password": temporary_password, "emailed": bool(emailed)}
+        user_public = _public_user(conn, user_id)
+        emailed = _send_managed_password_email(str(row["email"] or "").strip(), str(row["full_name"] or "").strip(), temporary_password, role=str(row["role"] or "USER")) if body.get("send_email", True) else False
+        return {"ok": True, "user": user_public, "temporary_password": temporary_password, "emailed": bool(emailed)}
     finally:
         conn.close()
 
 
-@router.post("/api/admin/users/{user_id}/archive")
-async def admin_archive_user(user_id: int, request: Request, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
-    admin = _require_admin(authorization)
+@router.post("/api/admin/users/{user_id}/send-summary")
+async def admin_send_user_summary(user_id: int, request: Request, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+    _require_admin(authorization)
     body = await request.json()
     conn = get_conn()
     try:
-        row = conn.execute("SELECT * FROM saas_users WHERE id=?", (user_id,)).fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail="User not found")
-        if str(row["role"] or "").upper() == "ADMIN":
-            raise HTTPException(status_code=400, detail="Archive is available for user desks only")
-        if str(row["archived_at"] or "").strip():
-            raise HTTPException(status_code=400, detail="User already archived")
-        reason = str(body.get("reason") or "Archived by admin").strip()[:240]
-        now = _utc_iso()
-        conn.execute(
-            "UPDATE saas_users SET status='ARCHIVED', archived_at=?, archived_by=?, archive_reason=?, auto_execute=0, updated_at=? WHERE id=?",
-            (now, int(admin["id"]), reason, now, user_id),
+        user_public = _public_user(conn, user_id)
+        wallet_note = str(body.get("wallet_note") or "").strip()
+        sent = _send_user_account_summary_email(
+            user_public,
+            headline=str(body.get("headline") or "Your latest account summary"),
+            intro=str(body.get("intro") or "here is the latest summary of your desk, wallet, and operating limits."),
+            wallet_note=wallet_note,
         )
-        conn.execute("UPDATE saas_wallets SET status='BLOCKED', updated_at=? WHERE user_id=?", (now, user_id))
-        _log_user_history(
-            conn,
-            user_id,
-            "USER_ARCHIVED",
-            "User archived",
-            reason,
-            actor_user_id=int(admin["id"]),
-            payload={"reason": reason},
-            created_at=now,
-        )
-        conn.commit()
-        send_email = bool(body.get("send_email", True))
-        emailed = _send_user_lifecycle_email(str(row["email"] or "").strip(), str(row["full_name"] or "").strip(), "Your desk has been archived", f"your access has been moved to archived status. Reason: {reason}", accent="#ffbf5e") if send_email else False
-        return {"ok": True, "user": _public_user(conn, user_id), "emailed": bool(emailed)}
-    finally:
-        conn.close()
-
-
-@router.post("/api/admin/users/{user_id}/restore")
-async def admin_restore_user(user_id: int, request: Request, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
-    admin = _require_admin(authorization)
-    body = await request.json()
-    conn = get_conn()
-    try:
-        row = conn.execute("SELECT * FROM saas_users WHERE id=?", (user_id,)).fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail="User not found")
-        if not str(row["archived_at"] or "").strip():
-            raise HTTPException(status_code=400, detail="User is not archived")
-        note = str(body.get("note") or "Desk restored by admin").strip()[:240]
-        now = _utc_iso()
-        restored_status = "ACTIVE" if str(row["status"] or "").upper() == "ARCHIVED" else str(row["status"] or "ACTIVE").upper()
-        conn.execute(
-            "UPDATE saas_users SET status=?, archived_at=NULL, archived_by=NULL, archive_reason='', updated_at=? WHERE id=?",
-            (restored_status, now, user_id),
-        )
-        conn.execute("UPDATE saas_wallets SET status='ACTIVE', updated_at=? WHERE user_id=?", (now, user_id))
-        _log_user_history(
-            conn,
-            user_id,
-            "USER_RESTORED",
-            "User restored",
-            note,
-            actor_user_id=int(admin["id"]),
-            payload={"note": note},
-            created_at=now,
-        )
-        conn.commit()
-        send_email = bool(body.get("send_email", True))
-        emailed = _send_user_lifecycle_email(str(row["email"] or "").strip(), str(row["full_name"] or "").strip(), "Your desk is active again", "your archived desk has been restored and can be used again.", accent="#67e8f9") if send_email else False
-        return {"ok": True, "user": _public_user(conn, user_id), "emailed": bool(emailed)}
+        if not sent:
+            raise HTTPException(status_code=502, detail="Failed to send summary email")
+        return {"ok": True, "sent": True, "user": user_public}
     finally:
         conn.close()
 
 
 @router.post("/api/admin/users/{user_id}/wallet/credit")
 async def admin_wallet_credit(user_id: int, request: Request, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
-    admin = _require_admin(authorization)
+    _require_admin(authorization)
     body = await request.json()
     amount = float(body.get("amount") or 0)
     note = str(body.get("note") or "Admin wallet credit")[:200]
@@ -3328,24 +3687,23 @@ async def admin_wallet_credit(user_id: int, request: Request, authorization: Opt
         raise HTTPException(status_code=400, detail="Amount required")
     conn = get_conn()
     try:
-        row = conn.execute("SELECT * FROM saas_users WHERE id=?", (user_id,)).fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail="User not found")
         if amount > 0:
             _credit_wallet(conn, user_id, amount, "ADMIN", note, reference_type="ADMIN", reference_id=str(user_id))
         else:
             _debit_wallet(conn, user_id, abs(amount), "ADMIN", note, reference_type="ADMIN", reference_id=str(user_id))
-        _log_user_history(
-            conn,
-            user_id,
-            "WALLET_CREDIT" if amount > 0 else "WALLET_DEBIT",
-            "Wallet adjusted",
-            f"{'Credited' if amount > 0 else 'Debited'} {amount:,.2f}. {note}",
-            actor_user_id=int(admin["id"]),
-            payload={"amount": float(amount), "note": note},
-        )
         conn.commit()
-        return {"ok": True, "wallet": _wallet_snapshot(conn, user_id)}
+        user_public = _public_user(conn, user_id)
+        wallet = _wallet_snapshot(conn, user_id)
+        emailed = False
+        if body.get("send_email", False):
+            direction = "credited" if amount > 0 else "debited"
+            emailed = _send_user_account_summary_email(
+                user_public,
+                headline="Your wallet was updated",
+                intro=f"your admin just {direction} your wallet. The latest wallet status is shown below.",
+                wallet_note=f"Wallet adjustment: Rs {amount:,.2f}. Note: {note}",
+            )
+        return {"ok": True, "wallet": wallet, "emailed": bool(emailed)}
     finally:
         conn.close()
 
@@ -3504,6 +3862,146 @@ async def admin_settings_upsert(request: Request, authorization: Optional[str] =
         conn.close()
 
 
+@router.get("/api/admin/gmail/oauth/status")
+def admin_gmail_oauth_status(authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+    _require_admin(authorization)
+    init_saas_db()
+    conn = get_conn()
+    try:
+        return {"ok": True, "gmail": _gmail_runtime_status(conn)}
+    finally:
+        conn.close()
+
+
+@router.post("/api/admin/gmail/oauth/start")
+async def admin_gmail_oauth_start(authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+    admin = _require_admin(authorization)
+    cfg = _gmail_oauth_cfg()
+    if not _gmail_oauth_ready():
+        raise HTTPException(status_code=400, detail="Gmail OAuth is not configured on server")
+    state = _gmail_oauth_state_sign(
+        {
+            "kind": "gmail_oauth",
+            "admin_id": int(admin.get("uid") or 0),
+            "admin_email": str(admin.get("email") or "").strip().lower(),
+            "exp": int(time.time()) + 900,
+        }
+    )
+    params = {
+        "client_id": cfg["client_id"],
+        "redirect_uri": cfg["redirect_uri"],
+        "response_type": "code",
+        "scope": " ".join(cfg["scopes"]),
+        "access_type": "offline",
+        "prompt": "consent",
+        "include_granted_scopes": "true",
+        "state": state,
+    }
+    auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)
+    return {"ok": True, "url": auth_url, "state": state}
+
+
+@router.get("/api/admin/gmail/oauth/callback")
+def admin_gmail_oauth_callback(code: str = "", state: str = "", error: str = ""):
+    if error:
+        msg = html.escape(str(error))
+        return HTMLResponse(
+            "<html><body style='font-family:Segoe UI;background:#07111d;color:#e5eefc;padding:24px'>"
+            "<div style='max-width:620px;margin:auto;background:#0d1b31;border:1px solid #1f3657;border-radius:18px;padding:24px'>"
+            f"<h2 style='margin:0 0 10px'>Gmail OAuth failed</h2><p style='line-height:1.7;margin:0'>Google returned: {msg}. You can close this window and retry.</p>"
+            "<script>try{if(window.opener){window.opener.postMessage({type:'nx-gmail-oauth',ok:false}, '*');}}catch(e){}</script>"
+            "</div></body></html>",
+            status_code=400,
+        )
+    payload = _gmail_oauth_state_verify(state)
+    if str(payload.get("kind") or "") != "gmail_oauth":
+        raise HTTPException(status_code=400, detail="Invalid OAuth state kind")
+    if not str(code or "").strip():
+        raise HTTPException(status_code=400, detail="OAuth code missing")
+    cfg = _gmail_oauth_cfg()
+    if not _gmail_oauth_ready():
+        raise HTTPException(status_code=400, detail="Gmail OAuth not configured on server")
+    try:
+        token_resp = requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": str(code).strip(),
+                "client_id": cfg["client_id"],
+                "client_secret": cfg["client_secret"],
+                "redirect_uri": cfg["redirect_uri"],
+                "grant_type": "authorization_code",
+            },
+            timeout=25,
+        )
+        token_data = token_resp.json() if token_resp.content else {}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"OAuth exchange failed: {exc}") from exc
+    if not token_resp.ok or not token_data.get("access_token"):
+        detail = str(token_data.get("error_description") or token_data.get("error") or "OAuth token exchange failed")
+        raise HTTPException(status_code=502, detail=detail)
+    access_token = str(token_data.get("access_token") or "").strip()
+    refresh_token = str(token_data.get("refresh_token") or "").strip()
+    expires_in = max(300, _safe_int(token_data.get("expires_in"), default=3600))
+    token_type = str(token_data.get("token_type") or "Bearer").strip() or "Bearer"
+    scope = str(token_data.get("scope") or "")
+    oauth_email = _gmail_oauth_user_email(access_token) or str(payload.get("admin_email") or "")
+    conn = get_conn()
+    try:
+        old = _gmail_oauth_row(conn)
+        _gmail_oauth_save(
+            conn,
+            {
+                "connected": True,
+                "email": oauth_email,
+                "access_token": access_token,
+                "refresh_token": refresh_token or old.get("refresh_token") or "",
+                "token_type": token_type,
+                "scope": scope,
+                "expires_at": int(time.time()) + expires_in,
+                "updated_at": _utc_iso(),
+                "error": "",
+            },
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    close_html = (
+        "<html><body style='font-family:Segoe UI;background:#07111d;color:#e5eefc;padding:24px'>"
+        "<div style='max-width:620px;margin:auto;background:#0d1b31;border:1px solid #1f3657;border-radius:18px;padding:24px'>"
+        "<h2 style='margin:0 0 10px'>Gmail connected successfully</h2>"
+        "<p style='line-height:1.7;margin:0'>You can close this window and return to Nexus admin.</p>"
+        "<script>try{if(window.opener){window.opener.postMessage({type:'nx-gmail-oauth',ok:true}, '*');}}catch(e){}setTimeout(function(){window.close();}, 700);</script>"
+        "</div></body></html>"
+    )
+    return HTMLResponse(close_html)
+
+
+@router.post("/api/admin/gmail/oauth/disconnect")
+def admin_gmail_oauth_disconnect(authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+    _require_admin(authorization)
+    init_saas_db()
+    conn = get_conn()
+    try:
+        _gmail_oauth_save(
+            conn,
+            {
+                "connected": False,
+                "email": "",
+                "access_token": "",
+                "refresh_token": "",
+                "token_type": "Bearer",
+                "scope": "",
+                "expires_at": 0,
+                "updated_at": _utc_iso(),
+                "error": "",
+            },
+        )
+        conn.commit()
+        return {"ok": True, "gmail": _gmail_runtime_status(conn)}
+    finally:
+        conn.close()
+
+
 @router.post("/api/admin/gmail/test")
 async def admin_gmail_test(request: Request, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
     admin = _require_admin(authorization)
@@ -3511,7 +4009,8 @@ async def admin_gmail_test(request: Request, authorization: Optional[str] = Head
     to_email = str(body.get("email") or admin.get("email") or DEFAULT_ADMIN_EMAIL).strip().lower()
     if not to_email or "@" not in to_email:
         raise HTTPException(status_code=400, detail="Valid email required")
-    if not _gmail_ready():
+    status = _gmail_runtime_status()
+    if not bool(status.get("ready")):
         raise HTTPException(status_code=400, detail="Gmail is not configured yet")
     sent = _send_admin_test_email(to_email)
     if not sent:

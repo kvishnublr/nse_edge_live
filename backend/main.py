@@ -16,7 +16,7 @@ import pytz
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 import fetcher
@@ -400,7 +400,12 @@ _FRONTEND_ADMIN = os.path.join(FRONTEND_DIR, "admin.html")
 app.mount("/frontend-static", StaticFiles(directory=os.path.abspath(FRONTEND_DIR)), name="frontend-static")
 
 @app.get("/")
-async def serve_frontend():
+async def serve_frontend(request: Request):
+    # Kite often redirects to http://127.0.0.1:PORT/?request_token=… (app root). Forward to OAuth
+    # callback so the popup can postMessage to Nexus and close.
+    if request.query_params.get("request_token"):
+        q = request.url.query
+        return RedirectResponse(url=f"/kite-oauth-return?{q}", status_code=307)
     resp = FileResponse(os.path.abspath(_FRONTEND))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     resp.headers["Pragma"] = "no-cache"
@@ -2306,7 +2311,12 @@ async def adv_idx_options_backtest_report(
 async def get_live_picks():
     """Compute live stock picks from current stocks cache."""
     lp = compute_live_picks(signals.state)
-    return JSONResponse({"picks": lp["picks"][:8], "count": lp["total"]})
+    return JSONResponse({
+        "picks": lp["picks"][:8],
+        "count": lp["total"],
+        "tiers": lp.get("tiers", {}),
+        "universe": lp.get("universe", {}),
+    })
 
 
 @app.get("/api/signals/history")
