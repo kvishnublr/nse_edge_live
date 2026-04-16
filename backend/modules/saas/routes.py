@@ -26,7 +26,7 @@ from urllib.parse import parse_qs, quote, urlencode, urlparse
 import requests
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 from config import is_market_open, get_market_status
 
 logger = logging.getLogger("saas")
@@ -292,6 +292,36 @@ def _unpack_secret(value: Any) -> str:
         return base64.urlsafe_b64decode(raw.encode("ascii")).decode("utf-8")
     except Exception:
         return raw
+
+
+def _normalize_kite_credential(value: str) -> str:
+    """Strip whitespace and common copy/paste wrappers from Kite api_key / tokens."""
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "\"'":
+        raw = raw[1:-1].strip()
+    low = raw.lower()
+    if low.startswith("bearer "):
+        raw = raw[7:].strip()
+    return raw
+
+
+def _is_kite_credential_rejected(message: str) -> bool:
+    m = (message or "").lower()
+    return "incorrect api_key" in m or "incorrect access_token" in m
+
+
+def _kite_auth_error_hint(message: str) -> str:
+    if not _is_kite_credential_rejected(message):
+        return ""
+    return (
+        " Zerodha rejected this api_key + access_token pair. "
+        "Typical causes: access token expired (fresh login each trading day), "
+        "API key is from a different Kite Connect app than the one used at login, "
+        "or values pasted with extra quotes. Reconnect (One-Time Login / Manual Paste) "
+        "or use Import from server env after saving a valid token to backend/.env or the project root .env."
+    )
 
 
 def _mask_secret(value: str, keep: int = 4) -> str:
@@ -1836,6 +1866,8 @@ def _build_order_spec(strategy_code: str, payload: dict[str, Any], broker: sqlit
 def _zerodha_test_connection(api_key: str, access_token: str) -> dict[str, Any]:
     from kiteconnect import KiteConnect
 
+    api_key = _normalize_kite_credential(api_key)
+    access_token = _normalize_kite_credential(access_token)
     kite = KiteConnect(api_key=api_key)
     kite.set_access_token(access_token)
     profile = kite.profile()
@@ -1850,8 +1882,8 @@ def _zerodha_test_connection(api_key: str, access_token: str) -> dict[str, Any]:
 def _zerodha_place_order(account: sqlite3.Row, spec: dict[str, Any], strategy_code: str, *, variety_override: Optional[str] = None) -> dict[str, Any]:
     from kiteconnect import KiteConnect
 
-    api_key = str(account["api_key"] or "").strip()
-    access_token = _unpack_secret(account["access_token_enc"])
+    api_key = _normalize_kite_credential(str(account["api_key"] or "").strip())
+    access_token = _normalize_kite_credential(_unpack_secret(account["access_token_enc"]))
     kite = KiteConnect(api_key=api_key)
     kite.set_access_token(access_token)
     variety = str(variety_override or account["order_variety"] or "regular").strip().lower() or "regular"
@@ -1877,8 +1909,8 @@ def _zerodha_place_order(account: sqlite3.Row, spec: dict[str, Any], strategy_co
 def _zerodha_order_snapshot(account: sqlite3.Row, order_id: str) -> dict[str, Any]:
     from kiteconnect import KiteConnect
 
-    api_key = str(account["api_key"] or "").strip()
-    access_token = _unpack_secret(account["access_token_enc"])
+    api_key = _normalize_kite_credential(str(account["api_key"] or "").strip())
+    access_token = _normalize_kite_credential(_unpack_secret(account["access_token_enc"]))
     kite = KiteConnect(api_key=api_key)
     kite.set_access_token(access_token)
     orders = kite.orders() or []
@@ -1891,8 +1923,8 @@ def _zerodha_order_snapshot(account: sqlite3.Row, order_id: str) -> dict[str, An
 def _zerodha_cancel_order(account: sqlite3.Row, order_id: str, *, variety_override: Optional[str] = None) -> dict[str, Any]:
     from kiteconnect import KiteConnect
 
-    api_key = str(account["api_key"] or "").strip()
-    access_token = _unpack_secret(account["access_token_enc"])
+    api_key = _normalize_kite_credential(str(account["api_key"] or "").strip())
+    access_token = _normalize_kite_credential(_unpack_secret(account["access_token_enc"]))
     kite = KiteConnect(api_key=api_key)
     kite.set_access_token(access_token)
     variety = str(variety_override or account["order_variety"] or "regular").strip().lower() or "regular"
@@ -2038,8 +2070,24 @@ def _auto_execute_signal_worker(user_id: int, user_email: str, strategy_code: st
                 conn.execute("UPDATE saas_signal_inbox SET status='AUTO_EXECUTED' WHERE user_id=? AND strategy_code=? AND signal_key=?", (user_id, strategy_code, signal_key))
             except Exception as exc:
                 error_text = str(exc)
-                conn.execute("UPDATE saas_broker_accounts SET status='ERROR', last_error=?, last_checked_at=?, updated_at=? WHERE id=?", (error_text[:500], now, now, int(broker["id"])))
-                _upsert_broker_order_log(conn, user_id=user_id, broker_account_id=int(broker["id"]), strategy_code=strategy_code, signal_key=signal_key, spec=spec, status="FAILED", live_mode=True, broker_status="ERROR", error_text=error_text)
+                hint = _kite_auth_error_hint(error_text)
+                err_for_db = (error_text + hint)[:600]
+                conn.execute(
+                    "UPDATE saas_broker_accounts SET status='ERROR', last_error=?, last_checked_at=?, updated_at=? WHERE id=?",
+                    (err_for_db[:500], now, now, int(broker["id"])),
+                )
+                _upsert_broker_order_log(
+                    conn,
+                    user_id=user_id,
+                    broker_account_id=int(broker["id"]),
+                    strategy_code=strategy_code,
+                    signal_key=signal_key,
+                    spec=spec,
+                    status="FAILED",
+                    live_mode=True,
+                    broker_status="ERROR",
+                    error_text=err_for_db,
+                )
                 conn.execute("UPDATE saas_signal_inbox SET status='AUTO_FAILED' WHERE user_id=? AND strategy_code=? AND signal_key=?", (user_id, strategy_code, signal_key))
                 conn.commit()
                 return
@@ -2406,10 +2454,10 @@ def _save_broker_connection(conn: sqlite3.Connection, user_id: int, body: dict[s
     catalog = _broker_catalog_map()
     if broker_code not in catalog:
         raise HTTPException(status_code=400, detail="Unsupported broker")
-    api_key = str(body.get("api_key", row["api_key"]) or row["api_key"] or "").strip()
-    api_secret = str(body.get("api_secret") or "").strip() or _unpack_secret(row["api_secret_enc"])
-    access_token = str(body.get("access_token") or "").strip()
-    refresh_token = str(body.get("refresh_token") or "").strip() or _unpack_secret(row["refresh_token_enc"])
+    api_key = _normalize_kite_credential(str(body.get("api_key", row["api_key"]) or row["api_key"] or "").strip())
+    api_secret = _normalize_kite_credential(str(body.get("api_secret") or "").strip() or _unpack_secret(row["api_secret_enc"]))
+    access_token = _normalize_kite_credential(str(body.get("access_token") or "").strip())
+    refresh_token = _normalize_kite_credential(str(body.get("refresh_token") or "").strip() or _unpack_secret(row["refresh_token_enc"]))
     account_label = str(body.get("account_label", row["account_label"]) or row["account_label"] or catalog[broker_code]["name"]).strip()
     broker_user_id = str(body.get("broker_user_id", row["broker_user_id"]) or row["broker_user_id"] or "").strip()
     enabled = 1 if body.get("enabled", bool(row["enabled"] or 0)) else 0
@@ -2438,7 +2486,7 @@ def _save_broker_connection(conn: sqlite3.Connection, user_id: int, body: dict[s
         request_raw = str(body.get("request_token") or body.get("redirect_url") or "").strip()
         request_token = _parse_kite_request_token(request_raw) if request_raw else ""
         if request_token:
-            secret_for_exchange = str(body.get("api_secret") or "").strip() or _unpack_secret(row["api_secret_enc"])
+            secret_for_exchange = _normalize_kite_credential(str(body.get("api_secret") or "").strip() or _unpack_secret(row["api_secret_enc"]))
             if not secret_for_exchange:
                 raise HTTPException(status_code=400, detail="API secret required to complete Zerodha login")
             try:
@@ -2446,11 +2494,11 @@ def _save_broker_connection(conn: sqlite3.Connection, user_id: int, body: dict[s
 
                 kite = KiteConnect(api_key=api_key)
                 sess = kite.generate_session(request_token, api_secret=secret_for_exchange)
-                access_token = str(sess.get("access_token") or "")
+                access_token = _normalize_kite_credential(str(sess.get("access_token") or ""))
             except Exception as exc:
                 raise HTTPException(status_code=400, detail=f"Zerodha login exchange failed: {exc}") from exc
         if not access_token:
-            access_token = _unpack_secret(row["access_token_enc"])
+            access_token = _normalize_kite_credential(_unpack_secret(row["access_token_enc"]))
         if not access_token:
             if test_only:
                 raise HTTPException(
@@ -2945,8 +2993,12 @@ async def user_broker_kite_interactive_start(request: Request, authorization: Op
     load_dotenv(BASE_DIR / ".env", override=True)
     payload = dict(body or {})
     payload["broker_code"] = "ZERODHA"
-    payload["api_key"] = str(payload.get("api_key") or (row["api_key"] if row else "") or os.getenv("KITE_API_KEY", "")).strip()
-    payload["api_secret"] = str(payload.get("api_secret") or (_unpack_secret(row["api_secret_enc"]) if row else "") or os.getenv("KITE_API_SECRET", "")).strip()
+    payload["api_key"] = _normalize_kite_credential(
+        str(payload.get("api_key") or (row["api_key"] if row else "") or os.getenv("KITE_API_KEY", "")).strip()
+    )
+    payload["api_secret"] = _normalize_kite_credential(
+        str(payload.get("api_secret") or (_unpack_secret(row["api_secret_enc"]) if row else "") or os.getenv("KITE_API_SECRET", "")).strip()
+    )
     if not str(payload.get("account_label") or "").strip():
         payload["account_label"] = str((row["account_label"] if row else "") or "Zerodha Desk")
     if "paper_mode" not in payload:
@@ -2972,16 +3024,31 @@ async def user_broker_kite_interactive_status(authorization: Optional[str] = Hea
 async def user_broker_import_env_token(request: Request, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
     user = _require_user(authorization)
     body = await request.json()
-    load_dotenv(BASE_DIR / ".env", override=True)
-    api_key = str(os.getenv("KITE_API_KEY", "") or "").strip()
-    api_secret = str(os.getenv("KITE_API_SECRET", "") or "").strip()
-    access_token = str(os.getenv("KITE_ACCESS_TOKEN", "") or "").strip()
+    backend_env = BASE_DIR / ".env"
+    load_dotenv(backend_env, override=True)
+    api_key = _normalize_kite_credential(str(os.getenv("KITE_API_KEY", "") or ""))
+    api_secret = _normalize_kite_credential(str(os.getenv("KITE_API_SECRET", "") or ""))
+    access_token = _normalize_kite_credential(str(os.getenv("KITE_ACCESS_TOKEN", "") or ""))
     broker_user_id = str(os.getenv("KITE_USER_ID", "") or "").strip()
+    if not api_key or not access_token:
+        root_env = BASE_DIR.parent / ".env"
+        if root_env.is_file():
+            root_vals = dotenv_values(root_env) or {}
+            if not api_key:
+                api_key = _normalize_kite_credential(str(root_vals.get("KITE_API_KEY") or ""))
+            if not api_secret:
+                api_secret = _normalize_kite_credential(str(root_vals.get("KITE_API_SECRET") or ""))
+            if not access_token:
+                access_token = _normalize_kite_credential(str(root_vals.get("KITE_ACCESS_TOKEN") or ""))
+            if not broker_user_id:
+                broker_user_id = str(root_vals.get("KITE_USER_ID") or "").strip()
     missing = [name for name, value in (("KITE_API_KEY", api_key), ("KITE_ACCESS_TOKEN", access_token)) if not value]
     if missing:
         raise HTTPException(
             status_code=400,
-            detail="Missing env values: " + ", ".join(missing) + ". Refresh/load your Zerodha token first.",
+            detail="Missing env values: "
+            + ", ".join(missing)
+            + ". Set them in backend/.env or the project root .env, then retry import.",
         )
     payload = dict(body or {})
     payload.update(
@@ -3033,10 +3100,10 @@ async def user_broker_sync_main_feed_token(authorization: Optional[str] = Header
         st = str(row["status"] or "").upper()
         if st not in {"CONNECTED", "READY"}:
             raise HTTPException(status_code=400, detail="Desk Kite session is not connected yet")
-        access_token = _unpack_secret(row["access_token_enc"])
+        access_token = _normalize_kite_credential(_unpack_secret(row["access_token_enc"]))
         if not access_token:
             raise HTTPException(status_code=400, detail="No access token stored on this desk")
-        api_key = str(row["api_key"] or "").strip()
+        api_key = _normalize_kite_credential(str(row["api_key"] or "").strip())
         if not api_key:
             raise HTTPException(status_code=400, detail="No API key stored on this desk")
         try:
@@ -3208,6 +3275,8 @@ async def user_broker_sample_order(request: Request, authorization: Optional[str
             }
         except Exception as exc:
             error_text = str(exc)
+            hint = _kite_auth_error_hint(error_text)
+            err_for_db = (error_text + hint)[:600]
             _upsert_broker_order_log(
                 conn,
                 user_id=int(user["id"]),
@@ -3218,19 +3287,25 @@ async def user_broker_sample_order(request: Request, authorization: Optional[str
                 status="FAILED",
                 live_mode=True,
                 broker_status="REJECTED",
-                error_text=error_text,
+                error_text=err_for_db,
                 request_data={"variety": broker_variety, **spec, "session_hint": session_hint},
-                response_data={"error": error_text, "session_hint": session_hint},
+                response_data={"error": error_text, "session_hint": session_hint, "hint": hint or None},
             )
-            conn.execute(
-                "UPDATE saas_broker_accounts SET last_error=?, last_checked_at=?, updated_at=? WHERE id=?",
-                (error_text[:500], now, now, int(broker["id"])),
-            )
+            if _is_kite_credential_rejected(error_text):
+                conn.execute(
+                    "UPDATE saas_broker_accounts SET status=?, last_error=?, last_checked_at=?, updated_at=? WHERE id=?",
+                    ("ERROR", err_for_db[:500], now, now, int(broker["id"])),
+                )
+            else:
+                conn.execute(
+                    "UPDATE saas_broker_accounts SET last_error=?, last_checked_at=?, updated_at=? WHERE id=?",
+                    (error_text[:500], now, now, int(broker["id"])),
+                )
             conn.commit()
             return JSONResponse(
                 {
                     "ok": False,
-                    "detail": f"Sample order was not accepted by broker ({broker_variety.upper()}, {session_hint}). {error_text}",
+                    "detail": f"Sample order was not accepted by broker ({broker_variety.upper()}, {session_hint}). {error_text}{hint}",
                     "sample": {
                         "mode": "live",
                         "symbol": symbol,
