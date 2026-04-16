@@ -607,25 +607,33 @@
       );
     const kiteBrand = '<div class="nx-kite-brand"><span class="nx-kite-z">Z</span><span>Zerodha Kite</span></div>';
     const allowServerImport = !!((NX.boot || {}).allow_user_server_session_import);
-    const steps = paper
-      ? '<div class="nx-z-paper-callout"><div class="nx-z-paper-title">Desk type: Paper</div><div class="nx-z-paper-sub">Switch Broker to <b>Zerodha Kite</b> to enable login tools. Keep <b>Paper route</b> ON to simulate orders.</div></div>'
-      : '<div class="nx-z-steps-wrap"><div class="nx-z-steps-head">Connect Zerodha (user token)</div><ol class="nx-z-steps">'
-        + '<li><span class="nx-z-sn">1</span><div><strong>One-time login</strong><span>Open Kite, login, and auto-capture token.</span></div></li>'
-        + '<li><span class="nx-z-sn">2</span><div><strong>Kite in popup</strong><span>Auto-close works when redirect URL is correct.</span></div></li>'
-        + '<li><span class="nx-z-sn">3</span><div><strong>Manual paste</strong><span>Paste redirect URL or request token only if needed.</span></div></li>'
-        + '</ol></div>'
-        + (paperRouteOn ? '<div class="nx-z-paper-route-note"><b>Paper route is ON</b> — orders stay simulated, but you still need a valid Kite session above for live quotes and session checks.</div>' : '');
     const altRedirect = nxKiteOAuthReturnAlt();
-    const kiteRedirectWarn = paper ? '' : (
-      '<div class="nx-z-redirect-warn nx-status warn" style="margin-top:12px">'
-      + '<b>Kite redirect URL (required for auto-close)</b>'
-      + '<div style="margin-top:8px;line-height:1.5">Zerodha’s preset <code>https://127.0.0.1/</code> uses <b>HTTPS and port 443</b> — nothing is listening there locally, so you see <i>connection refused</i> and Nexus never receives the token. In <b>Kite Connect → My apps → your app</b>, set <b>Redirect URL</b> to <b>http</b> (not https) on the <b>same host and port</b> as this app (examples below).</div>'
-      + '<div class="nx-inline-note" style="margin-top:10px"><b>Use exactly one of:</b> <code style="word-break:break-all">'+escapeHtml(nxKiteOAuthReturnAbs())+'</code>'
-      + (altRedirect ? (' <b>or</b> <code style="word-break:break-all">'+escapeHtml(altRedirect)+'</code>') : '')
-      + ' · <button type="button" class="nx-mini-btn" onclick="nxCopyKiteOAuthRedirect()">Copy primary</button>'
-      + (altRedirect ? ' <button type="button" class="nx-mini-btn" onclick="nxCopyKiteOAuthRedirectAlt()">Copy alt</button>' : '')
+    const primaryRedirect = escapeHtml(nxKiteOAuthReturnAbs());
+    const altRedirectHtml = altRedirect ? ('<div class="nx-inline-note" style="margin-top:6px">Alternate: <code style="word-break:break-all">' + escapeHtml(altRedirect) + '</code></div>') : '';
+    const loginDone = !paper && sessOk;
+    const simpleLoginCard = paper ? (
+      '<div class="nx-z-paper-callout"><div class="nx-z-paper-title">Select Zerodha first</div><div class="nx-z-paper-sub">Change the Broker dropdown from <b>Paper</b> to <b>Zerodha Kite</b>. Then one button is enough: <b>Login with Zerodha</b>.</div></div>'
+    ) : (
+      '<div class="nx-z-simple-login">'
+      + '<div class="nx-z-simple-kicker">Use any of below options for smooth login</div>'
+      + '<div class="nx-z-simple-title">Generate your token in 2 steps</div>'
+      + '<div class="nx-z-simple-steps">'
+      + '<div class="nx-z-simple-step"><span>1</span><div>Click <b>Login with Zerodha</b>.</div></div>'
+      + '<div class="nx-z-simple-step"><span>2</span><div>Finish login on Kite. Nexus will capture the token and update this desk automatically.</div></div>'
       + '</div>'
-      + '<div class="nx-inline-note" style="margin-top:8px">If you already use redirect <code>http://127.0.0.1:8000/</code> (root path only), login still works: STOCKR forwards <code>/?request_token=…</code> to the OAuth page so the popup can close.</div>'
+      + '<div class="nx-z-simple-actions">'
+      + '<button type="button" class="nx-btn nx-btn-gold nx-kite-login-btn" onclick="nxKiteInteractiveLogin()" '+((interactiveStarting || loginDone)?'disabled':'')+'>'+(loginDone ? 'Login completed' : (interactiveStarting?'Opening...':'Login with Zerodha'))+'</button>'
+      + '<button type="button" class="nx-btn nx-btn-ghost" onclick="nxKiteOpenLogin()" '+(loginDone?'disabled':'')+'>Popup login</button>'
+      + (loginDone
+        ? '<button type="button" class="nx-btn nx-btn-ghost" onclick="nxBrokerDisconnect()" '+(NX.loadingAction === 'broker-disconnect'?'disabled':'')+'>'+(NX.loadingAction === 'broker-disconnect'?'Closing...':'Close session')+'</button>'
+        : '<button type="button" class="nx-btn nx-btn-ghost" onclick="nxKiteClosePopup()" '+(NX.kitePopupLaunched?'':'style="opacity:.45"')+'>Close popup</button>')
+      + '</div>'
+      + '<div class="nx-form-grid" style="margin-top:14px"><label class="nx-form-label">Sample symbol<input id="nx-sample-symbol" class="nx-input" placeholder="SBIN"></label><label class="nx-form-label">Sample quantity<input id="nx-sample-qty" class="nx-input" placeholder="1" value="'+escapeHtml(String(broker.default_quantity || 1))+'"></label></div>'
+      + '<div class="nx-z-simple-actions" style="margin-top:12px">'
+      + '<button type="button" class="nx-btn nx-btn-gold" onclick="nxBrokerSampleOrder()" '+(sampling?'disabled':'')+'>'+(sampling?'Running...':'Sample order')+'</button>'
+      + '<button type="button" class="nx-btn nx-btn-ghost" onclick="nxSendKiteMobileLoginLink()" '+((NX.loadingAction === 'broker-mobile-link' || loginDone)?'disabled':'')+'>'+(NX.loadingAction === 'broker-mobile-link'?'Sending...':(loginDone?'Mobile link not needed':'Send Telegram mobile login'))+'</button>'
+      + '</div>'
+      + '<div class="nx-z-simple-help">If a browser popup is blocked, allow popups and retry. After success, this desk stores your token in the server DB and uses it for trading.</div>'
       + '</div>'
     );
     const deskFeedSync = !!(NX.boot || {}).desk_feed_sync_enabled;
@@ -638,18 +646,17 @@
       + '</div>'
     );
     const quickLane = paper ? '' : ''
-      + '<div class="nx-z-command-grid">'
+      + simpleLoginCard
+      + '<div class="nx-status '+tokenClass+'" style="margin-top:12px"><b>'+tokenTitle+'</b>'+(tokenMessage ? '<div style="margin-top:6px">'+tokenMessage+'</div>' : '')+tokenDetail+waitBanner+'</div>'
+      + '<details class="nx-z-simple-more"><summary>Need help or another login method?</summary><div class="nx-z-simple-more-body">'
+      + '<div class="nx-inline-note"><b>Redirect URL for auto-close:</b> <code style="word-break:break-all">'+primaryRedirect+'</code> <button type="button" class="nx-mini-btn" onclick="nxCopyKiteOAuthRedirect()">Copy</button></div>'
+      + altRedirectHtml
+      + '<div class="nx-inline-note" style="margin-top:8px">If Zerodha opens <code>127.0.0.1</code> and shows connection refused, update the redirect URL in <b>Kite Connect → My apps</b> to the value above.</div>'
       + (allowServerImport
-        ? '<div class="nx-z-command-card nx-z-command-card-primary"><div class="nx-z-fast-kicker">Quick connect</div><div class="nx-z-fast-title">Use server session</div><div class="nx-z-fast-sub">Import token and connect instantly.</div><div class="nx-actions" style="margin-top:14px"><button type="button" class="nx-btn nx-btn-primary" onclick="nxImportEnvBrokerToken()" '+(importing?'disabled':'')+'>'+(importing?'Importing...':'Use Server Session')+'</button><button type="button" class="nx-btn nx-btn-ghost" onclick="nxCheckServerTokenStatus()" '+(checking?'disabled':'')+'>'+(checking?'Checking...':'Check Status')+'</button></div></div>'
-        : '<div class="nx-z-command-card nx-z-command-card-primary"><div class="nx-z-fast-kicker">User-owned session</div><div class="nx-z-fast-title">Server session disabled</div><div class="nx-z-fast-sub">This desk uses each user\'s own Kite token only. Use One-Time login or Kite popup below.</div></div>')
-      + '<div class="nx-z-command-card nx-z-command-card-lite"><div class="nx-z-fast-kicker">Generate token</div><div class="nx-z-fast-title">Open Kite Login</div><div class="nx-z-fast-sub"><b>One-time</b> opens a separate Edge/Chrome window (not the Nexus popup). <b>Kite in popup</b> uses this tab’s popup + auto-close when redirect URL is correct. Do not spam One-time — extra windows stack up.</div><div class="nx-actions" style="margin-top:14px"><button type="button" class="nx-btn nx-btn-gold" onclick="nxKiteInteractiveLogin()" '+(interactiveStarting?'disabled':'')+'>'+(interactiveStarting?'Opening...':'One-Time Kite Login')+'</button><button type="button" class="nx-btn nx-btn-ghost" onclick="nxKiteOpenLogin()">Kite in popup</button><button type="button" class="nx-btn nx-btn-ghost" onclick="nxKiteClosePopup()" '+(NX.kitePopupLaunched?'':'style="opacity:.45"')+' title="Close the Kite popup">Close Kite</button></div></div>'
-      + (allowServerImport
-        ? '<div class="nx-z-command-card"><div class="nx-z-fast-kicker">Auto refresh</div><div class="nx-z-fast-title">Refresh and use</div><div class="nx-z-fast-sub">Rebuild token from saved env credentials.</div><div class="nx-actions" style="margin-top:14px"><button type="button" class="nx-btn nx-btn-ghost" onclick="nxRefreshEnvBrokerToken()" '+(refreshing?'disabled':'')+'>'+(refreshing?'Refreshing...':'Auto Refresh & Use')+'</button></div></div>'
-        : '<div class="nx-z-command-card"><div class="nx-z-fast-kicker">Status</div><div class="nx-z-fast-title">User token persists in desk DB</div><div class="nx-z-fast-sub">After successful login, token is stored server-side for this desk and used for trading.</div></div>')
-      + '</div>'
+        ? '<div class="nx-actions" style="margin-top:12px"><button type="button" class="nx-btn nx-btn-primary" onclick="nxImportEnvBrokerToken()" '+(importing?'disabled':'')+'>'+(importing?'Importing...':'Use server session')+'</button><button type="button" class="nx-btn nx-btn-ghost" onclick="nxCheckServerTokenStatus()" '+(checking?'disabled':'')+'>'+(checking?'Checking...':'Check status')+'</button><button type="button" class="nx-btn nx-btn-ghost" onclick="nxRefreshEnvBrokerToken()" '+(refreshing?'disabled':'')+'>'+(refreshing?'Refreshing...':'Refresh token')+'</button></div>'
+        : '<div class="nx-inline-note" style="margin-top:10px">Server session is disabled for user desks. This page uses only the user token generated from your own Kite login.</div>')
       + feedSyncHint
-      + kiteRedirectWarn
-      + '<div class="nx-status '+tokenClass+'" style="margin-top:12px"><b>'+tokenTitle+'</b>'+(tokenMessage ? '<div style="margin-top:6px">'+tokenMessage+'</div>' : '')+tokenDetail+waitBanner+'</div>';
+      + '</div></details>';
     const manualCard = paper ? '' : ''
       + '<div class="nx-z-manual-card">'
       + '<div class="nx-z-manual-head"><div><div class="nx-z-fast-kicker">Fallback</div><div class="nx-z-fast-title">Manual redirect paste</div></div><div class="nx-inline-note">Only use this if the one-time login flow is unavailable for your Kite redirect setup.</div></div>'
@@ -664,7 +671,6 @@
       + '<div id="nx-paper-fields" class="nx-z-toggle" style="display:'+(paper?'block':'none')+'"><p class="nx-z-lead">You have <b>Paper</b> selected as the broker <em>type</em>. Pick <b>Zerodha Kite</b> in the Broker menu to show login tools. After Kite is connected, use <b>Paper route</b> in Advanced to keep orders simulated.</p></div>'
       + '<div id="nx-zerodha-fields" class="nx-z-toggle" style="display:'+(paper?'none':'block')+'">'
       + quickLane
-      + manualCard
       + '</div></div>';
     let readiness = '';
     if(paper){
@@ -676,7 +682,7 @@
     }else if(sessOk && !broker.enabled){
       readiness = '<div class="nx-z-ready nx-z-ready-warn"><div class="nx-z-ready-title">Connected — routing off</div><div class="nx-z-ready-sub">Turn on <b>Broker enabled</b> in Advanced when you want auto-routing.</div></div>';
     }else{
-      readiness = '<div class="nx-z-ready"><div class="nx-z-ready-title">Not validated</div><div class="nx-z-ready-sub">Paste your redirect URL and click <b>Validate &amp; save</b>. We confirm your session immediately.</div></div>';
+      readiness = '<div class="nx-z-ready"><div class="nx-z-ready-title">Not connected yet</div><div class="nx-z-ready-sub">Use <b>Login with Zerodha</b>. After successful Kite login, this desk updates automatically.</div></div>';
     }
     return ''
       + '<div class="nx-card nx-kite-dock">'
@@ -686,27 +692,25 @@
       + '<div><div class="nx-card-title nx-kite-dock-title">Trading execution</div><div class="nx-card-sub">Pick your broker type first. Zerodha tools appear only when <b>Zerodha Kite</b> is selected — then connect, validate, and tune routing below.</div></div>'
       + '<div class="nx-kite-dock-badges"><span class="nx-badge '+statusClass+'">'+escapeHtml(broker.status || 'Idle')+'</span><span class="nx-badge '+modeBadge+'">'+modeLabel+'</span><span class="nx-badge '+(engineReady ? 'good' : 'warn')+'">'+(engineReady ? 'Engine ready' : (paper ? 'Paper' : 'Awaiting validation'))+'</span></div>'
       + '</div>'
-      + '<div class="nx-kite-dock-hero">'+(paper ? '' : kiteBrand)+steps+'</div>'
+      + '<div class="nx-kite-dock-hero">'+(paper ? '' : kiteBrand)+'</div>'
       + '</div>'
       + '<div class="nx-card-body nx-kite-dock-body"><div class="nx-kite-dock-grid">'
       + '<div class="nx-kite-dock-main">'+simpleForm
-      + '<details class="nx-z-advanced"><summary>Advanced routing &amp; manual token</summary>'
+      + '<details class="nx-z-advanced"><summary>Advanced options</summary>'
       + '<div class="nx-z-advanced-body">'
       + '<div class="nx-form-grid"><label class="nx-form-label">Broker user ID<input id="nx-broker-user-id" class="nx-input" placeholder="AB1234" value="'+escapeHtml(broker.broker_user_id || '')+'"></label><label class="nx-form-label">Default qty<input id="nx-broker-qty" class="nx-input" placeholder="1" value="'+escapeHtml(String(broker.default_quantity || 1))+'"></label></div>'
       + '<div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Manual access token<input id="nx-broker-access-token" class="nx-input" placeholder="'+escapeHtml(broker.access_token_masked || 'Only if not using login URL')+'" value=""></label><label class="nx-form-label">Intraday product<select id="nx-broker-intraday-product" class="nx-select"><option '+((broker.intraday_product||'MIS')==='MIS'?'selected':'')+'>MIS</option><option '+((broker.intraday_product||'MIS')==='CNC'?'selected':'')+'>CNC</option><option '+((broker.intraday_product||'MIS')==='NRML'?'selected':'')+'>NRML</option></select></label></div>'
       + '<div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Positional product<select id="nx-broker-positional-product" class="nx-select"><option '+((broker.positional_product||'CNC')==='CNC'?'selected':'')+'>CNC</option><option '+((broker.positional_product||'CNC')==='NRML'?'selected':'')+'>NRML</option><option '+((broker.positional_product||'CNC')==='MIS'?'selected':'')+'>MIS</option></select></label><label class="nx-form-label">&nbsp;</label></div>'
       + '<div class="nx-toggle-grid" style="margin-top:14px"><label class="nx-check"><input id="nx-broker-enabled" type="checkbox" onchange="nxBrokerCodeSync()"'+checkedAttr(!!broker.enabled)+'><span>Broker enabled</span><span class="nx-check-hint">Required for Sample order and auto-routing — must be saved with Capture Token or Save Credentials</span></label><label class="nx-check"><input id="nx-broker-paper-mode" type="checkbox" onchange="nxBrokerCodeSync()"'+checkedAttr(!!(broker.paper_mode || paper))+'><span>Paper route</span><span class="nx-check-hint">Simulate orders (Kite session can still be real)</span></label><label class="nx-check"><input id="nx-broker-live-mode" type="checkbox" onchange="nxBrokerCodeSync()"'+checkedAttr(!!broker.live_mode && !paper)+' '+(liveLocked ? 'disabled' : '')+'><span>Live mode</span><span class="nx-check-hint">Real broker orders when off paper route</span></label><label class="nx-check"><input id="nx-user-auto-execute" type="checkbox"'+checkedAttr(!!((user.controls||{}).auto_execute))+'><span>Auto execute</span></label></div>'
       + '<div class="nx-form-grid-3" style="margin-top:12px"><label class="nx-form-label">Daily loss<input id="nx-user-daily-loss" class="nx-input" placeholder="2500" value="'+escapeHtml(String((user.controls||{}).daily_loss_limit || 0))+'"></label><label class="nx-form-label">Max trades / day<input id="nx-user-max-trades" class="nx-input" placeholder="6" value="'+escapeHtml(String((user.controls||{}).max_trades_per_day || 0))+'"></label><label class="nx-form-label">Max open signals<input id="nx-user-max-open" class="nx-input" placeholder="3" value="'+escapeHtml(String((user.controls||{}).max_open_signals || 0))+'"></label></div>'
-      + '</div></details>'
       + '<div class="nx-z-cta">'
-      + '<button type="button" class="nx-btn nx-btn-primary nx-btn-validate" onclick="nxBrokerSaveCredentials()" '+(saving?'disabled':'')+'>'+(saving?'Saving...':'Save Credentials')+'</button>'
-      + '<button type="button" class="nx-btn nx-btn-gold" onclick="nxCaptureKiteToken()" '+(saving?'disabled':'')+'>'+(saving?'Saving...':'Capture Token')+'</button>'
-      + '<button type="button" class="nx-btn nx-btn-ghost" onclick="nxBrokerTest()" '+(testing?'disabled':'')+'>'+(testing?'Testing...':'Test Session')+'</button>'
-      + '<button type="button" class="nx-btn nx-btn-gold" onclick="nxBrokerSampleOrder()" '+(sampling?'disabled':'')+'>'+(sampling?'Running...':'Sample Order')+'</button>'
+      + '<button type="button" class="nx-btn nx-btn-primary nx-btn-validate" onclick="nxBrokerSaveCredentials()" '+(saving?'disabled':'')+'>'+(saving?'Saving...':'Save advanced changes')+'</button>'
+      + '<button type="button" class="nx-btn nx-btn-gold" onclick="nxCaptureKiteToken()" '+(saving?'disabled':'')+'>'+(saving?'Saving...':'Use pasted token')+'</button>'
+      + '<button type="button" class="nx-btn nx-btn-ghost" onclick="nxBrokerTest()" '+(testing?'disabled':'')+'>'+(testing?'Testing...':'Test session')+'</button>'
       + '</div>'
-      + '<div class="nx-form-grid" style="margin-top:10px"><label class="nx-form-label">Sample symbol<input id="nx-sample-symbol" class="nx-input" placeholder="SBIN"></label><label class="nx-form-label">Sample quantity<input id="nx-sample-qty" class="nx-input" placeholder="1" value="'+escapeHtml(String(broker.default_quantity || 1))+'"></label></div>'
+      + manualCard
+      + '</div></details>'
       + brokerTestHtml
-      + '<div class="nx-inline-note" style="margin-top:12px">SPIKE and SWING can route as equity. INDEX stays inbox-only until contract mapping ships.</div>'
       + '</div>'
       + '<div class="nx-kite-dock-side">'
       + readiness
@@ -1181,6 +1185,48 @@
     nxCloseKitePopupRef();
     safeRender();
     toast('Kite popup closed — paste redirect URL here if Zerodha showed it, then Capture Token.');
+  };
+  window.nxSendKiteMobileLoginLink = function(){
+    return runBusy('broker-mobile-link', async function(){
+      try{
+        const data = await nxApi('/api/user/broker/mobile-login-link', { method:'POST', body: JSON.stringify({}) });
+        const link = String((data || {}).mobile_login_url || '').trim();
+        NX.brokerAssist = {
+          type:'cool',
+          title:'Telegram login link sent',
+          message:'Open the Telegram message on your mobile and finish Kite login there.',
+          detail: link ? ('Mobile link: ' + link) : '',
+          waitHint:'After mobile login succeeds, the session is saved directly on the server.'
+        };
+        safeRender();
+        toast('Telegram mobile login link sent');
+      }catch(err){
+        NX.brokerAssist = { type:'error', title:'Could not send Telegram login link', message: err.message || 'Telegram send failed', detail:'', waitHint:'' };
+        safeRender();
+        toast(err.message || 'Telegram send failed');
+      }
+    });
+  };
+  window.nxBrokerDisconnect = function(){
+    return runBusy('broker-disconnect', async function(){
+      try{
+        await nxApi('/api/user/broker/disconnect', { method:'POST', body: JSON.stringify({}) });
+        NX.brokerAssist = {
+          type:'info',
+          title:'Session closed',
+          message:'The saved broker session was removed from this desk.',
+          detail:'Use Login with Zerodha again when you want to reconnect.',
+          waitHint:''
+        };
+        await loadUserData();
+        safeRender();
+        toast('Broker session closed');
+      }catch(err){
+        NX.brokerAssist = { type:'error', title:'Could not close session', message: err.message || 'Disconnect failed', detail:'', waitHint:'' };
+        safeRender();
+        toast(err.message || 'Disconnect failed');
+      }
+    });
   };
   function nxRunKiteOAuthHandshake(d){
     d = d || {};

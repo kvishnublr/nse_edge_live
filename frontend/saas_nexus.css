@@ -662,6 +662,17 @@ body.nx-modal-open{overflow:hidden!important}
 .nx-z-advanced{margin-top:20px;border-radius:16px;border:1px solid rgba(255,255,255,.1);background:rgba(0,0,0,.12);padding:0 14px}
 .nx-z-advanced summary{cursor:pointer;padding:12px 4px;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#8ec5ff}
 .nx-z-advanced-body{padding:4px 4px 14px}
+.nx-z-simple-login{padding:20px;border-radius:20px;border:1px solid rgba(94,242,161,.24);background:linear-gradient(180deg,rgba(94,242,161,.08),rgba(255,255,255,.03))}
+.nx-z-simple-kicker{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#8fdfff}
+.nx-z-simple-title{margin-top:8px;font-family:var(--fh,"Syne",sans-serif);font-size:24px;font-weight:900;line-height:1.08;color:#eef7ff}
+.nx-z-simple-steps{display:grid;grid-template-columns:1fr;gap:10px;margin-top:14px}
+.nx-z-simple-step{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:14px;border:1px solid rgba(255,255,255,.1);background:rgba(0,0,0,.14);font-size:12px;line-height:1.55;color:#b8cfe0}
+.nx-z-simple-step span{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:24px;height:24px;border-radius:999px;background:linear-gradient(135deg,#67e8f9,#38bdf8);color:#041320;font-size:11px;font-weight:900}
+.nx-z-simple-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.nx-z-simple-help{margin-top:10px;font-size:11px;line-height:1.55;color:#9eb8d6}
+.nx-z-simple-more{margin-top:14px;border-radius:16px;border:1px solid rgba(255,255,255,.1);background:rgba(0,0,0,.1);padding:0 14px}
+.nx-z-simple-more summary{cursor:pointer;padding:12px 4px;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#8ec5ff}
+.nx-z-simple-more-body{padding:4px 4px 14px}
 .nx-z-cta{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08)}
 .nx-btn-validate{min-width:200px;font-size:11px}
 .nx-kite-dock-side{display:flex;flex-direction:column;gap:12px}
@@ -817,6 +828,17 @@ body.nx-modal-open{overflow:hidden!important}
   background:
     radial-gradient(circle at 100% 0%, rgba(255,191,94,.12), transparent 36%),
     linear-gradient(180deg, rgba(255,255,255,.98), rgba(242,247,252,.96));
+}
+.light .nx-z-simple-login,
+.light .nx-z-simple-more{
+  border-color:rgba(111,142,176,.18);
+  background:linear-gradient(180deg, rgba(255,255,255,.98), rgba(242,247,252,.96));
+}
+.light .nx-z-simple-title{color:#10203a}
+.light .nx-z-simple-step{
+  border-color:rgba(111,142,176,.16);
+  background:rgba(255,255,255,.82);
+  color:#415979;
 }
 .light .nx-z-manual-card{
   border-color:rgba(111,142,176,.18);

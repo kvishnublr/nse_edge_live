@@ -34,6 +34,7 @@ router = APIRouter(tags=["saas-platform"])
 
 # Zerodha Kite Connect redirect target (register this exact URL on the Kite app).
 KITE_OAUTH_RETURN_PATH = "/kite-oauth-return"
+KITE_MOBILE_LOGIN_PATH = "/kite-mobile-login"
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = BASE_DIR / "data"
@@ -107,6 +108,7 @@ BROKER_CATALOG = [
 ]
 
 KITE_INTERACTIVE_TIMEOUT_SECONDS = max(120, int(os.getenv("SAAS_KITE_INTERACTIVE_TIMEOUT_SECONDS", "300") or 300))
+KITE_MOBILE_TICKET_TTL_SECONDS = max(300, int(os.getenv("SAAS_KITE_MOBILE_TICKET_TTL_SECONDS", "43200") or 43200))
 _kite_interactive_lock = threading.Lock()
 _kite_interactive_sessions: dict[int, dict[str, Any]] = {}
 
@@ -1009,6 +1011,10 @@ def send_token_validation_reminders() -> dict[str, int]:
             broker_error = str(row["broker_last_error"] or "").strip()
             invalid_now = broker_status not in {"CONNECTED", "READY"} or bool(broker_error)
             login_url = _broker_login_url({"broker_code": broker_code, "api_key": str(row["broker_api_key"] or "").strip()})
+            public_base = _public_app_base_url()
+            mobile_login_url = ""
+            if public_base:
+                mobile_login_url = _mobile_kite_login_url(public_base, _issue_kite_mobile_ticket(int(row["id"])))
             if invalid_now:
                 reminder_html = (
                     f"<b>{html.escape(BRAND_NAME)} broker session action required</b>\n"
@@ -1032,6 +1038,9 @@ def send_token_validation_reminders() -> dict[str, int]:
             if login_url:
                 reminder_html += f"\n<a href=\"{html.escape(login_url, quote=True)}\">Tap to login on Kite now</a>"
                 reminder_text += f"\nLogin link: {login_url}"
+            if mobile_login_url:
+                reminder_html += f"\n<a href=\"{html.escape(mobile_login_url, quote=True)}\">Login from mobile and save session to server</a>"
+                reminder_text += f"\nMobile login link: {mobile_login_url}"
             channel_ok = False
             if bool(row["notify_email"] or 0) and str(row["email"] or "").strip():
                 subject = f"{BRAND_NAME} broker token reminder"
@@ -1547,6 +1556,49 @@ def _broker_login_url(account: sqlite3.Row | dict[str, Any] | None) -> Optional[
         return str(kite.login_url() or "")
     except Exception:
         return None
+
+
+def _public_app_base_url() -> str:
+    for key in ("SAAS_PUBLIC_BASE_URL", "APP_BASE_URL", "PUBLIC_BASE_URL", "RENDER_EXTERNAL_URL"):
+        value = str(os.getenv(key, "") or "").strip().rstrip("/")
+        if value.startswith("http://") or value.startswith("https://"):
+            return value
+    return ""
+
+
+def _issue_kite_mobile_ticket(user_id: int) -> str:
+    payload = {
+        "kind": "kite_mobile_login",
+        "user_id": int(user_id),
+        "iat": int(time.time()),
+        "exp": int(time.time()) + int(KITE_MOBILE_TICKET_TTL_SECONDS),
+    }
+    body = _b64(json.dumps(payload, separators=(",", ":"), ensure_ascii=True).encode("utf-8"))
+    sig = _b64(hmac.new(TOKEN_SECRET.encode("utf-8"), body.encode("utf-8"), hashlib.sha256).digest())
+    return f"{body}.{sig}"
+
+
+def _read_kite_mobile_ticket(raw: str) -> dict[str, Any]:
+    token = str(raw or "").strip()
+    if "." not in token:
+        raise HTTPException(status_code=400, detail="Invalid mobile login link")
+    body, sig = token.split(".", 1)
+    expected = _b64(hmac.new(TOKEN_SECRET.encode("utf-8"), body.encode("utf-8"), hashlib.sha256).digest())
+    if not hmac.compare_digest(sig, expected):
+        raise HTTPException(status_code=400, detail="Mobile login link signature is invalid")
+    try:
+        payload = json.loads(_b64d(body).decode("utf-8"))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Mobile login link payload is invalid") from exc
+    if str(payload.get("kind") or "") != "kite_mobile_login":
+        raise HTTPException(status_code=400, detail="Mobile login link is not valid for Kite")
+    if int(payload.get("exp") or 0) < int(time.time()):
+        raise HTTPException(status_code=400, detail="Mobile login link expired. Send a fresh Telegram link and retry.")
+    return payload
+
+
+def _mobile_kite_login_url(base_url: str, ticket: str) -> str:
+    return f"{str(base_url or '').rstrip('/')}{KITE_MOBILE_LOGIN_PATH}?ticket={quote(ticket)}"
 
 
 def _set_kite_interactive_session(user_id: int, **fields: Any) -> dict[str, Any]:
@@ -2720,8 +2772,95 @@ def kite_oauth_return_page() -> HTMLResponse:
   try {{
     localStorage.setItem("nx_kite_oauth_payload", JSON.stringify(payload));
   }} catch (e4) {{}}
+  var mobileTicket = "";
+  try {{
+    mobileTicket = String(localStorage.getItem("nx_kite_mobile_ticket") || "");
+  }} catch (e5) {{}}
+  if (rt && mobileTicket) {{
+    if (done) done.textContent = "Login successful. Saving session to server…";
+    fetch("/api/user/broker/mobile-complete", {{
+      method: "POST",
+      headers: {{ "Content-Type": "application/json" }},
+      body: JSON.stringify({{
+        ticket: mobileTicket,
+        request_token: rt,
+        redirect_url: location.href
+      }})
+    }})
+      .then(function(resp){{
+        return resp.json().catch(function(){{ return {{}}; }}).then(function(data){{
+          if (!resp.ok || !data || data.ok === false) {{
+            throw new Error((data && (data.detail || data.message)) || "Could not save mobile login");
+          }}
+          try {{ localStorage.removeItem("nx_kite_mobile_ticket"); }} catch (e6) {{}}
+          if (done) done.textContent = "Login successful. Session saved on server for this desk.";
+          if (hint) hint.textContent = "You can close this tab now. The desk will use this session automatically.";
+        }});
+      }})
+      .catch(function(err){{
+        if (done) done.textContent = "Kite login succeeded, but saving the session failed.";
+        if (hint) hint.textContent = (err && err.message) || "Could not save mobile login on the server.";
+      }});
+    return;
+  }}
   setTimeout(function(){{ try {{ window.close(); }} catch (e2) {{}} }}, 500);
 }})();
+  </script>
+</body>
+</html>"""
+    return HTMLResponse(content=body, status_code=200)
+
+
+@router.get(KITE_MOBILE_LOGIN_PATH, response_class=HTMLResponse)
+def kite_mobile_login_page(ticket: str = "") -> HTMLResponse:
+    payload = _read_kite_mobile_ticket(ticket)
+    user_id = int(payload.get("user_id") or 0)
+    init_saas_db()
+    conn = get_conn()
+    try:
+        user_row = conn.execute("SELECT full_name FROM saas_users WHERE id=?", (user_id,)).fetchone()
+        broker = _broker_row(conn, user_id)
+        if user_row is None or broker is None:
+            raise HTTPException(status_code=404, detail="Desk not found for this mobile login link")
+        login_url = _broker_login_url(broker)
+        if not login_url:
+            raise HTTPException(status_code=400, detail="Zerodha API key is not configured for this desk")
+        trader_name = html.escape(str(user_row["full_name"] or "Trader"), quote=True)
+        desk_label = html.escape(str(broker["account_label"] or "Zerodha Desk"), quote=True)
+    finally:
+        conn.close()
+    ticket_js = json.dumps(str(ticket or ""))
+    body = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Mobile Kite Login — {html.escape(BRAND_NAME, quote=True)}</title>
+  <style>
+    body{{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#08101d;color:#e6eefc}}
+    .wrap{{max-width:620px;margin:0 auto;padding:24px}}
+    .card{{background:#0f1b31;border:1px solid #214062;border-radius:20px;padding:24px;box-shadow:0 18px 48px rgba(0,0,0,.28)}}
+    .kicker{{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#7dd3fc}}
+    h1{{margin:10px 0 8px;font-size:28px;line-height:1.1}}
+    p{{line-height:1.6;color:#c1d3ea}}
+    .btn{{display:inline-block;margin-top:14px;padding:14px 18px;border-radius:14px;background:#ffb347;color:#132033;font-weight:800;text-decoration:none}}
+    .muted{{font-size:13px;color:#9fb4ce;margin-top:12px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="kicker">{html.escape(BRAND_NAME)}</div>
+      <h1>Login to Zerodha from mobile</h1>
+      <p>This link is for <b>{trader_name}</b> and will save the new Kite session directly to <b>{desk_label}</b> on the server after login.</p>
+      <a class="btn" href="{html.escape(login_url, quote=True)}">Continue to Zerodha</a>
+      <div class="muted">After you complete Kite login, STOCKR will return here and store the session automatically.</div>
+    </div>
+  </div>
+  <script>
+    (function(){{
+      try {{ localStorage.setItem("nx_kite_mobile_ticket", {ticket_js}); }} catch (e) {{}}
+    }})();
   </script>
 </body>
 </html>"""
@@ -3083,6 +3222,74 @@ async def user_broker_kite_interactive_start(request: Request, authorization: Op
     return {"ok": True, "interactive": status}
 
 
+@router.post("/api/user/broker/mobile-login-link")
+async def user_broker_mobile_login_link(request: Request, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+    user = _require_user(authorization)
+    init_saas_db()
+    conn = get_conn()
+    try:
+        broker = _broker_row(conn, int(user["id"]))
+        user_row = conn.execute("SELECT full_name, telegram_chat_id FROM saas_users WHERE id=?", (int(user["id"]),)).fetchone()
+        if broker is None or user_row is None:
+            raise HTTPException(status_code=404, detail="Broker workspace unavailable")
+        if str(broker["broker_code"] or "").upper() != "ZERODHA":
+            raise HTTPException(status_code=400, detail="Select Zerodha Kite before sending a mobile login link")
+        if not str(broker["api_key"] or "").strip():
+            raise HTTPException(status_code=400, detail="Save your Zerodha API key first")
+        telegram_chat_id = _normalize_telegram_chat_id(user_row["telegram_chat_id"])
+        if not telegram_chat_id:
+            raise HTTPException(status_code=400, detail="Add your Telegram chat ID in profile settings first")
+        base_url = str(request.base_url).rstrip("/") or _public_app_base_url()
+        if not base_url:
+            raise HTTPException(status_code=400, detail="Public app URL is unavailable for mobile login link")
+        ticket = _issue_kite_mobile_ticket(int(user["id"]))
+        mobile_url = _mobile_kite_login_url(base_url, ticket)
+        msg = (
+            f"<b>{html.escape(BRAND_NAME)} mobile Zerodha login</b>\n"
+            f"Hi {html.escape(str(user_row['full_name'] or 'Trader'))}, tap below to login on mobile and save the session directly to your desk.\n"
+            f"<a href=\"{html.escape(mobile_url, quote=True)}\">Open mobile login</a>"
+        )
+        if not _send_telegram_to_chat(telegram_chat_id, msg):
+            raise HTTPException(status_code=400, detail="Could not send Telegram message to this chat ID")
+        return {"ok": True, "mobile_login_url": mobile_url, "sent": True}
+    finally:
+        conn.close()
+
+
+@router.post("/api/user/broker/mobile-complete")
+async def user_broker_mobile_complete(request: Request) -> dict[str, Any]:
+    body = await request.json()
+    payload = _read_kite_mobile_ticket(body.get("ticket") or "")
+    user_id = int(payload.get("user_id") or 0)
+    request_token = _parse_kite_request_token(body.get("request_token") or body.get("redirect_url") or "")
+    if not request_token:
+        raise HTTPException(status_code=400, detail="request_token missing from mobile login redirect")
+    init_saas_db()
+    conn = get_conn()
+    try:
+        broker = _broker_row(conn, user_id)
+        if broker is None:
+            raise HTTPException(status_code=404, detail="Broker workspace unavailable")
+        save_payload = {
+            "broker_code": str(broker["broker_code"] or "ZERODHA"),
+            "account_label": str(broker["account_label"] or "Zerodha Desk"),
+            "broker_user_id": str(broker["broker_user_id"] or ""),
+            "api_key": str(broker["api_key"] or ""),
+            "api_secret": _unpack_secret(broker["api_secret_enc"]),
+            "request_token": request_token,
+            "enabled": bool(broker["enabled"] or 0),
+            "paper_mode": bool(broker["paper_mode"] or 0),
+            "live_mode": bool(broker["live_mode"] or 0),
+            "default_quantity": int(broker["default_quantity"] or 1),
+            "intraday_product": str(broker["intraday_product"] or "MIS"),
+            "positional_product": str(broker["positional_product"] or "CNC"),
+        }
+        updated = _save_broker_connection(conn, user_id, save_payload, test_only=False)
+        return {"ok": True, "broker": updated, "mobile_saved": True}
+    finally:
+        conn.close()
+
+
 @router.get("/api/user/broker/kite-interactive-status")
 async def user_broker_kite_interactive_status(authorization: Optional[str] = Header(None)) -> dict[str, Any]:
     user = _require_user(authorization)
@@ -3092,6 +3299,30 @@ async def user_broker_kite_interactive_status(authorization: Optional[str] = Hea
     finally:
         conn.close()
     return {"ok": True, "interactive": _public_kite_interactive_session(int(user["id"])), "broker": broker}
+
+
+@router.post("/api/user/broker/disconnect")
+async def user_broker_disconnect(authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+    user = _require_user(authorization)
+    init_saas_db()
+    conn = get_conn()
+    try:
+        row = _broker_row(conn, int(user["id"]))
+        if row is None:
+            raise HTTPException(status_code=404, detail="Broker workspace unavailable")
+        now = _utc_iso()
+        conn.execute(
+            """
+            UPDATE saas_broker_accounts
+            SET access_token_enc='', refresh_token_enc='', status='DISCONNECTED', last_error='', connected_at=NULL, last_checked_at=?, updated_at=?
+            WHERE user_id=?
+            """,
+            (now, now, int(user["id"])),
+        )
+        conn.commit()
+        return {"ok": True, "broker": _public_broker(conn, int(user["id"])), "disconnected": True}
+    finally:
+        conn.close()
 
 
 @router.post("/api/user/broker/import-env-token")
