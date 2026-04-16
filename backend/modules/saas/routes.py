@@ -3596,9 +3596,34 @@ async def admin_update_user(user_id: int, request: Request, authorization: Optio
         if row is None:
             raise HTTPException(status_code=404, detail="User not found")
         now = _utc_iso()
+        email = _normalize_login_email(body.get("email") or row["email"] or "")
+        if not email or "@" not in email:
+            raise HTTPException(status_code=400, detail="Valid email required")
+        role = str(body.get("role", row["role"]) or row["role"] or "USER").upper().strip()
+        if role not in {"USER", "ADMIN"}:
+            raise HTTPException(status_code=400, detail="Role must be USER or ADMIN")
+        status = str(body.get("status", row["status"]) or row["status"] or "ACTIVE").upper().strip()
+        if status not in {"ACTIVE", "LIMITED", "DISABLED", "ARCHIVED"}:
+            raise HTTPException(status_code=400, detail="Status must be ACTIVE, LIMITED, DISABLED, or ARCHIVED")
+        existing = conn.execute("SELECT id FROM saas_users WHERE email=? AND id<>?", (email, user_id)).fetchone()
+        if existing is not None:
+            raise HTTPException(status_code=409, detail="Email already exists")
+        # Keep at least one admin account active.
+        if str(row["role"] or "").upper() == "ADMIN" and (role != "ADMIN" or status in {"DISABLED", "ARCHIVED"}):
+            remaining = int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM saas_users WHERE role='ADMIN' AND status IN ('ACTIVE','LIMITED') AND id<>?",
+                    (user_id,),
+                ).fetchone()[0]
+                or 0
+            )
+            if remaining <= 0:
+                raise HTTPException(status_code=400, detail="At least one active admin account is required")
         fields = {
+            "email": email,
+            "role": role,
             "full_name": str(body.get("full_name", row["full_name"]) or row["full_name"]),
-            "status": str(body.get("status", row["status"]) or row["status"]).upper(),
+            "status": status,
             "wallet_type": str(body.get("wallet_type", row["wallet_type"]) or row["wallet_type"]).upper(),
             "daily_loss_limit": float(body.get("daily_loss_limit", row["daily_loss_limit"]) or 0),
             "max_trades_per_day": int(body.get("max_trades_per_day", row["max_trades_per_day"]) or 0),
@@ -3615,10 +3640,11 @@ async def admin_update_user(user_id: int, request: Request, authorization: Optio
             "notes": str(body.get("notes", row["notes"]) or "")[:1000],
         }
         conn.execute(
-            "UPDATE saas_users SET full_name=?, status=?, wallet_type=?, daily_loss_limit=?, max_trades_per_day=?, max_open_signals=?, profit_share_pct=?, coupon_profit_cap=?, auto_execute=?, notify_email=?, notify_telegram=?, notify_whatsapp=?, notify_token_reminder=?, whatsapp_phone=?, telegram_chat_id=?, notes=?, updated_at=? WHERE id=?",
-            (fields["full_name"], fields["status"], fields["wallet_type"], fields["daily_loss_limit"], fields["max_trades_per_day"], fields["max_open_signals"], fields["profit_share_pct"], fields["coupon_profit_cap"], fields["auto_execute"], fields["notify_email"], fields["notify_telegram"], fields["notify_whatsapp"], fields["notify_token_reminder"], fields["whatsapp_phone"], fields["telegram_chat_id"], fields["notes"], now, user_id),
+            "UPDATE saas_users SET email=?, role=?, full_name=?, status=?, wallet_type=?, daily_loss_limit=?, max_trades_per_day=?, max_open_signals=?, profit_share_pct=?, coupon_profit_cap=?, auto_execute=?, notify_email=?, notify_telegram=?, notify_whatsapp=?, notify_token_reminder=?, whatsapp_phone=?, telegram_chat_id=?, notes=?, updated_at=? WHERE id=?",
+            (fields["email"], fields["role"], fields["full_name"], fields["status"], fields["wallet_type"], fields["daily_loss_limit"], fields["max_trades_per_day"], fields["max_open_signals"], fields["profit_share_pct"], fields["coupon_profit_cap"], fields["auto_execute"], fields["notify_email"], fields["notify_telegram"], fields["notify_whatsapp"], fields["notify_token_reminder"], fields["whatsapp_phone"], fields["telegram_chat_id"], fields["notes"], now, user_id),
         )
-        conn.execute("UPDATE saas_wallets SET wallet_type=?, status=?, updated_at=? WHERE user_id=?", (fields["wallet_type"], "BLOCKED" if fields["status"] == "DISABLED" else "ACTIVE", now, user_id))
+        wallet_blocked = fields["status"] in {"DISABLED", "ARCHIVED"}
+        conn.execute("UPDATE saas_wallets SET wallet_type=?, status=?, updated_at=? WHERE user_id=?", (fields["wallet_type"], "BLOCKED" if wallet_blocked else "ACTIVE", now, user_id))
         conn.commit()
         user_public = _public_user(conn, user_id)
         emailed = False
@@ -3629,6 +3655,50 @@ async def admin_update_user(user_id: int, request: Request, authorization: Optio
                 intro="your admin updated your desk settings. Here is the latest snapshot of your account.",
             )
         return {"ok": True, "user": user_public, "emailed": bool(emailed)}
+    finally:
+        conn.close()
+
+
+@router.post("/api/admin/users/{user_id}/archive")
+async def admin_archive_user(user_id: int, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+    _require_admin(authorization)
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT * FROM saas_users WHERE id=?", (user_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        if str(row["role"] or "").upper() == "ADMIN":
+            remaining = int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM saas_users WHERE role='ADMIN' AND status IN ('ACTIVE','LIMITED') AND id<>?",
+                    (user_id,),
+                ).fetchone()[0]
+                or 0
+            )
+            if remaining <= 0:
+                raise HTTPException(status_code=400, detail="At least one active admin account is required")
+        now = _utc_iso()
+        conn.execute("UPDATE saas_users SET status='ARCHIVED', updated_at=? WHERE id=?", (now, user_id))
+        conn.execute("UPDATE saas_wallets SET status='BLOCKED', updated_at=? WHERE user_id=?", (now, user_id))
+        conn.commit()
+        return {"ok": True, "user": _public_user(conn, user_id)}
+    finally:
+        conn.close()
+
+
+@router.post("/api/admin/users/{user_id}/restore")
+async def admin_restore_user(user_id: int, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+    _require_admin(authorization)
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT * FROM saas_users WHERE id=?", (user_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        now = _utc_iso()
+        conn.execute("UPDATE saas_users SET status='ACTIVE', updated_at=? WHERE id=?", (now, user_id))
+        conn.execute("UPDATE saas_wallets SET status='ACTIVE', updated_at=? WHERE user_id=?", (now, user_id))
+        conn.commit()
+        return {"ok": True, "user": _public_user(conn, user_id)}
     finally:
         conn.close()
 
