@@ -3250,7 +3250,14 @@ async def user_broker_mobile_login_link(request: Request, authorization: Optiona
             f"<a href=\"{html.escape(mobile_url, quote=True)}\">Open mobile login</a>"
         )
         if not _send_telegram_to_chat(telegram_chat_id, msg):
-            raise HTTPException(status_code=400, detail="Could not send Telegram message to this chat ID")
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Telegram bot could not message this user yet. "
+                    "Open the bot from the same Telegram account, press Start or send any message once, "
+                    "verify the saved Telegram chat ID, then retry."
+                ),
+            )
         return {"ok": True, "mobile_login_url": mobile_url, "sent": True}
     finally:
         conn.close()
@@ -3450,11 +3457,6 @@ async def user_broker_sample_order(request: Request, authorization: Optional[str
         broker = _broker_row(conn, int(user["id"]))
         if broker is None:
             raise HTTPException(status_code=404, detail="Broker workspace unavailable")
-        if not bool(broker["enabled"] or 0):
-            raise HTTPException(
-                status_code=400,
-                detail="Broker routing is off. Open Trading execution → Advanced routing, check Broker enabled, then click Save Credentials or Capture Token so the desk saves it, and try again.",
-            )
         status = str(broker["status"] or "").upper()
         if status not in {"CONNECTED", "READY"}:
             raise HTTPException(status_code=400, detail="Broker not connected")

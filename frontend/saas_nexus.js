@@ -633,6 +633,7 @@
       + '<button type="button" class="nx-btn nx-btn-gold" onclick="nxBrokerSampleOrder()" '+(sampling?'disabled':'')+'>'+(sampling?'Running...':'Sample order')+'</button>'
       + '<button type="button" class="nx-btn nx-btn-ghost" onclick="nxSendKiteMobileLoginLink()" '+((NX.loadingAction === 'broker-mobile-link' || loginDone)?'disabled':'')+'>'+(NX.loadingAction === 'broker-mobile-link'?'Sending...':(loginDone?'Mobile link not needed':'Send Telegram mobile login'))+'</button>'
       + '</div>'
+      + '<div class="nx-inline-note" style="margin-top:10px">Telegram mobile login works only after the user opens the bot from the same Telegram account and presses <b>Start</b> once.</div>'
       + '<div class="nx-z-simple-help">If a browser popup is blocked, allow popups and retry. After success, this desk stores your token in the server DB and uses it for trading.</div>'
       + '</div>'
     );
@@ -1710,20 +1711,6 @@
         if(!symbol) return;
         const qty = Math.max(1, Number(((el('nx-sample-qty')||{}).value || ((el('nx-broker-qty')||{}).value || 1)) || 1));
         const autoCancel = true;
-        const domBrokerOn = !!((el('nx-broker-enabled')||{}).checked);
-        const serverBrokerOn = !!(((NX.dashboard||{}).broker||{}).enabled);
-        if(!serverBrokerOn){
-          const logMsg = domBrokerOn
-            ? 'Broker enabled is checked in the form but not saved on the server. Click Capture Token or Save Credentials, then try Sample order again.'
-            : 'Broker routing is off. Open Advanced routing, check Broker enabled, then Capture Token or Save Credentials.';
-          const toastMsg = domBrokerOn
-            ? 'Save the desk first: click Capture Token or Save Credentials (Broker enabled is not on the server yet).'
-            : 'Turn on Broker enabled under Advanced routing, then Capture Token or Save Credentials.';
-          NX.brokerSampleLog = { ok:false, symbol:'', quantity:'', status:'FAILED', message: logMsg };
-          safeRender();
-          toast(toastMsg);
-          return;
-        }
         NX.brokerSampleLog = { ok:true, symbol:symbol, quantity:qty, status:'REQUESTED', message:'Sending test trade request...' };
         safeRender();
         const data = await nxApi('/api/user/broker/sample-order', { method:'POST', body: JSON.stringify({ symbol: symbol, quantity: qty, auto_cancel: autoCancel }) });
