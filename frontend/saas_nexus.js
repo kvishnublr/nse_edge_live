@@ -44,6 +44,29 @@
     });
     return out;
   }
+  function readKiteOAuthPayloadFromPage(){
+    try{
+      const q = new URLSearchParams(String(window.location.search || '').replace(/^\?/, ''));
+      var rt = String(q.get('request_token') || '').trim();
+      var st = String(q.get('status') || '').trim();
+      var act = String(q.get('action') || '').trim();
+      if(!rt && window.location.hash && String(window.location.hash).indexOf('request_token=') !== -1){
+        const hq = new URLSearchParams(String(window.location.hash).replace(/^#/, ''));
+        rt = String(hq.get('request_token') || '').trim();
+        st = String(hq.get('status') || st).trim();
+        act = String(hq.get('action') || act).trim();
+      }
+      if(!rt) return null;
+      return { type:'stockr_kite_oauth', request_token:rt, redirect_url:String(window.location.href || ''), status:st, action:act };
+    }catch(_){ return null; }
+  }
+  function nxStorePendingKiteOAuth(payload){
+    try{
+      if(payload && payload.request_token){
+        localStorage.setItem('nx_kite_oauth_payload', JSON.stringify(payload));
+      }
+    }catch(_){}
+  }
   function paymentMeta(payment){
     const qp = String((payment || {}).qr_payload || '');
     const query = qp.indexOf('?') >= 0 ? qp.split('?')[1] : '';
@@ -583,12 +606,13 @@
         + '</div>'
       );
     const kiteBrand = '<div class="nx-kite-brand"><span class="nx-kite-z">Z</span><span>Zerodha Kite</span></div>';
+    const allowServerImport = !!((NX.boot || {}).allow_user_server_session_import);
     const steps = paper
       ? '<div class="nx-z-paper-callout"><div class="nx-z-paper-title">Desk type: Paper</div><div class="nx-z-paper-sub">Switch Broker to <b>Zerodha Kite</b> to enable login tools. Keep <b>Paper route</b> ON to simulate orders.</div></div>'
-      : '<div class="nx-z-steps-wrap"><div class="nx-z-steps-head">Connect Zerodha (three options)</div><ol class="nx-z-steps">'
-        + '<li><span class="nx-z-sn">1</span><div><strong>Server session</strong><span>One-click import from server env.</span></div></li>'
-        + '<li><span class="nx-z-sn">2</span><div><strong>One-time login</strong><span>Open Kite, login, and auto-capture token.</span></div></li>'
-        + '<li><span class="nx-z-sn">3</span><div><strong>Manual paste</strong><span>Paste redirect URL or request token.</span></div></li>'
+      : '<div class="nx-z-steps-wrap"><div class="nx-z-steps-head">Connect Zerodha (user token)</div><ol class="nx-z-steps">'
+        + '<li><span class="nx-z-sn">1</span><div><strong>One-time login</strong><span>Open Kite, login, and auto-capture token.</span></div></li>'
+        + '<li><span class="nx-z-sn">2</span><div><strong>Kite in popup</strong><span>Auto-close works when redirect URL is correct.</span></div></li>'
+        + '<li><span class="nx-z-sn">3</span><div><strong>Manual paste</strong><span>Paste redirect URL or request token only if needed.</span></div></li>'
         + '</ol></div>'
         + (paperRouteOn ? '<div class="nx-z-paper-route-note"><b>Paper route is ON</b> — orders stay simulated, but you still need a valid Kite session above for live quotes and session checks.</div>' : '');
     const altRedirect = nxKiteOAuthReturnAlt();
@@ -615,9 +639,13 @@
     );
     const quickLane = paper ? '' : ''
       + '<div class="nx-z-command-grid">'
-      + '<div class="nx-z-command-card nx-z-command-card-primary"><div class="nx-z-fast-kicker">Quick connect</div><div class="nx-z-fast-title">Use server session</div><div class="nx-z-fast-sub">Import token and connect instantly.</div><div class="nx-actions" style="margin-top:14px"><button type="button" class="nx-btn nx-btn-primary" onclick="nxImportEnvBrokerToken()" '+(importing?'disabled':'')+'>'+(importing?'Importing...':'Use Server Session')+'</button><button type="button" class="nx-btn nx-btn-ghost" onclick="nxCheckServerTokenStatus()" '+(checking?'disabled':'')+'>'+(checking?'Checking...':'Check Status')+'</button></div></div>'
+      + (allowServerImport
+        ? '<div class="nx-z-command-card nx-z-command-card-primary"><div class="nx-z-fast-kicker">Quick connect</div><div class="nx-z-fast-title">Use server session</div><div class="nx-z-fast-sub">Import token and connect instantly.</div><div class="nx-actions" style="margin-top:14px"><button type="button" class="nx-btn nx-btn-primary" onclick="nxImportEnvBrokerToken()" '+(importing?'disabled':'')+'>'+(importing?'Importing...':'Use Server Session')+'</button><button type="button" class="nx-btn nx-btn-ghost" onclick="nxCheckServerTokenStatus()" '+(checking?'disabled':'')+'>'+(checking?'Checking...':'Check Status')+'</button></div></div>'
+        : '<div class="nx-z-command-card nx-z-command-card-primary"><div class="nx-z-fast-kicker">User-owned session</div><div class="nx-z-fast-title">Server session disabled</div><div class="nx-z-fast-sub">This desk uses each user\'s own Kite token only. Use One-Time login or Kite popup below.</div></div>')
       + '<div class="nx-z-command-card nx-z-command-card-lite"><div class="nx-z-fast-kicker">Generate token</div><div class="nx-z-fast-title">Open Kite Login</div><div class="nx-z-fast-sub"><b>One-time</b> opens a separate Edge/Chrome window (not the Nexus popup). <b>Kite in popup</b> uses this tab’s popup + auto-close when redirect URL is correct. Do not spam One-time — extra windows stack up.</div><div class="nx-actions" style="margin-top:14px"><button type="button" class="nx-btn nx-btn-gold" onclick="nxKiteInteractiveLogin()" '+(interactiveStarting?'disabled':'')+'>'+(interactiveStarting?'Opening...':'One-Time Kite Login')+'</button><button type="button" class="nx-btn nx-btn-ghost" onclick="nxKiteOpenLogin()">Kite in popup</button><button type="button" class="nx-btn nx-btn-ghost" onclick="nxKiteClosePopup()" '+(NX.kitePopupLaunched?'':'style="opacity:.45"')+' title="Close the Kite popup">Close Kite</button></div></div>'
-      + '<div class="nx-z-command-card"><div class="nx-z-fast-kicker">Auto refresh</div><div class="nx-z-fast-title">Refresh and use</div><div class="nx-z-fast-sub">Rebuild token from saved env credentials.</div><div class="nx-actions" style="margin-top:14px"><button type="button" class="nx-btn nx-btn-ghost" onclick="nxRefreshEnvBrokerToken()" '+(refreshing?'disabled':'')+'>'+(refreshing?'Refreshing...':'Auto Refresh & Use')+'</button></div></div>'
+      + (allowServerImport
+        ? '<div class="nx-z-command-card"><div class="nx-z-fast-kicker">Auto refresh</div><div class="nx-z-fast-title">Refresh and use</div><div class="nx-z-fast-sub">Rebuild token from saved env credentials.</div><div class="nx-actions" style="margin-top:14px"><button type="button" class="nx-btn nx-btn-ghost" onclick="nxRefreshEnvBrokerToken()" '+(refreshing?'disabled':'')+'>'+(refreshing?'Refreshing...':'Auto Refresh & Use')+'</button></div></div>'
+        : '<div class="nx-z-command-card"><div class="nx-z-fast-kicker">Status</div><div class="nx-z-fast-title">User token persists in desk DB</div><div class="nx-z-fast-sub">After successful login, token is stored server-side for this desk and used for trading.</div></div>')
       + '</div>'
       + feedSyncHint
       + kiteRedirectWarn
@@ -943,6 +971,7 @@
     NX.ready = false;
     setNotice('success', 'Login successful. Loading your workspace...');
     await hydrate();
+    nxConsumeDeferredKiteOAuthPayload();
     toast('Welcome to Login Nexus');
   }
 
@@ -1179,6 +1208,25 @@
       toast('No request_token in redirect — set Kite app redirect URL to ' + nxKiteOAuthReturnAbs());
       return;
     }
+    if(!NX.token){
+      nxStorePendingKiteOAuth({
+        type:'stockr_kite_oauth',
+        request_token: rt,
+        redirect_url: String(d.redirect_url || '').trim(),
+        status: String(d.status || '').trim(),
+        action: String(d.action || '').trim()
+      });
+      NX.brokerAssist = {
+        type:'info',
+        title:'Kite login successful',
+        message:'Please login to Nexus to finish token exchange automatically.',
+        detail:'Your request token is saved in this browser and will be processed right after login.',
+        waitHint:''
+      };
+      safeRender();
+      toast('Kite login captured. Sign in to Nexus to complete broker connect.');
+      return;
+    }
     const paste = el('nx-broker-request-paste');
     const href = String(d.redirect_url || '').trim();
     if(paste){
@@ -1260,6 +1308,23 @@
       };
     }catch(_){ /* unsupported */ }
   }
+  function nxConsumeDeferredKiteOAuthPayload(){
+    var payload = null;
+    try{
+      var raw = localStorage.getItem('nx_kite_oauth_payload');
+      if(raw) payload = JSON.parse(raw);
+    }catch(_){}
+    if(!payload) payload = readKiteOAuthPayloadFromPage();
+    if(!payload || !payload.request_token) return;
+    try{ localStorage.removeItem('nx_kite_oauth_payload'); }catch(_){}
+    try{
+      if(window.history && window.history.replaceState){
+        var cleaned = String(window.location.pathname || '/') + String(window.location.hash || '');
+        window.history.replaceState({}, document.title || '', cleaned);
+      }
+    }catch(_){}
+    nxRunKiteOAuthHandshake(payload);
+  }
   window.nxKiteOpenLogin = function(){
     const now = Date.now();
     if(window._nxKiteOpenLast && (now - window._nxKiteOpenLast) < 2800){
@@ -1332,6 +1397,10 @@
   }
   window.nxCheckServerTokenStatus = function(){
     return runBusy('broker-token-status', async function(){
+      if(!((NX.boot || {}).allow_user_server_session_import)){
+        toast('Server session checks are disabled for user desks. Use your own Kite login.');
+        return;
+      }
       try{
         const data = await nxApi('/api/token-status', { method:'GET' });
         const errRaw = String(data.error || '').toLowerCase();
@@ -1355,6 +1424,10 @@
   };
   window.nxImportEnvBrokerToken = function(){
     return runBusy('broker-import-env', async function(){
+      if(!((NX.boot || {}).allow_user_server_session_import)){
+        toast('Use One-Time Kite Login or Kite popup. Server session import is disabled for user desks.');
+        return;
+      }
       try{
         const payload = brokerPayload();
         payload.broker_code = 'ZERODHA';
@@ -1399,6 +1472,10 @@
   };
   window.nxRefreshEnvBrokerToken = function(){
     return runBusy('broker-refresh-env', async function(){
+      if(!((NX.boot || {}).allow_user_server_session_import)){
+        toast('Server token rebuild is disabled for user desks. Use your own Kite login.');
+        return;
+      }
       try{
         const status = await nxApi('/api/token-status', { method:'GET' });
         if(status && status.valid){
@@ -1893,6 +1970,7 @@
   }
 
   safeRender();
+  nxConsumeDeferredKiteOAuthPayload();
   bootNexusIfMounted();
   document.addEventListener('DOMContentLoaded', function(){
     if(el('nx-root')){

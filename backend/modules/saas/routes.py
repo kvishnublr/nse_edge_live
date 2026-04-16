@@ -185,8 +185,15 @@ def _normalize_login_email(value: str) -> str:
     return email
 
 
+def _json_default(value: Any) -> Any:
+    """JSON fallback for broker payloads that include datetime objects."""
+    if isinstance(value, (dt.datetime, dt.date, dt.time)):
+        return value.isoformat()
+    return str(value)
+
+
 def _dumps(data: Any) -> str:
-    return json.dumps(data, ensure_ascii=True, separators=(",", ":"))
+    return json.dumps(data, ensure_ascii=True, separators=(",", ":"), default=_json_default)
 
 
 def _loads(data: Any, fallback: Any) -> Any:
@@ -975,7 +982,8 @@ def send_token_validation_reminders() -> dict[str, int]:
     try:
         rows = conn.execute(
             """
-            SELECT u.*, b.broker_code, b.status AS broker_status, b.enabled AS broker_enabled, b.account_label
+            SELECT u.*, b.broker_code, b.status AS broker_status, b.enabled AS broker_enabled, b.account_label,
+                   b.api_key AS broker_api_key, b.last_error AS broker_last_error
             FROM saas_users u
             LEFT JOIN saas_broker_accounts b ON b.user_id=u.id
             WHERE u.role='USER' AND u.status IN ('ACTIVE','LIMITED')
@@ -997,14 +1005,33 @@ def send_token_validation_reminders() -> dict[str, int]:
                 skipped += 1
                 continue
             account_label = str(row["account_label"] or broker_code or "broker").strip()
-            reminder_html = (
-                f"<b>{html.escape(BRAND_NAME)} broker token reminder</b>\n"
-                f"Please validate your <b>{html.escape(account_label)}</b> token before <b>8:00 AM IST</b> so auto routing stays ready for today."
-            )
-            reminder_text = (
-                f"{BRAND_NAME} broker token reminder\n"
-                f"Please validate your {account_label} token before 8:00 AM IST so auto routing stays ready for today."
-            )
+            broker_status = str(row["broker_status"] or "").upper().strip()
+            broker_error = str(row["broker_last_error"] or "").strip()
+            invalid_now = broker_status not in {"CONNECTED", "READY"} or bool(broker_error)
+            login_url = _broker_login_url({"broker_code": broker_code, "api_key": str(row["broker_api_key"] or "").strip()})
+            if invalid_now:
+                reminder_html = (
+                    f"<b>{html.escape(BRAND_NAME)} broker session action required</b>\n"
+                    f"Your <b>{html.escape(account_label)}</b> session is not valid for today's market open.\n"
+                    f"{html.escape(broker_error[:220]) if broker_error else 'Please login and refresh token now.'}"
+                )
+                reminder_text = (
+                    f"{BRAND_NAME} broker session action required\n"
+                    f"Your {account_label} session is not valid for today's market open.\n"
+                    + (broker_error[:220] if broker_error else "Please login and refresh token now.")
+                )
+            else:
+                reminder_html = (
+                    f"<b>{html.escape(BRAND_NAME)} broker token reminder</b>\n"
+                    f"Please validate your <b>{html.escape(account_label)}</b> token before <b>8:00 AM IST</b> so auto routing stays ready for today."
+                )
+                reminder_text = (
+                    f"{BRAND_NAME} broker token reminder\n"
+                    f"Please validate your {account_label} token before 8:00 AM IST so auto routing stays ready for today."
+                )
+            if login_url:
+                reminder_html += f"\n<a href=\"{html.escape(login_url, quote=True)}\">Tap to login on Kite now</a>"
+                reminder_text += f"\nLogin link: {login_url}"
             channel_ok = False
             if bool(row["notify_email"] or 0) and str(row["email"] or "").strip():
                 subject = f"{BRAND_NAME} broker token reminder"
@@ -2689,7 +2716,10 @@ def kite_oauth_return_page() -> HTMLResponse:
   var hint = document.getElementById("kite-hint");
   var done = document.getElementById("kite-done");
   if (hint) hint.style.display = "block";
-  if (done && rt) done.textContent = "Login data sent to Nexus. Closing…";
+  if (done && rt) done.textContent = "Login successful. Syncing with Nexus and closing…";
+  try {{
+    localStorage.setItem("nx_kite_oauth_payload", JSON.stringify(payload));
+  }} catch (e4) {{}}
   setTimeout(function(){{ try {{ window.close(); }} catch (e2) {{}} }}, 500);
 }})();
   </script>
@@ -2718,6 +2748,7 @@ def saas_bootstrap(request: Request) -> dict[str, Any]:
             "payment_profile": _public_payment_profile(conn),
             "kite_oauth_return_url": public_base + KITE_OAUTH_RETURN_PATH,
             "desk_feed_sync_enabled": _env_flag_true("ALLOW_DESK_TOKEN_TO_MAIN_FEED"),
+            "allow_user_server_session_import": _env_flag_true("ALLOW_USER_SERVER_SESSION_IMPORT"),
         }
     finally:
         conn.close()
@@ -3066,6 +3097,11 @@ async def user_broker_kite_interactive_status(authorization: Optional[str] = Hea
 @router.post("/api/user/broker/import-env-token")
 async def user_broker_import_env_token(request: Request, authorization: Optional[str] = Header(None)) -> dict[str, Any]:
     user = _require_user(authorization)
+    if not _env_flag_true("ALLOW_USER_SERVER_SESSION_IMPORT"):
+        raise HTTPException(
+            status_code=403,
+            detail="Disabled for user sessions. Use One-Time Kite Login / Kite popup for your own desk token.",
+        )
     body = await request.json()
     backend_env = BASE_DIR / ".env"
     load_dotenv(backend_env, override=True)
