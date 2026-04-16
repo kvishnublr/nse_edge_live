@@ -30,7 +30,7 @@
   function el(id){ return document.getElementById(id); }
   function fmtMoney(v){ const n=Number(v||0); return '\u20B9' + n.toLocaleString('en-IN',{maximumFractionDigits:2}); }
   function fmtNum(v){ return Number(v||0).toLocaleString('en-IN',{maximumFractionDigits:2}); }
-  function fmtDate(v){ if(!v) return '—'; try{ return new Date(v).toLocaleString('en-IN'); }catch(_){ return v; } }
+  function fmtDate(v){ if(!v) return '—'; try{ return new Date(v).toLocaleString('en-IN',{ timeZone:'Asia/Kolkata' }); }catch(_){ return v; } }
   function escapeHtml(v){ return String(v==null?'':v).replace(/[&<>"']/g, function(ch){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch]; }); }
   function checkedAttr(v){ return v ? ' checked' : ''; }
   function parseQueryString(raw){

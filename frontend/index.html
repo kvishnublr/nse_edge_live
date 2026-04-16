@@ -11077,7 +11077,7 @@ function ixFmtSignalTime(s) {
       if(snapEl) snapEl.textContent = JSON.stringify(j, null, 2);
       aixApplySnapshotUI(j);
       aixLiveRenderCards();
-      _aixSetStatus('Snapshot · ' + new Date().toLocaleTimeString(), 'live');
+      _aixSetStatus('Snapshot · ' + new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}), 'live');
     }catch(e){
       if(snapEl) snapEl.textContent = String(e);
       _aixSetStatus('Error', 'live');
@@ -11681,7 +11681,7 @@ function ixFmtSignalTime(s) {
       advioApply(j);
       var pre = document.getElementById('advio-json');
       if(pre) pre.textContent = JSON.stringify(j, null, 2);
-      if(st) st.textContent = 'Updated ' + new Date().toLocaleTimeString();
+      if(st) st.textContent = 'Updated ' + new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
     }catch(e){
       advioApply(null);
       if(st) st.textContent = String(e);
@@ -13275,7 +13275,7 @@ function cfFmtTs(ts){
   if(ts==null||ts==='') return '—';
   try{
     const d = new Date(Number(ts) > 1e12 ? ts : ts * 1000);
-    return d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+    return d.toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
   }catch(e){ return '—'; }
 }
 
@@ -14996,7 +14996,7 @@ function _topActiveStocks(stocks){
           const sc2  = t => t === 'go' ? 'background:var(--go-d);color:var(--go);border:1px solid var(--go-b)' : t === 'st' ? 'background:var(--st-d);color:var(--st);border:1px solid var(--st-b)' : 'background:var(--am-d);color:var(--am);border:1px solid var(--am-b)';
           const cc = v => v > 0 ? 'var(--go)' : 'var(--st)';
           window._stockSignalSeen = window._stockSignalSeen || {};
-          const nowHHMM = () => new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:false});
+          const nowHHMM = () => new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:false});
           const histPickMap = (window._histData && Array.isArray(window._histData.stock_picks)) ? Object.fromEntries(window._histData.stock_picks.map(p => [p.sym, p])) : {};
           const tradeHtml = s => {
             const sym = s.symbol || '';
@@ -18428,6 +18428,37 @@ function _perfFmtPx(n){
   const v = Number(n);
   return v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+function _perfFmtMarketTime(v){
+  if(v == null || v === '') return '—';
+  const raw = String(v).trim();
+  if(!raw) return '—';
+  if(/^\d{1,2}:\d{2}(:\d{2})?\s*(am|pm)?$/i.test(raw)){
+    const m = raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?$/i);
+    if(m){
+      let hh = Number(m[1] || 0);
+      const mm = Number(m[2] || 0);
+      const ap = String(m[4] || '').toLowerCase();
+      if(ap === 'pm' && hh < 12) hh += 12;
+      if(ap === 'am' && hh === 12) hh = 0;
+      if(hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59){
+        return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+      }
+    }
+  }
+  const d = new Date(raw);
+  if(!Number.isNaN(d.getTime())){
+    try{
+      return d.toLocaleTimeString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+    }catch(_){}
+    return d.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+  return raw;
+}
 function _perfPickPnl(r){
   const pm = Number(r && r.pnl_model_inr != null ? r.pnl_model_inr : NaN);
   const pa = Number(r && r.pnl_inr != null ? r.pnl_inr : NaN);
@@ -18952,13 +18983,15 @@ function renderDayPerfFromCache(){
               + (r.option_expiry ? (' · EXP ' + r.option_expiry + (r.option_week ? (' ' + r.option_week) : '')) : '')
             )
           : (r.trigger || '');
-        const entT = (r.entry_time_ist != null && r.entry_time_ist !== '') ? r.entry_time_ist : (r.time || '—');
+        const entTRaw = (r.entry_time_ist != null && r.entry_time_ist !== '') ? r.entry_time_ist : (r.time || '—');
+        const entT = _perfFmtMarketTime(entTRaw);
         const stOpen = String(r.status || '').toUpperCase() === 'OPEN';
-        let exT = '—';
+        let exTRaw = '—';
         if(!stOpen){
-          if(r.exit_time_ist != null && r.exit_time_ist !== '') exT = r.exit_time_ist;
-          else if(r.hit_time) exT = r.hit_time;
+          if(r.exit_time_ist != null && r.exit_time_ist !== '') exTRaw = r.exit_time_ist;
+          else if(r.hit_time) exTRaw = r.hit_time;
         }
+        const exT = _perfFmtMarketTime(exTRaw);
         const qty = (r.qty_model != null && r.qty_model !== '') ? Number(r.qty_model) : 0;
         const lotsM = (r.lots_model != null && r.lots_model !== '') ? Number(r.lots_model) : 0;
         const qtyHint = (r.section === 'INDEX_RADAR' && lotsM > 0 && qty > 0)
@@ -18970,6 +19003,14 @@ function renderDayPerfFromCache(){
         const depHint = (r.section === 'INDEX_RADAR')
           ? ('Fixed cash budget ₹30,000 per INDEX RADAR trade (execution = 1 lot)')
           : 'qty × entry (≤ notional)';
+        const ltpPx = _perfFmtPx((r.ltp != null && r.ltp !== 0) ? r.ltp : null);
+        const exitPx = _perfFmtPx((r.exit != null && r.exit !== 0) ? r.exit : null);
+        const ltpExitCell = (ltpPx === '—' && exitPx === '—')
+          ? '—'
+          : `<div style="display:flex;flex-direction:column;align-items:flex-end;line-height:1.2">
+               <span style="font-size:10px;color:var(--bl)">LTP ${ltpPx}</span>
+               <span style="font-size:10px;color:var(--t1)">Exit ${exitPx}</span>
+             </div>`;
         return `<tr>
           <td style="color:var(--t0);font-variant-numeric:tabular-nums;font-weight:700" title="Entry (signal time)">${entT}</td>
           <td><span class="perf-pill ${secPill}">${(r.section||'—').replace('_',' ')}</span></td>
@@ -18981,7 +19022,7 @@ function renderDayPerfFromCache(){
           <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--t1)" title="${depHint}">${dep}</td>
           <td style="text-align:right;font-variant-numeric:tabular-nums">${_perfFmtPx(r.sl)}</td>
           <td style="text-align:right;font-variant-numeric:tabular-nums">${_perfFmtPx(r.t1)}</td>
-          <td style="text-align:right;font-variant-numeric:tabular-nums">${_perfFmtPx((r.ltp!=null&&r.ltp!==0)?r.ltp:null)}</td>
+          <td style="text-align:right;font-variant-numeric:tabular-nums">${ltpExitCell}</td>
           <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--t0);font-weight:700" title="Exit time when position closed">${exT}</td>
           <td style="text-align:right;font-weight:900;color:${rpnl>0?'var(--go)':rpnl<0?'var(--st)':'var(--t1)'}">${_perfFmtInr(rpnl)}</td>
           <td><span class="perf-pill ${outCls}">${out||'—'}</span></td>
@@ -20070,7 +20111,7 @@ function _sesSummaryBar(kz) {
   // ── Kill zone + timestamp ────────────────────────────────
   _sv('ses-s-kz', kz?.lbl || '—');
   const updEl = document.getElementById('ses-updated');
-  if(updEl) updEl.textContent = _sesHistoryMode ? 'HISTORY' : 'LIVE ' + new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  if(updEl) updEl.textContent = _sesHistoryMode ? 'HISTORY' : 'LIVE ' + new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
 }
 
 function _renderSESCards() {
