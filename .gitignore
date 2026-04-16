@@ -1,10 +1,16 @@
-# Environment variables - NEVER commit credentials
-backend/.env
+# Environment variables — never commit credentials (root + backend)
 .env
+backend/.env
 .env.local
 .env.*.local
+# Named env files under any directory; keep the documented template tracked
+.env.*
+!backend/.env.example
 
+# Local SQLite / runtime DBs (SaaS desk, backtests, etc.)
 backend/data/*.db
+backend/data/saas.db
+backend/data/backtest.db
 *.db
 # Python
 __pycache__/
