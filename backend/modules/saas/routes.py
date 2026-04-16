@@ -324,6 +324,38 @@ def _kite_auth_error_hint(message: str) -> str:
     )
 
 
+def _is_kite_ip_order_blocked(message: str) -> bool:
+    m = (message or "").lower()
+    return "not allowed" in m and "ip" in m and ("place order" in m or "orders" in m)
+
+
+def _kite_ip_order_block_hint(message: str) -> str:
+    if not _is_kite_ip_order_blocked(message):
+        return ""
+    return (
+        " Zerodha blocked this order because the Kite Connect app has IP allowlisting. "
+        "Open https://developers.kite.trade/ → your app → allowed IPs, and add the public outbound IP shown in the error "
+        "(that is the IP your trading server uses to call Kite, e.g. a VPS or cloud host). "
+        "Profile or quote calls can work while order placement stays blocked until the IP is allowlisted."
+    )
+
+
+def _kite_market_protection_hint(message: str) -> str:
+    m = (message or "").lower()
+    if "market protection" not in m and "market orders without" not in m:
+        return ""
+    return (
+        " Kite now requires a market_protection value for MARKET/SL-M API orders "
+        "(use -1 for automatic protection per exchange rules, or a positive percent). "
+        "This build sends market_protection=-1 for those order types."
+    )
+
+
+def _kite_broker_api_hint(message: str) -> str:
+    """Extra context for Kite order/session failures (appended to logs and HTTP detail)."""
+    return _kite_ip_order_block_hint(message) or _kite_auth_error_hint(message) or _kite_market_protection_hint(message)
+
+
 def _mask_secret(value: str, keep: int = 4) -> str:
     raw = str(value or "").strip()
     if not raw:
@@ -1902,6 +1934,17 @@ def _zerodha_place_order(account: sqlite3.Row, spec: dict[str, Any], strategy_co
         kwargs["price"] = float(spec["price"])
     if spec.get("trigger_price") is not None:
         kwargs["trigger_price"] = float(spec["trigger_price"])
+    # Zerodha RMS: MARKET / SL-M via API require explicit market protection (see Kite orders docs).
+    order_type_u = str(spec.get("order_type") or "").strip().upper()
+    if order_type_u in ("MARKET", "SL-M"):
+        mp_raw = spec.get("market_protection", -1)
+        try:
+            mp_int = int(mp_raw)
+        except (TypeError, ValueError):
+            mp_int = -1
+        if mp_int <= 0:
+            mp_int = -1
+        kwargs["market_protection"] = mp_int
     order_id = kite.place_order(**kwargs)
     return {"order_id": order_id, "request": kwargs}
 
@@ -2070,7 +2113,7 @@ def _auto_execute_signal_worker(user_id: int, user_email: str, strategy_code: st
                 conn.execute("UPDATE saas_signal_inbox SET status='AUTO_EXECUTED' WHERE user_id=? AND strategy_code=? AND signal_key=?", (user_id, strategy_code, signal_key))
             except Exception as exc:
                 error_text = str(exc)
-                hint = _kite_auth_error_hint(error_text)
+                hint = _kite_broker_api_hint(error_text)
                 err_for_db = (error_text + hint)[:600]
                 conn.execute(
                     "UPDATE saas_broker_accounts SET status='ERROR', last_error=?, last_checked_at=?, updated_at=? WHERE id=?",
@@ -3141,7 +3184,10 @@ async def user_broker_sample_order(request: Request, authorization: Optional[str
         if broker is None:
             raise HTTPException(status_code=404, detail="Broker workspace unavailable")
         if not bool(broker["enabled"] or 0):
-            raise HTTPException(status_code=400, detail="Enable broker before sample order")
+            raise HTTPException(
+                status_code=400,
+                detail="Broker routing is off. Open Trading execution → Advanced routing, check Broker enabled, then click Save Credentials or Capture Token so the desk saves it, and try again.",
+            )
         status = str(broker["status"] or "").upper()
         if status not in {"CONNECTED", "READY"}:
             raise HTTPException(status_code=400, detail="Broker not connected")
@@ -3275,7 +3321,7 @@ async def user_broker_sample_order(request: Request, authorization: Optional[str
             }
         except Exception as exc:
             error_text = str(exc)
-            hint = _kite_auth_error_hint(error_text)
+            hint = _kite_broker_api_hint(error_text)
             err_for_db = (error_text + hint)[:600]
             _upsert_broker_order_log(
                 conn,

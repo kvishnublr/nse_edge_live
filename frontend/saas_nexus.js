@@ -270,7 +270,9 @@
     if(window._nxKiteInteractiveTimer){ clearTimeout(window._nxKiteInteractiveTimer); window._nxKiteInteractiveTimer = null; }
     nxCloseKitePopupRef();
     remember('', '');
-    NX.user=null; NX.dashboard=null; NX.admin=null; NX.payments=[]; NX.trades=[]; NX.loadingAction=''; NX.brokerTest=null; NX.brokerAssist=null; NX.selectedPaymentId=null; clearNotice(); safeRender();
+    NX.user=null; NX.dashboard=null; NX.admin=null; NX.payments=[]; NX.trades=[]; NX.loadingAction=''; NX.brokerTest=null; NX.brokerAssist=null; NX.selectedPaymentId=null; NX.ready=false;
+    window._nxBootHydrateDone = false;
+    clearNotice(); safeRender();
   }
 
   async function ensureBoot(){
@@ -526,6 +528,10 @@
   }
 
   function renderKiteExecutionHub(user, broker, brokerOptions, brokerProfileBits, brokerTestHtml, executionOrders, effectiveBrokerCode){
+    try{
+    user = user || {};
+    broker = broker || {};
+    const profileBits = brokerProfileBits || [];
     const code = String(effectiveBrokerCode || broker.broker_code || 'PAPER').toUpperCase();
     const paper = code === 'PAPER';
     const liveLocked = code === 'PAPER';
@@ -537,7 +543,7 @@
     const statusClass = sessOk ? 'good' : (broker.status === 'ERROR' ? 'bad' : 'warn');
     const modeBadge = effectiveLive ? 'bad' : 'cool';
     const modeLabel = effectiveLive ? 'Live execution' : 'Paper / safe';
-    const profileLine = brokerProfileBits.length ? brokerProfileBits.join(' · ') : 'Not verified yet';
+    const profileLine = profileBits.length ? profileBits.join(' · ') : 'Not verified yet';
     const tokenClass = assist ? (assist.type === 'success' ? 'success' : (assist.type === 'error' ? 'error' : (assist.type === 'info' ? 'info' : 'cool'))) : 'warn';
     const tokenTitle = assist ? escapeHtml(assist.title || 'Shared session checked') : 'Shared session not checked yet';
     const tokenMessage = assist ? escapeHtml(assist.message || '') : 'Fastest path: use the server session if your Zerodha keys and token already live in backend/.env.';
@@ -661,7 +667,7 @@
       + '<div class="nx-form-grid"><label class="nx-form-label">Broker user ID<input id="nx-broker-user-id" class="nx-input" placeholder="AB1234" value="'+escapeHtml(broker.broker_user_id || '')+'"></label><label class="nx-form-label">Default qty<input id="nx-broker-qty" class="nx-input" placeholder="1" value="'+escapeHtml(String(broker.default_quantity || 1))+'"></label></div>'
       + '<div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Manual access token<input id="nx-broker-access-token" class="nx-input" placeholder="'+escapeHtml(broker.access_token_masked || 'Only if not using login URL')+'" value=""></label><label class="nx-form-label">Intraday product<select id="nx-broker-intraday-product" class="nx-select"><option '+((broker.intraday_product||'MIS')==='MIS'?'selected':'')+'>MIS</option><option '+((broker.intraday_product||'MIS')==='CNC'?'selected':'')+'>CNC</option><option '+((broker.intraday_product||'MIS')==='NRML'?'selected':'')+'>NRML</option></select></label></div>'
       + '<div class="nx-form-grid" style="margin-top:12px"><label class="nx-form-label">Positional product<select id="nx-broker-positional-product" class="nx-select"><option '+((broker.positional_product||'CNC')==='CNC'?'selected':'')+'>CNC</option><option '+((broker.positional_product||'CNC')==='NRML'?'selected':'')+'>NRML</option><option '+((broker.positional_product||'CNC')==='MIS'?'selected':'')+'>MIS</option></select></label><label class="nx-form-label">&nbsp;</label></div>'
-      + '<div class="nx-toggle-grid" style="margin-top:14px"><label class="nx-check"><input id="nx-broker-enabled" type="checkbox"'+checkedAttr(!!broker.enabled)+'><span>Broker enabled</span><span class="nx-check-hint">Allow routing to this desk</span></label><label class="nx-check"><input id="nx-broker-paper-mode" type="checkbox"'+checkedAttr(!!broker.paper_mode || paper)+'><span>Paper route</span><span class="nx-check-hint">Simulate orders (Kite session can still be real)</span></label><label class="nx-check"><input id="nx-broker-live-mode" type="checkbox"'+checkedAttr(!!broker.live_mode && !paper)+' '+(liveLocked ? 'disabled' : '')+'><span>Live mode</span><span class="nx-check-hint">Real broker orders when off paper route</span></label><label class="nx-check"><input id="nx-user-auto-execute" type="checkbox"'+checkedAttr(!!((user.controls||{}).auto_execute))+'><span>Auto execute</span></label></div>'
+      + '<div class="nx-toggle-grid" style="margin-top:14px"><label class="nx-check"><input id="nx-broker-enabled" type="checkbox" onchange="nxBrokerCodeSync()"'+checkedAttr(!!broker.enabled)+'><span>Broker enabled</span><span class="nx-check-hint">Required for Sample order and auto-routing — must be saved with Capture Token or Save Credentials</span></label><label class="nx-check"><input id="nx-broker-paper-mode" type="checkbox" onchange="nxBrokerCodeSync()"'+checkedAttr(!!(broker.paper_mode || paper))+'><span>Paper route</span><span class="nx-check-hint">Simulate orders (Kite session can still be real)</span></label><label class="nx-check"><input id="nx-broker-live-mode" type="checkbox" onchange="nxBrokerCodeSync()"'+checkedAttr(!!broker.live_mode && !paper)+' '+(liveLocked ? 'disabled' : '')+'><span>Live mode</span><span class="nx-check-hint">Real broker orders when off paper route</span></label><label class="nx-check"><input id="nx-user-auto-execute" type="checkbox"'+checkedAttr(!!((user.controls||{}).auto_execute))+'><span>Auto execute</span></label></div>'
       + '<div class="nx-form-grid-3" style="margin-top:12px"><label class="nx-form-label">Daily loss<input id="nx-user-daily-loss" class="nx-input" placeholder="2500" value="'+escapeHtml(String((user.controls||{}).daily_loss_limit || 0))+'"></label><label class="nx-form-label">Max trades / day<input id="nx-user-max-trades" class="nx-input" placeholder="6" value="'+escapeHtml(String((user.controls||{}).max_trades_per_day || 0))+'"></label><label class="nx-form-label">Max open signals<input id="nx-user-max-open" class="nx-input" placeholder="3" value="'+escapeHtml(String((user.controls||{}).max_open_signals || 0))+'"></label></div>'
       + '</div></details>'
       + '<div class="nx-z-cta">'
@@ -682,10 +688,14 @@
       + (broker.last_error ? '<div class="nx-status error" style="margin-top:12px">'+escapeHtml(broker.last_error)+'</div>' : '<div class="nx-status success" style="margin-top:12px">No blocking errors. Use <b>Test session</b> after market opens if needed.</div>')
       + '</div>'
       + '<div class="nx-item" style="margin-top:12px"><div class="nx-item-title">Recent auto orders</div><div class="nx-item-sub">Live orders and paper drills. On paper route, <b>Paper test OK</b> means the desk check succeeded — nothing is sent to the exchange.</div><div style="margin-top:12px">'+executionOrders+'</div></div>'
-      + '<div class="nx-item" style="margin-top:12px"><div class="nx-item-title">Test trade log</div><div class="nx-item-sub">Latest sample order. Use top <b>Order firing → Live</b> for real Kite orders (market hours). <b>Paper route</b> in Advanced must be off for live.</div>'
+      + '<div class="nx-item" style="margin-top:12px"><div class="nx-item-title">Test trade log</div><div class="nx-item-sub">Latest sample order. Requires <b>Broker enabled</b> (Advanced routing) saved to the server. Use top <b>Order firing → Live</b> for real Kite orders (market hours). <b>Paper route</b> in Advanced must be off for live.</div>'
       + (sampleLog ? '<div class="nx-inline-note" style="margin-top:10px">Symbol <b>'+escapeHtml(sampleLog.symbol || '—')+'</b> · Qty <b>'+escapeHtml(String(sampleLog.quantity || '—'))+'</b> · Status <b>'+escapeHtml(sampleLog.status || 'PENDING')+'</b></div><div class="nx-status '+(sampleLog.ok ? 'success' : 'error')+'" style="margin-top:10px">'+escapeHtml(sampleLog.message || '')+'</div>' : '<div class="nx-inline-note" style="margin-top:10px">Run <b>Sample Order</b> to populate this panel.</div>')
       + '</div>'
       + '</div></div></div></div>';
+    }catch(err){
+      console.error('Nexus renderKiteExecutionHub failed', err);
+      return '<div class="nx-card nx-status error" style="margin:12px"><div class="nx-item-title">Trading execution</div><div class="nx-item-sub" style="margin-top:8px;word-break:break-word">This section hit a render error (the rest of Nexus may still work).</div><div class="nx-inline-note" style="margin-top:10px;word-break:break-word;font-family:ui-monospace,Consolas,monospace;font-size:12px">'+escapeHtml(String((err && err.message) || err || 'unknown'))+'</div><div class="nx-actions" style="margin-top:12px"><button type="button" class="nx-btn nx-btn-primary" onclick="window.nxRefresh&&window.nxRefresh()">Reload desk data</button></div></div>';
+    }
   }
 
   function renderUserCards(){
@@ -886,7 +896,21 @@
   function renderAll(){
     const mount = el('nx-root');
     if(!mount) return;
-    mount.innerHTML = renderHero() + renderBody();
+    var hero = '';
+    var body = '';
+    try{
+      hero = renderHero();
+    }catch(err){
+      console.error('Nexus renderHero failed', err);
+      hero = '<div class="nx-hero"><div class="nx-status error" style="padding:16px">Nexus header failed to render: '+escapeHtml(String((err && err.message) || err || 'error'))+'</div></div>';
+    }
+    try{
+      body = renderBody();
+    }catch(err){
+      console.error('Nexus renderBody failed', err);
+      body = '<div class="nx-card"><div class="nx-card-body"><div class="nx-status error"><b>Workspace panel failed to render.</b></div><div class="nx-inline-note" style="margin-top:10px;word-break:break-word;font-size:13px">'+escapeHtml(String((err && err.message) || err || 'error'))+'</div><div class="nx-inline-note" style="margin-top:10px">Open DevTools (F12) → Console for the stack trace. APIs may still be running on the server.</div><div class="nx-actions" style="margin-top:14px"><button type="button" class="nx-btn nx-btn-primary" onclick="window.nxRefresh&&window.nxRefresh()">Reload desk data</button><button type="button" class="nx-btn nx-btn-ghost" onclick="location.reload()">Hard refresh page</button></div></div></div>';
+    }
+    mount.innerHTML = hero + body;
   }
 
   function safeRender(){
@@ -895,7 +919,7 @@
     try{
       renderAll();
     }catch(err){
-      mount.innerHTML = '<div style="padding:24px;color:#e5eefc;font-family:Aptos,Segoe UI,sans-serif"><div style="font-size:22px;font-weight:800;margin-bottom:8px">Nexus Control Hub</div><div style="font-size:14px;line-height:1.6;color:#b8c8e6">The panel hit a render issue. Refresh once, then open NEXUS again. If this keeps happening, the fallback is active and the APIs are still live.</div></div>';
+      mount.innerHTML = '<div style="padding:24px;color:#e5eefc;font-family:Aptos,Segoe UI,sans-serif"><div style="font-size:22px;font-weight:800;margin-bottom:8px">Nexus Control Hub</div><div style="font-size:14px;line-height:1.6;color:#b8c8e6">The panel hit a render issue while updating the page. Try <b>Reload desk data</b> below, or close Nexus and hard-refresh the browser (Ctrl+F5).</div><div style="margin-top:14px;padding:12px;border-radius:10px;background:rgba(255,80,80,.12);color:#ffd6d6;font-size:13px;word-break:break-word;font-family:ui-monospace,Consolas,monospace">'+escapeHtml(String((err && err.message) || err || 'unknown error'))+'</div><div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap"><button type="button" class="nx-btn nx-btn-primary" style="cursor:pointer" onclick="window.nxRefresh&&window.nxRefresh()">Reload desk data</button><button type="button" class="nx-btn nx-btn-ghost" style="cursor:pointer" onclick="location.reload()">Hard refresh</button></div></div>';
       console.error('Nexus render failed', err);
     }
   }
@@ -1563,6 +1587,20 @@
         if(!symbol) return;
         const qty = Math.max(1, Number(((el('nx-sample-qty')||{}).value || ((el('nx-broker-qty')||{}).value || 1)) || 1));
         const autoCancel = true;
+        const domBrokerOn = !!((el('nx-broker-enabled')||{}).checked);
+        const serverBrokerOn = !!(((NX.dashboard||{}).broker||{}).enabled);
+        if(!serverBrokerOn){
+          const logMsg = domBrokerOn
+            ? 'Broker enabled is checked in the form but not saved on the server. Click Capture Token or Save Credentials, then try Sample order again.'
+            : 'Broker routing is off. Open Advanced routing, check Broker enabled, then Capture Token or Save Credentials.';
+          const toastMsg = domBrokerOn
+            ? 'Save the desk first: click Capture Token or Save Credentials (Broker enabled is not on the server yet).'
+            : 'Turn on Broker enabled under Advanced routing, then Capture Token or Save Credentials.';
+          NX.brokerSampleLog = { ok:false, symbol:'', quantity:'', status:'FAILED', message: logMsg };
+          safeRender();
+          toast(toastMsg);
+          return;
+        }
         NX.brokerSampleLog = { ok:true, symbol:symbol, quantity:qty, status:'REQUESTED', message:'Sending test trade request...' };
         safeRender();
         const data = await nxApi('/api/user/broker/sample-order', { method:'POST', body: JSON.stringify({ symbol: symbol, quantity: qty, auto_cancel: autoCancel }) });
