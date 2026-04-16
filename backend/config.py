@@ -81,6 +81,13 @@ def _resolve_listen_port() -> int:
 
 PORT = _resolve_listen_port()
 
+
+def _env_csv_list(key: str, default: list[str] | tuple[str, ...] | None = None) -> list[str]:
+    raw = os.getenv(key, "").strip()
+    if raw:
+        return [part.strip().upper() for part in raw.split(",") if part.strip()]
+    return [str(x).strip().upper() for x in (default or []) if str(x).strip()]
+
 # â”€â”€â”€ NSE HEADERS (for FII/DII â€” only endpoint not on Kite) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 NSE_HEADERS = {
     "User-Agent": (
@@ -175,6 +182,44 @@ LOT_SIZES = {
 }
 
 FNO_SYMBOLS = list(LOT_SIZES.keys())
+
+# Swing stock universe:
+# - keep the legacy 15 names as pinned leaders
+# - expand from live NFO stock-futures availability (prefer NIFTY 200) for better coverage
+SWING_UNIVERSE = {
+    "source": (os.getenv("SWING_UNIVERSE_SOURCE", "NIFTY200_FNO") or "NIFTY200_FNO").strip().upper(),
+    "max_symbols": max(8, int(os.getenv("SWING_UNIVERSE_MAX_SYMBOLS", "60") or 60)),
+    "pinned_symbols": _env_csv_list("SWING_PINNED_SYMBOLS", FNO_SYMBOLS[2:]),
+    "manual_include": _env_csv_list("SWING_MANUAL_INCLUDE"),
+    "manual_exclude": _env_csv_list("SWING_MANUAL_EXCLUDE"),
+}
+
+# Two output tiers for positional ideas:
+# - strict = high-conviction shortlist
+# - coverage = broader watchlist after strict names are removed
+SWING_PICK_TIERS = {
+    "strict_limit": max(4, int(os.getenv("SWING_STRICT_LIMIT", "8") or 8)),
+    "coverage_limit": max(6, int(os.getenv("SWING_COVERAGE_LIMIT", "16") or 16)),
+    "coverage_overrides": {
+        "min_score_log": 64,
+        "min_pc_log": 3,
+        "min_rr": 1.85,
+        "min_abs_chg_pct": 0.25,
+        "max_abs_chg_pct": 3.0,
+        "min_vol_ratio": 1.0,
+        "counter_trend_min_pc": 4,
+        "pcr_soft_min_pc": 4,
+        "allowed_setups": ["Pullback", "Breakout"],
+        "allowed_directions": [],
+        "pullback_short_only": False,
+        "breakout_long_enabled": True,
+        "breakout_long_min_pc": 3,
+        "breakout_long_min_rs": 0.1,
+        "breakout_long_min_vol": 1.2,
+        "breakout_long_max_chg": 2.7,
+        "recovery_vol_min": 1.02,
+    },
+}
 
 # â”€â”€â”€ UPDATE INTERVALS (seconds) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 INTERVAL_PRICES  = 1    # KiteTicker is real-time; REST quote fallback every 1s

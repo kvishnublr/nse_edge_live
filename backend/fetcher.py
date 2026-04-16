@@ -415,6 +415,16 @@ def fetch_indices() -> Optional[dict]:
     return out
 
 
+def _quote_many(kite, keys: List[str], batch_size: int = 100) -> dict:
+    merged: dict = {}
+    size = max(1, int(batch_size or 100))
+    for i in range(0, len(keys), size):
+        batch = keys[i:i + size]
+        if batch:
+            merged.update(kite.quote(batch) or {})
+    return merged
+
+
 # â”€â”€â”€ F&O STOCK OI (via kite.quote on NFO futures) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def fetch_fno_stocks(kite) -> List[dict]:
     """
@@ -424,15 +434,20 @@ def fetch_fno_stocks(kite) -> List[dict]:
     """
     if not _kite_or_none(kite, "fetch_fno_stocks"):
         return []
-    from config import FNO_SYMBOLS, LOT_SIZES
+    from config import LOT_SIZES
     from feed import get_price
 
     stocks = []
     try:
-        # Get near-month futures instruments
-        futures = _get_nfo_futures(kite)
-        if not futures:
+        selected_symbols = get_swing_tradeable_symbols(kite)
+        futures_all = _get_nfo_futures(kite)
+        if not futures_all:
             logger.warning("No futures instruments available")
+            return []
+        fut_map = {f["name"]: f for f in futures_all}
+        futures = [fut_map[s] for s in selected_symbols if s in fut_map]
+        if not futures:
+            logger.warning("No futures instruments matched swing tradeable symbols")
             return []
 
         # Build quote keys for futures
@@ -440,19 +455,14 @@ def fetch_fno_stocks(kite) -> List[dict]:
         if not fut_keys:
             return []
 
-        # Fetch in one call
-        data = kite.quote(fut_keys[:100])  # max 100 keys
-
-        fut_map = {f["name"]: f for f in futures}
+        data = _quote_many(kite, fut_keys, batch_size=100)
         analytics = _get_stock_analytics(kite, futures)
         nifty_eq = get_price("NIFTY") or {}
         nifty_chg = float(nifty_eq.get("chg_pct", 0) or 0)
+        from config import SWING_UNIVERSE
+        universe_source = str(SWING_UNIVERSE.get("source") or "NIFTY200_FNO").strip().lower()
 
-        missing_syms = [s for s in FNO_SYMBOLS if s not in fut_map]
-        if missing_syms:
-            logger.warning(f"fetch_fno_stocks: no futures found for {missing_syms}, skipping")
-
-        for sym in FNO_SYMBOLS:
+        for rank, sym in enumerate(selected_symbols, start=1):
             fut = fut_map.get(sym)
             if not fut:
                 continue
@@ -461,17 +471,23 @@ def fetch_fno_stocks(kite) -> List[dict]:
 
             # Equity price from ticker (real-time)
             eq = get_price(sym)
-            price    = eq["price"] if eq else fq.get("last_price", 0)
-            chg_pct  = eq["chg_pct"] if eq else 0
-            chg_pts  = eq["chg_pts"] if eq else 0
+            fut_ltp = float(fq.get("last_price", 0) or 0)
+            fut_prev = float((fq.get("ohlc", {}) or {}).get("close", 0) or 0)
+            fut_chg_pts = round(fut_ltp - fut_prev, 2) if fut_prev else 0.0
+            fut_chg_pct = round(fut_chg_pts / fut_prev * 100, 2) if fut_prev else 0.0
+            price    = float(eq["price"]) if eq else fut_ltp
+            chg_pct  = float(eq["chg_pct"]) if eq else fut_chg_pct
+            chg_pts  = float(eq["chg_pts"]) if eq else fut_chg_pts
 
             oi       = fq.get("oi", 0)
             oi_prev  = fq.get("oi_day_low", oi)  # rough proxy for prev OI
             oi_chg   = oi - oi_prev
             oi_chg_p = round(oi_chg / oi_prev * 100, 2) if oi_prev else 0
 
-            vol      = fq.get("volume_traded", 0) or eq.get("volume", 0) if eq else 0
-            lot      = LOT_SIZES.get(sym, 1)
+            vol = int(eq.get("volume", 0) or 0) if eq else 0
+            if vol <= 0:
+                vol = int(fq.get("volume_traded", 0) or 0)
+            lot = int(fut.get("lot_size") or LOT_SIZES.get(sym, 1) or 1)
             stat     = analytics.get(sym, {})
             avg_vol  = float(stat.get("avg_vol20", 0) or 0)
             vol_ratio = round(vol / avg_vol, 2) if avg_vol > 0 and vol > 0 else 0.0
@@ -509,7 +525,7 @@ def fetch_fno_stocks(kite) -> List[dict]:
                 "oi_chg_pct": oi_chg_p,
                 "volume":     vol,
                 "lot_size":   lot,
-                "fut_ltp":    fq.get("last_price", 0),
+                "fut_ltp":    fut_ltp,
                 "avg_vol20":  round(avg_vol, 0) if avg_vol else 0,
                 "vol_ratio":  round(vol_ratio, 2),
                 "atr_pct":    atr_pct,
@@ -518,6 +534,10 @@ def fetch_fno_stocks(kite) -> List[dict]:
                 "signal":     signal,
                 "score":      min(99, score),
                 "derived_fields": True,
+                "universe_rank": rank,
+                "universe_source": universe_source,
+                "tracked_symbols": len(selected_symbols),
+                "price_source": "equity_tick" if eq else "futures_quote",
             })
     except Exception as e:
         logger.error(f"FnO stocks fetch error: {e}", exc_info=True)
@@ -527,6 +547,8 @@ def fetch_fno_stocks(kite) -> List[dict]:
 
 _nfo_fut_cache: list = []
 _nfo_fut_cache_ts: float = 0
+_swing_universe_cache: list = []
+_swing_universe_ts: float = 0.0
 _nifty200_symbols_cache: list = []
 _nifty200_symbols_ts: float = 0.0
 _nifty200_token_cache: dict = {}
@@ -540,7 +562,6 @@ def _get_nfo_futures(kite) -> List[dict]:
     if _nfo_fut_cache and time.time() - _nfo_fut_cache_ts < 21600:
         return _nfo_fut_cache
     try:
-        from config import FNO_SYMBOLS
         all_inst = kite.instruments("NFO")
         today    = datetime.now(IST).date()
         # Some symbols have different 'name' field in Zerodha NFO instruments.
@@ -555,15 +576,13 @@ def _get_nfo_futures(kite) -> List[dict]:
             for alias in aliases:
                 _alias_reverse[alias] = canon
         # Build set for fast lookup (canonical names)
-        fno_set = set(FNO_SYMBOLS)
-
-        # Near-month futures for our symbols
+        excluded = {"NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX"}
         futures: dict = {}
         for i in all_inst:
             raw_name = i.get("name", "")
             # Resolve alias to canonical name
             name = _alias_reverse.get(raw_name, raw_name)
-            if name not in fno_set:
+            if not name or name in excluded:
                 continue
             if i.get("instrument_type") != "FUT":
                 continue
@@ -578,14 +597,57 @@ def _get_nfo_futures(kite) -> List[dict]:
                 futures[name] = inst
         _nfo_fut_cache    = list(futures.values())
         _nfo_fut_cache_ts = time.time()
-        found   = set(futures.keys())
-        missing = [s for s in FNO_SYMBOLS if s not in found]
-        logger.info(f"Near-month futures loaded: {len(_nfo_fut_cache)} / {len(FNO_SYMBOLS)} symbols")
-        if missing:
+        logger.info(f"Near-month stock futures loaded: {len(_nfo_fut_cache)} symbols")
+        if False:
             logger.warning(f"Missing NFO futures for: {missing} â€” these will be skipped in F&O stocks")
         return _nfo_fut_cache
     except Exception as e:
         logger.error(f"NFO futures instruments error: {e}")
+        return []
+
+
+def get_swing_tradeable_symbols(kite) -> List[str]:
+    """Pinned core symbols first, then expand from live stock futures (prefer NIFTY 200)."""
+    global _swing_universe_cache, _swing_universe_ts
+    if _swing_universe_cache and time.time() - _swing_universe_ts < 900:
+        return list(_swing_universe_cache)
+    if kite is None:
+        return []
+    try:
+        from config import SWING_UNIVERSE
+
+        source = str(SWING_UNIVERSE.get("source") or "NIFTY200_FNO").strip().upper()
+        cap = max(8, int(SWING_UNIVERSE.get("max_symbols", 60) or 60))
+        pinned = [str(x).strip().upper() for x in (SWING_UNIVERSE.get("pinned_symbols") or []) if str(x).strip()]
+        manual_include = [str(x).strip().upper() for x in (SWING_UNIVERSE.get("manual_include") or []) if str(x).strip()]
+        manual_exclude = {str(x).strip().upper() for x in (SWING_UNIVERSE.get("manual_exclude") or []) if str(x).strip()}
+
+        futures = _get_nfo_futures(kite)
+        available = sorted({str(f.get("name") or "").upper() for f in futures if str(f.get("name") or "").strip()})
+        available_set = set(available)
+        selected: list[str] = []
+
+        def _add(items):
+            for raw in items:
+                sym = str(raw or "").strip().upper()
+                if not sym or sym in manual_exclude or sym not in available_set or sym in selected:
+                    continue
+                selected.append(sym)
+                if len(selected) >= cap:
+                    return
+
+        _add(pinned)
+        _add(manual_include)
+        if len(selected) < cap and source in {"NIFTY200_FNO", "NIFTY200"}:
+            _add(get_nifty200_symbols())
+        if len(selected) < cap:
+            _add(available)
+
+        _swing_universe_cache = selected[:cap]
+        _swing_universe_ts = time.time()
+        return list(_swing_universe_cache)
+    except Exception as e:
+        logger.warning("Swing tradeable symbol build failed: %s", e)
         return []
 
 

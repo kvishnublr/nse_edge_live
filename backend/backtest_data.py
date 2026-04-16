@@ -582,11 +582,20 @@ def swing_radar_candidates(
         }
 
     weak_syms: set[str] = set()
+    probation_syms: set[str] = set()
+    leader_syms: set[str] = set()
     try:
         weak_syms = {str(x).upper() for x in (get_signal_accuracy_filters().get("weak_symbols") or [])}
     except Exception:
         pass
-    blocked_syms = {str(x).upper() for x in (SWR.get("blocked_symbols") or []) if str(x).strip()}
+    try:
+        _swing_q = get_swing_symbol_quality_filters()
+        blocked_syms = {str(x).upper() for x in (_swing_q.get("blocked_symbols") or [])}
+        probation_syms = {str(x).upper() for x in (_swing_q.get("probation_symbols") or [])}
+        leader_syms = {str(x).upper() for x in (_swing_q.get("leader_symbols") or [])}
+    except Exception:
+        blocked_syms = set()
+    blocked_syms |= {str(x).upper() for x in (SWR.get("blocked_symbols") or []) if str(x).strip()}
 
     vix = float((indices or {}).get("vix", 0) or 0)
     pcr = float((chain or {}).get("pcr", 0) or 0)
@@ -622,8 +631,13 @@ def swing_radar_candidates(
             continue
         chg = float(s.get("chg_pct", 0) or 0)
         raw_score = int(s.get("score", 0) or 0)
-        penalty = int(SWR.get("weak_symbol_penalty", 10)) if sym in weak_syms else 0
-        rank_score = raw_score - penalty
+        penalty = 0
+        if sym in weak_syms:
+            penalty += int(SWR.get("weak_symbol_penalty", 10))
+        if sym in probation_syms:
+            penalty += int(max(1, round(float(SWR.get("weak_symbol_penalty", 10)) * 0.75)))
+        bonus = 3 if sym in leader_syms else 0
+        rank_score = raw_score - penalty + bonus
         if rank_score < min_log:
             continue
 
@@ -1272,6 +1286,69 @@ def get_signal_accuracy_filters():
         "weak_buckets": weak_buckets,
         "symbol_stats": {k: {"sample": v["n"], "win_rate": round(v["w"] / v["n"] * 100, 1)} for k, v in symbol_stats.items()},
         "bucket_stats": {k: {"sample": v["n"], "win_rate": round(v["w"] / v["n"] * 100, 1)} for k, v in bucket_stats.items()},
+    }
+
+
+def get_swing_symbol_quality_filters(lookback_days: int = 540, max_rows_per_symbol: int = 12):
+    """Rolling symbol quality model for swing radar based on recent closed swing outcomes."""
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            """SELECT trade_date, symbol, outcome, pnl_pct
+               FROM live_signal_history
+               WHERE status='CLOSED'
+                 AND outcome IN ('TARGET HIT','SL HIT','EXPIRED')
+                 AND (
+                    COALESCE(verdict,'')='SWING_RADAR'
+                    OR signal_key LIKE 'BT-SWING|%'
+                 )
+               ORDER BY trade_date DESC, id DESC"""
+        ).fetchall()
+    finally:
+        conn.close()
+
+    cutoff = date.today() - timedelta(days=max(30, int(lookback_days or 540)))
+    cap = max(2, int(max_rows_per_symbol or 12))
+    by_symbol: dict[str, list[tuple[str, float]]] = {}
+    for trade_date, symbol, outcome, pnl_pct in rows:
+        sym = str(symbol or "").upper().strip()
+        if not sym:
+            continue
+        try:
+            d = datetime.strptime(str(trade_date)[:10], "%Y-%m-%d").date()
+        except Exception:
+            continue
+        if d < cutoff:
+            continue
+        sample = by_symbol.setdefault(sym, [])
+        if len(sample) >= cap:
+            continue
+        sample.append((str(outcome or "").upper(), float(pnl_pct or 0.0)))
+
+    blocked_symbols: set[str] = set()
+    probation_symbols: set[str] = set()
+    leader_symbols: set[str] = set()
+    symbol_stats: dict[str, dict] = {}
+    for sym, sample_rows in by_symbol.items():
+        if not sample_rows:
+            continue
+        sample = len(sample_rows)
+        wins = sum(1 for outcome, _ in sample_rows if outcome == "TARGET HIT")
+        win_rate = round(wins / sample * 100, 1)
+        avg_pnl = round(sum(p for _, p in sample_rows) / sample, 4)
+        symbol_stats[sym] = {"sample": sample, "win_rate": win_rate, "avg_pnl_pct": avg_pnl}
+        if sample >= 4 and (win_rate <= 30.0 or avg_pnl <= -0.35):
+            blocked_symbols.add(sym)
+        elif sample >= 3 and (win_rate < 45.0 or avg_pnl <= 0.0):
+            probation_symbols.add(sym)
+        elif sample >= 4 and win_rate >= 65.0 and avg_pnl >= 0.6:
+            leader_symbols.add(sym)
+
+    return {
+        "blocked_symbols": blocked_symbols,
+        "probation_symbols": probation_symbols,
+        "leader_symbols": leader_symbols,
+        "symbol_stats": symbol_stats,
     }
 
 
