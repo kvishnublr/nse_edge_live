@@ -1419,6 +1419,42 @@ button{font-weight:700}
 .jfk{font-size:8px;color:var(--t2);letter-spacing:1.5px;margin-bottom:3px}
 .jfi,.jfs,.jfta{background:var(--s2);border:1px solid var(--b1);color:var(--t0);font-family:var(--fn);font-size:10px;padding:5px 8px;border-radius:3px;outline:none;width:100%;transition:border-color .15s}
 .jfi:focus,.jfs:focus,.jfta:focus{border-color:var(--go)}
+/* ADV PRIME STRIKE backtest — compact dates (override global .jfi width:100%) */
+.ps-bt-datebar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.ps-dt-chip{display:inline-flex;align-items:center;gap:5px;background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:4px 6px 4px 8px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.ps-dt-chip .ps-dt-lbl{font-size:7px;font-weight:800;color:var(--t3);letter-spacing:.55px;text-transform:uppercase;white-space:nowrap}
+.ps-dt-inp{appearance:auto;-webkit-appearance:auto;width:auto!important;min-width:116px;max-width:138px;height:26px!important;padding:2px 8px!important;font-size:11px!important;font-weight:700;font-family:var(--fn);border-radius:6px!important;border:1px solid var(--b1)!important;background:var(--s2)!important;color:var(--t0)!important;color-scheme:dark;outline:none;transition:border-color .15s;flex:0 0 auto!important}
+.ps-dt-inp:focus{border-color:#f59e0b!important}
+.light .ps-dt-inp{color-scheme:light}
+.ps-dt-cal{width:28px;height:26px;padding:0;border:1px solid rgba(245,158,11,.5);border-radius:6px;background:rgba(245,158,11,.14);cursor:pointer;font-size:13px;line-height:1;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--t0)}
+.ps-dt-cal:hover{background:rgba(245,158,11,.28)}
+.ps-bt-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.ps-bt-hint{font-size:6.5px;color:var(--t3);line-height:1.35;max-width:100%}
+/* ADV PRIME STRIKE — one scroll region for summary + tables (avoids vertical crush) */
+.ps-bt-scroll{
+  flex:1;
+  min-height:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  border-top:1px solid rgba(245,158,11,.18);
+  background:var(--bg);
+  scrollbar-width:thin;
+  scrollbar-color:rgba(245,158,11,.75) rgba(30,41,59,.5);
+}
+.ps-bt-scroll::-webkit-scrollbar{width:11px}
+.ps-bt-scroll::-webkit-scrollbar-track{background:var(--s1);border-radius:10px;margin:4px 0}
+.ps-bt-scroll::-webkit-scrollbar-thumb{
+  background:linear-gradient(180deg,#fbbf24,#d97706);
+  border-radius:10px;
+  border:3px solid var(--s1);
+  min-height:48px;
+}
+.ps-bt-scroll::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,#fde68a,#f59e0b)}
+.light .ps-bt-scroll{scrollbar-color:#94a3b8 #e2e8f0}
+.light .ps-bt-scroll::-webkit-scrollbar-track{background:#f1f5f9}
+.light .ps-bt-scroll::-webkit-scrollbar-thumb{border-color:#f1f5f9;background:linear-gradient(180deg,#64748b,#475569)}
+.ps-summary-row{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;padding:10px 12px 12px;border-bottom:1px solid var(--b1);background:rgba(245,158,11,.06)}
+.ps-bt-body-inner{display:flex;flex-direction:column;gap:14px;padding:12px 12px 24px}
 .jfta{resize:vertical;min-height:44px}
 .jfs option{background:var(--s2)}
 .gcks{display:flex;gap:4px;flex-wrap:wrap}
@@ -3996,15 +4032,21 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
         </div>
 
         <div class="tab tab-primestrike" style="--tc:#f59e0b;--tg:rgba(245,158,11,.14);--ts:rgba(245,158,11,.55)"
-             onclick="sw('primestrike',this)" id="ps-tab" title="PRIME STRIKES: 3-layer confirmed intraday option buying — VIX gate · PCR align · window filter">
+             onclick="sw('primestrike',this)" id="ps-tab" title="ADV PRIME STRIKE: buying-only intraday index options with VIX gate, PCR align, and ranked momentum filters">
           <span class="tab-glyph" aria-hidden="true">◈</span>
-          <span class="tab-txt">PRIME STRIKES</span>
+          <span class="tab-txt">ADV PRIME STRIKE</span>
         </div>
 
         <div class="tab tab-advspike" style="--tc:#a78bfa;--tg:rgba(167,139,250,.14);--ts:rgba(167,139,250,.55)"
              onclick="sw('advspikescanner',this)" id="asr-tab" title="NIFTY 200 spike hunter — live alerts + backtest cards">
           <span class="tab-glyph" aria-hidden="true">🚨</span>
           <span class="tab-txt">SPIKE HUNT</span>
+        </div>
+
+        <div class="tab tab-apexhunt" style="--tc:#00e5a0;--tg:rgba(0,229,160,.13);--ts:rgba(0,229,160,.50)"
+             onclick="sw('apexhunt',this)" id="ah-tab" title="APEX HUNT: Basket sentiment + Heat Score → NIFTY index options signals">
+          <span class="tab-glyph" aria-hidden="true">🔥</span>
+          <span class="tab-txt">APEX HUNT</span>
         </div>
 
         <div class="tab tab-signal" style="--tc:#fbbf24;--tg:rgba(251,191,36,.12);--ts:rgba(251,191,36,.45)"
@@ -4038,6 +4080,12 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
              onclick="sw('swing',this)" title="Swing Radar — multi-day ideas, backtest, scoring">
           <span class="tab-glyph" aria-hidden="true">🌊</span>
           <span class="tab-txt">SWING RADAR</span>
+        </div>
+
+        <div class="tab tab-advsw" style="--tc:#22d3ee;--tg:rgba(34,211,238,.12);--ts:rgba(34,211,238,.48)"
+             onclick="sw('advswing',this)" id="advs-tab" title="ADV-SWING — Nifty 500 cash, strict filters, backtest report">
+          <span class="tab-glyph" aria-hidden="true">◇</span>
+          <span class="tab-txt">ADV-SWING</span>
         </div>
 
         <div class="tab tab-levels" style="--tc:#94a3b8;--tg:rgba(148,163,184,.12);--ts:rgba(148,163,184,.45)"
@@ -4704,6 +4752,21 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
   .light .sw-mtbl tbody tr:hover td{background:rgba(0,97,168,.10)}
   </style>
 
+  <!-- Sub-tab bar: SWING RADAR | 52W BREAKOUT -->
+  <div style="display:flex;border-bottom:1px solid var(--b1);flex-shrink:0;background:var(--s1)">
+    <button type="button" id="sw-sub-radar" onclick="swSubTab('radar',this)"
+      style="flex:1;padding:7px 4px;font-family:var(--fn);font-size:8px;font-weight:800;letter-spacing:1px;border:none;cursor:pointer;background:var(--s2);color:var(--pu);border-bottom:2px solid var(--pu)">
+      🌊 SWING RADAR
+    </button>
+    <button type="button" id="sw-sub-52w" onclick="swSubTab('52w',this)"
+      style="flex:1;padding:7px 4px;font-family:var(--fn);font-size:8px;font-weight:800;letter-spacing:1px;border:none;cursor:pointer;background:var(--s1);color:var(--t2);border-bottom:2px solid transparent">
+      📈 52W BREAKOUT
+    </button>
+  </div>
+
+  <!-- PANEL: existing SWING RADAR -->
+  <div id="sw-panel-radar" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden">
+
   <!-- Top bar -->
   <div id="sw-topbar">
     <span class="sw-title">SWING RADAR</span>
@@ -4745,6 +4808,120 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
 
   <!-- hidden tbody kept for historical data compatibility -->
   <table style="display:none"><tbody id="sw-body"></tbody></table>
+  </div><!-- /sw-panel-radar -->
+
+  <!-- PANEL: 52W BREAKOUT -->
+  <div id="sw-panel-52w" style="display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--b1);flex-shrink:0;background:linear-gradient(90deg,rgba(16,185,129,.10),transparent);flex-wrap:wrap">
+      <span style="font-family:var(--fh);font-size:11px;font-weight:800;letter-spacing:1.8px;color:#10b981">52W BREAKOUT</span>
+      <span style="font-size:7px;color:var(--t2)">NIFTY 500 · 52-week high + vol 1.5× + sector align · SL=1×ATR · T1=2.5×ATR · T2=4×ATR</span>
+      <span id="s52-regime-badge" style="font-size:7px;font-weight:800;padding:1px 8px;border-radius:10px;border:1px solid rgba(16,185,129,.4);background:rgba(16,185,129,.1);color:#10b981;margin-left:auto">REGIME —</span>
+      <button type="button" class="btpre" onclick="s52FetchLive()" style="font-size:8px;padding:3px 10px;border-color:rgba(16,185,129,.5);color:#10b981">↻ LIVE SCAN</button>
+    </div>
+
+    <!-- Sub-sub-tabs: LIVE | BACKTEST -->
+    <div style="display:flex;border-bottom:1px solid var(--b1);flex-shrink:0">
+      <button id="s52-sub-live" onclick="s52SubTab('live',this)"
+        style="flex:1;padding:5px;font-family:var(--fn);font-size:7.5px;font-weight:800;letter-spacing:.8px;border:none;cursor:pointer;background:rgba(16,185,129,.08);color:#10b981;border-bottom:2px solid #10b981">
+        ⚡ LIVE CANDIDATES
+      </button>
+      <button id="s52-sub-bt" onclick="s52SubTab('bt',this)"
+        style="flex:1;padding:5px;font-family:var(--fn);font-size:7.5px;font-weight:800;letter-spacing:.8px;border:none;cursor:pointer;background:var(--s1);color:var(--t2);border-bottom:2px solid transparent">
+        ⏱ BACKTEST
+      </button>
+    </div>
+
+    <!-- LIVE candidates panel -->
+    <div id="s52-live-panel" style="flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+      <div id="s52-live-status" style="font-size:8px;color:var(--t2);text-align:center;padding:20px">Click ↻ LIVE SCAN to scan NIFTY 500 for today's breakouts</div>
+      <div id="s52-live-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px"></div>
+    </div>
+
+    <!-- BACKTEST panel -->
+    <div id="s52-bt-panel" style="display:none;flex-direction:column;flex:1;min-height:0">
+
+      <!-- Controls -->
+      <div style="padding:8px 12px;border-bottom:1px solid var(--b1);flex-shrink:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--s1)">
+        <div style="display:flex;gap:5px">
+          <button class="ps-dt-chip on" id="s52-r-1m" onclick="s52BtRange(30,this)">1M</button>
+          <button class="ps-dt-chip" id="s52-r-3m" onclick="s52BtRange(90,this)">3M</button>
+          <button class="ps-dt-chip" id="s52-r-6m" onclick="s52BtRange(180,this)">6M</button>
+          <button class="ps-dt-chip" id="s52-r-1y" onclick="s52BtRange(365,this)">1Y</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <input type="date" id="s52-bt-from" class="ps-dt-input" style="width:115px">
+          <span style="font-size:8px;color:var(--t2)">→</span>
+          <input type="date" id="s52-bt-to"   class="ps-dt-input" style="width:115px">
+        </div>
+        <button id="s52-run-btn" onclick="s52BtRun()"
+          style="padding:4px 14px;font-family:var(--fn);font-size:8px;font-weight:800;letter-spacing:1px;border:1px solid #10b981;color:#10b981;background:rgba(16,185,129,.1);border-radius:6px;cursor:pointer">
+          ▶ RUN BACKTEST
+        </button>
+        <span id="s52-bt-status" style="font-size:8px;color:var(--t2);margin-left:4px"></span>
+      </div>
+
+      <!-- Results -->
+      <div id="s52-bt-body" class="ps-bt-scroll" style="flex:1;overflow-y:auto;padding:14px">
+        <div style="text-align:center;padding:40px;color:var(--t2);font-size:9px">Select a date range and run backtest</div>
+      </div>
+    </div>
+
+  </div><!-- /sw-panel-52w -->
+
+  </div><!-- /tp-swing -->
+
+  <!-- TAB: ADV-SWING (Nifty 500 · strict swing overlay · backtest report) -->
+  <div class="tp" id="tp-advswing" style="padding:0;gap:0;flex-direction:column;overflow:hidden;flex:1;min-height:0;max-width:100%">
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--b1);flex-shrink:0;background:linear-gradient(90deg,rgba(34,211,238,.12),transparent);flex-wrap:wrap">
+      <span style="font-family:var(--fh);font-size:10px;font-weight:800;letter-spacing:1.6px;color:#22d3ee">ADV-SWING</span>
+      <span style="font-size:7px;color:var(--t2);max-width:520px;line-height:1.45">NIFTY <b>500</b> cash (Kite EQ daily) · same gate engine as Swing Radar backtest · <b>stricter</b> ADV_SWING_RADAR filters · longer default hold · rows: <code style="font-size:7px">BT-ADVS|…</code> / verdict <code style="font-size:7px">ADV_SWING</code></span>
+      <span id="advs-uni" style="font-size:7px;color:var(--t3);margin-left:auto;white-space:nowrap">Universe: —</span>
+    </div>
+    <div style="padding:8px 10px;border-bottom:1px solid var(--b1);flex-shrink:0;background:var(--s1);display:flex;flex-direction:column;gap:8px">
+      <div class="ps-bt-datebar">
+        <div class="ps-dt-chip" title="Backtest start">
+          <span class="ps-dt-lbl">From</span>
+          <input type="date" id="advs-from" class="ps-dt-inp" autocomplete="off">
+          <button type="button" class="ps-dt-cal" onclick="psOpenDatePicker('advs-from')" title="Calendar">📅</button>
+        </div>
+        <div class="ps-dt-chip" title="Backtest end">
+          <span class="ps-dt-lbl">To</span>
+          <input type="date" id="advs-to" class="ps-dt-inp" autocomplete="off">
+          <button type="button" class="ps-dt-cal" onclick="psOpenDatePicker('advs-to')" title="Calendar">📅</button>
+        </div>
+        <div class="ps-bt-actions" style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">
+          <button type="button" onclick="advSwingRunBacktest()" id="advs-run-btn"
+            style="padding:4px 12px;font-family:var(--fn);font-size:8px;font-weight:800;letter-spacing:1px;border:1px solid #22d3ee;color:#0f172a;background:#22d3ee;border-radius:6px;cursor:pointer">
+            ▶ RUN BACKTEST
+          </button>
+          <button type="button" onclick="advSwingLoadReport()" id="advs-report-btn"
+            style="padding:4px 12px;font-family:var(--fn);font-size:8px;font-weight:800;letter-spacing:1px;border:1px solid #22d3ee;color:#22d3ee;background:rgba(34,211,238,.1);border-radius:6px;cursor:pointer">
+            REFRESH REPORT
+          </button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+        <span style="font-size:7px;color:var(--t3);font-weight:700">QUICK RANGE (sets From→To):</span>
+        <button type="button" class="btpre" onclick="advSwingQuickRange(30)">30D</button>
+        <button type="button" class="btpre" onclick="advSwingQuickRange(90)">90D</button>
+        <button type="button" class="btpre" onclick="advSwingQuickRange(180)">6M</button>
+        <button type="button" class="btpre" onclick="advSwingQuickRange(365)">1Y</button>
+      </div>
+      <div id="advs-status" style="font-size:7.5px;color:var(--t2);min-height:14px"></div>
+      <div class="ps-bt-hint">First run loads <b>~500</b> Kite daily series (rate-limited). Needs <b>Backtest Download</b> for NIFTY/VIX/PCR/FII. Report reads closed <b>ADV_SWING</b> rows only.</div>
+    </div>
+    <div id="advs-scroll" class="ps-bt-scroll" style="border-top:1px solid rgba(34,211,238,.2)" title="Scroll for summary and tables">
+      <div id="advs-summary" class="ps-summary-row" style="display:none;background:rgba(34,211,238,.06)"></div>
+      <div class="ps-bt-body-inner" id="advs-body">
+        <div style="text-align:center;padding:36px 16px;color:var(--t2);font-size:9px;line-height:1.85">
+          <div style="font-size:26px;opacity:.25;margin-bottom:10px">◇</div>
+          <div style="font-weight:700">Choose dates (or a quick range), then <b>RUN BACKTEST</b></div>
+          <div style="font-size:8px;color:var(--t3);margin-top:6px">Stricter gates aim for higher win rate — fewer signals than classic Swing Radar.</div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- SPIKES tab removed; WS spikes still feed SPIKE HUNT (advspikescanner) -->
@@ -4925,6 +5102,128 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
   </div>
   <!-- /tp-advspikescanner -->
 
+  <!-- ═══ TAB: APEX HUNT — Basket sentiment + Heat Score → NIFTY options ═══ -->
+  <div class="tp" id="tp-apexhunt" style="padding:0;gap:0;overflow-y:hidden;max-width:100%;flex-direction:column">
+
+    <!-- Sub-tab bar -->
+    <div style="display:flex;border-bottom:1px solid var(--b1);flex-shrink:0">
+      <button type="button" id="ah-sub-live" onclick="ahSubTab('live')"
+              style="flex:1;padding:6px;font-family:var(--fn);font-size:8px;font-weight:700;letter-spacing:1px;border:none;cursor:pointer;background:var(--s2);color:#00e5a0;border-bottom:2px solid #00e5a0">
+        🔥 LIVE</button>
+      <button type="button" id="ah-sub-bt" onclick="ahSubTab('bt')"
+              style="flex:1;padding:6px;font-family:var(--fn);font-size:8px;font-weight:700;letter-spacing:1px;border:none;cursor:pointer;background:var(--s1);color:var(--t2);border-bottom:2px solid transparent">
+        ⏱ BACKTEST</button>
+    </div>
+
+    <!-- ── LIVE PANEL ──────────────────────────────────────────────────────── -->
+    <div id="ah-live-panel" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden">
+
+      <!-- Heat Score + Basket Strip -->
+      <div style="display:flex;align-items:stretch;gap:0;border-bottom:1px solid var(--b1);flex-shrink:0">
+
+        <!-- Heat Gauge -->
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 16px;border-right:1px solid var(--b1);min-width:100px;background:rgba(0,229,160,.05)">
+          <span style="font-size:7px;font-weight:800;letter-spacing:1.5px;color:#00e5a0;margin-bottom:4px">HEAT SCORE</span>
+          <span id="ah-heat-val" style="font-size:32px;font-weight:900;font-variant-numeric:tabular-nums;color:#00e5a0;line-height:1">—</span>
+          <div style="width:72px;height:5px;background:var(--s3);border-radius:3px;margin-top:6px;overflow:hidden">
+            <div id="ah-heat-bar" style="height:100%;width:0%;background:#00e5a0;border-radius:3px;transition:width .4s"></div>
+          </div>
+          <span id="ah-heat-dir" style="font-size:8px;font-weight:700;letter-spacing:1px;margin-top:5px;color:var(--t2)">—</span>
+        </div>
+
+        <!-- Score components -->
+        <div style="display:flex;flex:1;flex-direction:column;justify-content:center;padding:8px 12px;gap:4px">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;align-items:center;min-width:52px;background:var(--s2);border:1px solid var(--b1);border-radius:4px;padding:4px 8px">
+              <span style="font-size:9px;font-weight:800;color:var(--t0)" id="ah-sc-basket">—</span>
+              <span style="font-size:6.5px;color:var(--t3);letter-spacing:.5px">BASKET</span>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;min-width:52px;background:var(--s2);border:1px solid var(--b1);border-radius:4px;padding:4px 8px">
+              <span style="font-size:9px;font-weight:800;color:var(--t0)" id="ah-sc-pcr">—</span>
+              <span style="font-size:6.5px;color:var(--t3);letter-spacing:.5px">PCR</span>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;min-width:52px;background:var(--s2);border:1px solid var(--b1);border-radius:4px;padding:4px 8px">
+              <span style="font-size:9px;font-weight:800;color:var(--t0)" id="ah-sc-vix">—</span>
+              <span style="font-size:6.5px;color:var(--t3);letter-spacing:.5px">VIX</span>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;min-width:52px;background:var(--s2);border:1px solid var(--b1);border-radius:4px;padding:4px 8px">
+              <span style="font-size:9px;font-weight:800;color:var(--t0)" id="ah-sc-mom">—</span>
+              <span style="font-size:6.5px;color:var(--t3);letter-spacing:.5px">MOMENTUM</span>
+            </div>
+          </div>
+          <div id="ah-basket-chips" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:2px"></div>
+        </div>
+
+        <!-- Session stats -->
+        <div style="display:flex;flex-direction:column;justify-content:center;gap:6px;padding:8px 14px;border-left:1px solid var(--b1)">
+          <div class="sr-stat"><span class="sr-stat-val" id="ah-live-total" style="color:var(--t0)">0</span><span class="sr-stat-lbl">SIGNALS</span></div>
+          <div class="sr-stat"><span class="sr-stat-val" id="ah-live-wins"  style="color:var(--go)">0</span><span class="sr-stat-lbl">WIN</span></div>
+          <div class="sr-stat"><span class="sr-stat-val" id="ah-live-loss"  style="color:var(--st)">0</span><span class="sr-stat-lbl">LOSS</span></div>
+        </div>
+      </div>
+
+      <!-- Live signals list -->
+      <div style="overflow-y:auto;flex:1;min-height:0;padding:8px" id="ah-live-list">
+        <div style="text-align:center;padding:40px 16px;color:var(--t2);font-size:9px;line-height:1.9" id="ah-live-empty">
+          <div style="font-size:26px;margin-bottom:10px;opacity:.3">🔥</div>
+          Waiting for Heat Score threshold to fire…<br>
+          <span style="font-size:8px;color:var(--t3)">Fires when score &gt; 62 in valid time windows (9:15–10:30 · 11:00–11:45 · 13:30–14:30)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── BACKTEST PANEL ───────────────────────────────────────────────────── -->
+    <div id="ah-bt-panel" style="display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden">
+
+      <!-- Controls — styled like ADV PRIME STRIKE -->
+      <div style="padding:8px 10px;border-bottom:1px solid var(--b1);flex-shrink:0;background:linear-gradient(180deg,rgba(0,229,160,.08),rgba(0,229,160,.02));display:flex;flex-direction:column;gap:8px">
+        <div class="ps-bt-datebar">
+          <div class="ps-dt-chip" title="Backtest start date">
+            <span class="ps-dt-lbl">From</span>
+            <input type="date" id="ah-bt-from" class="ps-dt-inp" autocomplete="off">
+            <button type="button" class="ps-dt-cal" onclick="psOpenDatePicker('ah-bt-from')" title="Open calendar">📅</button>
+          </div>
+          <div class="ps-dt-chip" title="Backtest end date">
+            <span class="ps-dt-lbl">To</span>
+            <input type="date" id="ah-bt-to" class="ps-dt-inp" autocomplete="off">
+            <button type="button" class="ps-dt-cal" onclick="psOpenDatePicker('ah-bt-to')" title="Open calendar">📅</button>
+          </div>
+          <div class="ps-bt-actions" style="margin-left:auto;display:flex;gap:6px">
+            <button onclick="ahBtRun()" id="ah-run-btn"
+              style="padding:4px 14px;font-family:var(--fn);font-size:8px;font-weight:800;letter-spacing:1px;border:1px solid #00e5a0;color:#00e5a0;background:rgba(0,229,160,.1);border-radius:6px;cursor:pointer">
+              ▶ RUN BACKTEST
+            </button>
+          </div>
+        </div>
+        <!-- Quick range chips -->
+        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+          <span style="font-size:7px;color:var(--t3);font-weight:700;letter-spacing:.5px">QUICK:</span>
+          <button type="button" class="btpre" onclick="ahBtRange(1)"   style="padding:2px 8px;font-size:7px;border-radius:10px">TODAY</button>
+          <button type="button" class="btpre" onclick="ahBtRange(30)"  style="padding:2px 8px;font-size:7px;border-radius:10px">1M</button>
+          <button type="button" class="btpre" onclick="ahBtRange(90)"  style="padding:2px 8px;font-size:7px;border-radius:10px">3M</button>
+          <button type="button" class="btpre" onclick="ahBtRange(180)" style="padding:2px 8px;font-size:7px;border-radius:10px">6M</button>
+          <button type="button" class="btpre" onclick="ahBtRange(365)" style="padding:2px 8px;font-size:7px;border-radius:10px">1Y</button>
+          <span id="ah-bt-status" style="font-size:7.5px;color:var(--t2);margin-left:6px"></span>
+        </div>
+        <div class="ps-bt-hint">SL −8 pts · T1 +15 pts · T2 +25 pts · NIFTY 1-min · ATM delta ≈ 0.5 · lot 75 · 55-day chunks. Scroll below for results.</div>
+      </div>
+
+      <!-- Scrollable results — same pattern as ADV PRIME STRIKE -->
+      <div class="ps-bt-scroll" id="ah-bt-scroll">
+        <div id="ah-summary" class="ps-summary-row" style="display:none;background:rgba(0,229,160,.06)"></div>
+        <div class="ps-bt-body-inner" id="ah-body">
+          <div style="text-align:center;padding:40px 16px;color:var(--t2);font-size:9px;line-height:2">
+            <div style="font-size:28px;opacity:.2;margin-bottom:10px">🔥</div>
+            <div style="font-weight:700;margin-bottom:4px">Run a backtest or tap a Quick range above</div>
+            <div style="font-size:8px;color:var(--t3)">SL −8 pts · T1 +15 pts · T2 +25 pts · Proxy: 5-bar EMA breakout + body strength + range expansion</div>
+            <div style="font-size:7px;color:#00e5a0;margin-top:10px;font-weight:700;letter-spacing:.5px">↓ Scroll this panel after a run to see all sections</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- /tp-apexhunt -->
+
   <!-- TAB: INDEX HUNT (scheduler index_signals → WS index_spikes) -->
   <div class="tp" id="tp-idxradar" style="padding:0;gap:0;overflow-y:hidden;max-width:100%;flex-direction:column">
 
@@ -5009,12 +5308,12 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
   <!-- /tp-idxradar -->
 
   <!-- TAB: PRIME STRIKES ─────────────────────────────────────────────────── -->
-  <div class="tp" id="tp-primestrike" style="padding:0;gap:0;overflow-y:hidden;max-width:100%;flex-direction:column">
+  <div class="tp" id="tp-primestrike" style="padding:0;gap:0;overflow-y:auto;min-height:0;max-width:100%;flex-direction:column">
 
     <!-- header strip -->
     <div style="display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--b1);flex-shrink:0;background:rgba(245,158,11,.06);flex-wrap:wrap">
-      <span style="font-size:9px;font-weight:900;letter-spacing:1.5px;color:#f59e0b;white-space:nowrap">◈ PRIME STRIKES</span>
-      <span style="font-size:7px;color:var(--t3);flex:1;min-width:120px">VIX≤17 · PCR align · 10:00–13:00 · session lock · 2-bar confirm · 15m hunt · quality tier lots</span>
+      <span style="font-size:9px;font-weight:900;letter-spacing:1.5px;color:#f59e0b;white-space:nowrap">◈ ADV PRIME STRIKE</span>
+      <span style="font-size:7px;color:var(--t3);flex:1;min-width:120px">Buying only · VIX day gate · PCR align · 10:00–13:00 · session lock · 15m hunt · ranked 1-3 trades/day</span>
     </div>
 
     <!-- sub-tabs: LIVE TODAY | BACKTEST -->
@@ -5037,31 +5336,49 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
 
     <!-- BACKTEST panel -->
     <div id="ps-bt-panel" style="display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden">
-      <!-- controls -->
-      <div style="padding:7px 12px;border-bottom:1px solid var(--b1);display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap;background:rgba(245,158,11,.04)">
-        <span style="font-size:7.5px;color:var(--t2);letter-spacing:1px">FROM</span>
-        <input type="date" id="ps-from" class="jfi" style="font-size:8px;padding:3px 6px;background:var(--s2);border:1px solid var(--b1);color:var(--t0);border-radius:3px">
-        <span style="font-size:7.5px;color:var(--t2);letter-spacing:1px">TO</span>
-        <input type="date" id="ps-to"   class="jfi" style="font-size:8px;padding:3px 6px;background:var(--s2);border:1px solid var(--b1);color:var(--t0);border-radius:3px">
-        <button onclick="psRunBacktest()" id="ps-run-btn"
-          style="padding:3px 14px;font-family:var(--fn);font-size:8px;font-weight:800;letter-spacing:1px;border:1px solid #f59e0b;color:#f59e0b;background:rgba(245,158,11,.1);border-radius:3px;cursor:pointer">
-          ▶ RUN BACKTEST
-        </button>
-        <div id="ps-status" style="font-size:7.5px;color:var(--t2);flex:1;min-width:80px"></div>
-        <span style="font-size:7px;color:var(--t3);letter-spacing:.3px">⚠ Max 60-day range (Kite minute-data limit)</span>
+      <!-- controls: compact date chips + visible calendar affordance -->
+      <div style="padding:8px 10px;border-bottom:1px solid var(--b1);flex-shrink:0;background:linear-gradient(180deg,rgba(245,158,11,.1),rgba(245,158,11,.02));display:flex;flex-direction:column;gap:8px">
+        <div class="ps-bt-datebar">
+          <div class="ps-dt-chip" title="Backtest start date">
+            <span class="ps-dt-lbl">From</span>
+            <input type="date" id="ps-from" class="ps-dt-inp" autocomplete="off">
+            <button type="button" class="ps-dt-cal" onclick="psOpenDatePicker('ps-from')" title="Open calendar">📅</button>
+          </div>
+          <div class="ps-dt-chip" title="Backtest end date">
+            <span class="ps-dt-lbl">To</span>
+            <input type="date" id="ps-to" class="ps-dt-inp" autocomplete="off">
+            <button type="button" class="ps-dt-cal" onclick="psOpenDatePicker('ps-to')" title="Open calendar">📅</button>
+          </div>
+          <div class="ps-bt-actions" style="margin-left:auto">
+            <button onclick="psRunBacktest()" id="ps-run-btn"
+              style="padding:4px 12px;font-family:var(--fn);font-size:8px;font-weight:800;letter-spacing:1px;border:1px solid #f59e0b;color:#f59e0b;background:rgba(245,158,11,.1);border-radius:6px;cursor:pointer">
+              ▶ RUN BACKTEST
+            </button>
+            <button onclick="psRunRangeReport()" id="ps-report-btn"
+              style="padding:4px 12px;font-family:var(--fn);font-size:8px;font-weight:800;letter-spacing:1px;border:1px solid #f59e0b;color:#111827;background:#f59e0b;border-radius:6px;cursor:pointer">
+              1M-1Y REPORT
+            </button>
+            <button onclick="psRunRangeReportV2(false)" id="ps-report-v2-btn" title="A/B books · regime exits · day risk brakes"
+              style="padding:4px 10px;font-family:var(--fn);font-size:8px;font-weight:800;letter-spacing:1px;border:1px solid #d97706;color:#d97706;background:rgba(217,119,6,.14);border-radius:6px;cursor:pointer">
+              V2 REPORT
+            </button>
+          </div>
+        </div>
+        <div id="ps-status" style="font-size:7.5px;color:var(--t2);min-height:14px"></div>
+        <div class="ps-bt-hint">Scroll the panel below for results. Long 1Y runs use chunked Kite data and may take a minute.</div>
       </div>
 
-      <!-- summary cards -->
-      <div id="ps-summary" style="display:none;flex-shrink:0;padding:8px 12px;border-bottom:1px solid var(--b1);gap:6px;flex-wrap:wrap;background:rgba(245,158,11,.03)">
-      </div>
-
-      <!-- breakdown tables + trade list -->
-      <div style="overflow-y:auto;flex:1;min-height:0;padding:10px 12px;display:flex;flex-direction:column;gap:14px" id="ps-body">
-        <div style="text-align:center;padding:40px 16px;color:var(--t2);font-size:9px;line-height:2">
-          <div style="font-size:28px;opacity:.2;margin-bottom:10px">◈</div>
-          <div style="font-weight:700;margin-bottom:4px">Select a date range (max 60 days) and tap RUN BACKTEST</div>
-          <div style="font-size:8px;color:var(--t3)">FULL tier (quality≥80) = 2 lots · HALF tier (quality≥64) = 1 lot · P&L is lot-adjusted</div>
-          <div style="font-size:8px;color:var(--t3)">VIX &gt;17 days blocked entirely · max 3 signals/day · stops after 2 consecutive SL</div>
+      <div id="ps-bt-scroll" class="ps-bt-scroll" title="Scroll here for summary cards, walk-forward, and full trade log">
+        <!-- summary cards + report share one scroll (prevents walk-forward strip being clipped) -->
+        <div id="ps-summary" class="ps-summary-row" style="display:none"></div>
+        <div class="ps-bt-body-inner" id="ps-body">
+          <div style="text-align:center;padding:40px 16px;color:var(--t2);font-size:9px;line-height:2">
+            <div style="font-size:28px;opacity:.2;margin-bottom:10px">◈</div>
+            <div style="font-weight:700;margin-bottom:4px">Run a custom backtest or tap 1M-1Y REPORT for the full ADV PRIME STRIKE summary</div>
+            <div style="font-size:8px;color:var(--t3)">Report metrics normalize P&amp;L and drawdown to 1 lot. Trade log still keeps tier and lots.</div>
+            <div style="font-size:8px;color:var(--t3)">VIX &gt;17 days blocked entirely · target 1-3 trades/day · can be more only on stronger sessions</div>
+            <div style="font-size:7px;color:#f59e0b;margin-top:10px;font-weight:700;letter-spacing:.5px">↓ Scroll this panel after a run to see all sections</div>
+          </div>
         </div>
       </div>
     </div>
@@ -6675,10 +6992,14 @@ entry_time    strike  type  entry  max   exit  return%
           <div style="font-size:13px;font-weight:900;letter-spacing:1.5px;color:var(--t0)">PERFORMANCE HISTORY</div>
           <div style="font-size:9px;color:var(--t2);margin-top:2px">Live signal outcomes — click any day to drill in</div>
         </div>
-        <div style="display:flex;gap:5px">
+        <div style="display:flex;gap:5px;align-items:center">
           <button class="dp-chip on" id="hp-range-3" onclick="hpSetRange(3,this)">3M</button>
           <button class="dp-chip" id="hp-range-6" onclick="hpSetRange(6,this)">6M</button>
           <button class="dp-chip" id="hp-range-12" onclick="hpSetRange(12,this)">1Y</button>
+          <div style="width:1px;height:16px;background:var(--b2);margin:0 2px"></div>
+          <button class="dp-chip" id="hp-backfill-btn" onclick="hpBackfill3M(this)"
+            style="border-color:rgba(139,92,246,.5);color:#c4b5fd;background:rgba(139,92,246,.1)"
+            title="Pull 3 months of spike signals from Kite history into the database">⚡ BACKFILL 3M</button>
         </div>
       </div>
 
@@ -7509,7 +7830,7 @@ entry_time    strike  type  entry  max   exit  return%
           <!-- Capital per trade input -->
           <div style="margin-left:auto;display:flex;align-items:center;gap:6px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:8px;padding:3px 10px 3px 8px">
             <span style="font-size:9px;font-weight:800;letter-spacing:.8px;color:var(--go)">₹/TRADE</span>
-            <input id="adv-cap-input" type="number" min="1000" step="1000" value="30000"
+            <input id="adv-cap-input" type="number" min="1000" step="1000" value="20000"
               onchange="advSetCap(this.value)"
               onkeydown="if(event.key==='Enter')advSetCap(this.value)"
               style="width:72px;font-size:11px;font-weight:800;font-family:var(--fn);font-variant-numeric:tabular-nums;background:transparent;border:none;outline:none;color:var(--go);text-align:right">
@@ -8168,6 +8489,9 @@ function sw(name,btn){
   if(name==='advspikescanner'){
     try{ if(typeof asrEnsureLoaded === 'function') asrEnsureLoaded(); }catch(e){}
   }
+  if(name==='apexhunt'){
+    try{ ahFetchLive(); }catch(e){}
+  }
   if(name==='idxradar'){
     try{ if(typeof irEnsureLoaded === 'function') irEnsureLoaded(); }catch(e){}
   }
@@ -8204,6 +8528,9 @@ function sw(name,btn){
   if(name==='swing'){
     setTimeout(loadSwingTriggerHistory, 100);
     setTimeout(function(){ try{ _swingRefreshWeakSyms(); }catch(e){} }, 50);
+  }
+  if(name==='advswing'){
+    setTimeout(function(){ try{ advSwingEnsureDates(); advSwingLoadUniverse(); }catch(e){} }, 60);
   }
   if(name==='nexus'){
     setTimeout(function(){ try{ if(typeof window.nxEnter === 'function') window.nxEnter(); }catch(e){} }, 40);
@@ -9069,6 +9396,273 @@ function swRenderSwingHistModalContent(){
   });
 }
 
+// ══════════════════════════════════════════════════════════════════
+//  SWING TAB SUB-TAB SWITCHER (SWING RADAR | 52W BREAKOUT)
+// ══════════════════════════════════════════════════════════════════
+window._swActiveSubTab = 'radar';
+function swSubTab(name, btn){
+  window._swActiveSubTab = name;
+  document.querySelectorAll('[id^="sw-sub-"]').forEach(function(b){
+    b.style.background = 'var(--s1)';
+    b.style.color = 'var(--t2)';
+    b.style.borderBottom = '2px solid transparent';
+  });
+  if(btn){
+    btn.style.background = name==='radar' ? 'var(--s2)' : 'rgba(16,185,129,.08)';
+    btn.style.color = name==='radar' ? 'var(--pu)' : '#10b981';
+    btn.style.borderBottom = '2px solid ' + (name==='radar' ? 'var(--pu)' : '#10b981');
+  }
+  var radar = document.getElementById('sw-panel-radar');
+  var w52   = document.getElementById('sw-panel-52w');
+  if(radar) radar.style.display = name==='radar' ? 'flex' : 'none';
+  if(w52)   w52.style.display   = name==='52w'   ? 'flex' : 'none';
+  if(name==='52w' && !window._s52LiveLoaded){
+    window._s52LiveLoaded = true;
+    try{ s52FetchLive(); }catch(e){}
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  52W BREAKOUT ENGINE — FRONTEND
+// ══════════════════════════════════════════════════════════════════
+window._s52BtResult = null;
+
+function s52SubTab(name, btn){
+  document.querySelectorAll('[id^="s52-sub-"]').forEach(function(b){
+    b.style.background = 'var(--s1)';
+    b.style.color = 'var(--t2)';
+    b.style.borderBottom = '2px solid transparent';
+  });
+  if(btn){
+    btn.style.background = name==='live' ? 'rgba(16,185,129,.08)' : 'rgba(99,102,241,.08)';
+    btn.style.color = name==='live' ? '#10b981' : 'var(--bl)';
+    btn.style.borderBottom = '2px solid ' + (name==='live' ? '#10b981' : 'var(--bl)');
+  }
+  var lp = document.getElementById('s52-live-panel');
+  var bp = document.getElementById('s52-bt-panel');
+  if(lp) lp.style.display = name==='live' ? 'flex' : 'none';
+  if(bp) bp.style.display = name==='bt'   ? 'flex' : 'none';
+}
+
+function s52FetchLive(){
+  var st = document.getElementById('s52-live-status');
+  var grid = document.getElementById('s52-live-grid');
+  var badge = document.getElementById('s52-regime-badge');
+  if(st) st.textContent = '⏳ Scanning NIFTY 500 for 52W breakouts…';
+  if(grid) grid.innerHTML = '';
+  fetch((window._backendBase||'') + '/api/swing52/live')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d.error){ if(st) st.textContent = '✗ ' + d.error; return; }
+      var cands = d.candidates || [];
+      if(badge){
+        badge.textContent = 'REGIME ' + (d.regime || '—');
+        badge.style.color = d.regime==='BULL' ? '#10b981' : '#f59e0b';
+        badge.style.borderColor = d.regime==='BULL' ? 'rgba(16,185,129,.4)' : 'rgba(245,158,11,.4)';
+        badge.style.background  = d.regime==='BULL' ? 'rgba(16,185,129,.1)' : 'rgba(245,158,11,.1)';
+      }
+      if(!cands.length){
+        if(st) st.textContent = '✓ Scanned ' + (d.total_scanned||0) + ' stocks — no 52W breakouts today (regime: ' + (d.regime||'?') + ')';
+        return;
+      }
+      if(st) st.textContent = '✓ ' + cands.length + ' breakout(s) · scanned ' + (d.total_scanned||0) + ' stocks';
+      if(grid) grid.innerHTML = cands.map(function(c){
+        var chgCls = c.chg_pct >= 0 ? 'color:var(--go)' : 'color:var(--st)';
+        var chgSign = c.chg_pct >= 0 ? '+' : '';
+        return '<div style="border:1px solid rgba(16,185,129,.3);border-radius:8px;background:rgba(16,185,129,.05);padding:12px;display:flex;flex-direction:column;gap:7px">'
+          + '<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+          +   '<div><div style="font-weight:800;font-size:12px;color:var(--t0)">'+c.symbol+'</div>'
+          +   '<div style="font-size:8px;color:var(--t2)">'+c.sector.replace('_',' ')+'</div></div>'
+          +   '<div style="text-align:right"><div style="font-weight:800;font-size:11px;color:var(--t0)">₹'+c.price+'</div>'
+          +   '<div style="font-size:8px;'+chgCls+'">'+chgSign+c.chg_pct+'%</div></div>'
+          + '</div>'
+          + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;font-size:8px">'
+          +   '<div style="color:var(--t2)">52W HIGH</div><div style="font-weight:700;color:var(--t0);text-align:right">₹'+c['52w_high']+'</div>'
+          +   '<div style="color:var(--t2)">VOL RATIO</div><div style="font-weight:700;color:#10b981;text-align:right">'+c.vol_ratio+'×</div>'
+          +   '<div style="color:var(--t2)">ATR</div><div style="font-weight:700;color:var(--am);text-align:right">'+c.atr+' ('+c.atr_pct+'%)</div>'
+          + '</div>'
+          + '<div style="border-top:1px solid rgba(16,185,129,.15);padding-top:6px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;font-size:8px;text-align:center">'
+          +   '<div><div style="color:var(--st);font-weight:700">SL</div><div style="color:var(--t1)">₹'+c.sl+'</div></div>'
+          +   '<div><div style="color:var(--am);font-weight:700">T1</div><div style="color:var(--t1)">₹'+c.t1+'</div></div>'
+          +   '<div><div style="color:var(--go);font-weight:700">T2</div><div style="color:var(--t1)">₹'+c.t2+'</div></div>'
+          + '</div>'
+          + '</div>';
+      }).join('');
+    })
+    .catch(function(e){
+      if(st) st.textContent = '✗ ' + e;
+    });
+}
+
+function s52BtRange(days, btn){
+  document.querySelectorAll('[id^="s52-r-"]').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+  var now = new Date();
+  var to  = now.toISOString().slice(0,10);
+  var fr  = new Date(now - days * 86400000).toISOString().slice(0,10);
+  var fi = document.getElementById('s52-bt-from');
+  var ti = document.getElementById('s52-bt-to');
+  if(fi) fi.value = fr;
+  if(ti) ti.value = to;
+  s52BtRun();
+}
+
+function s52BtRun(){
+  var fi = document.getElementById('s52-bt-from');
+  var ti = document.getElementById('s52-bt-to');
+  var st = document.getElementById('s52-bt-status');
+  var rb = document.getElementById('s52-run-btn');
+  var body = document.getElementById('s52-bt-body');
+  var from = (fi && fi.value) ? fi.value : '';
+  var to   = (ti && ti.value) ? ti.value : '';
+  if(!from || !to){ if(st) st.textContent = 'Pick date range first'; return; }
+  if(rb){ rb.disabled = true; rb.textContent = '⏳ RUNNING…'; }
+  if(st) st.textContent = 'Fetching NIFTY 500 bars + scanning…';
+  if(body) body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t2);font-size:9px">⏳ Fetching bars for NIFTY 500 stocks (30–90 sec)…</div>';
+  fetch((window._backendBase||'') + '/api/swing52/backtest', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({from_date: from, to_date: to})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if(rb){ rb.disabled = false; rb.textContent = '▶ RUN BACKTEST'; }
+    if(d && d.error){ if(st) st.textContent = '✗ '+d.error; if(body) body.innerHTML='<div style="padding:20px;color:var(--st);font-size:9px">'+d.error+'</div>'; return; }
+    var s = (d.summary||{});
+    var dbg = d.debug || {};
+    if(st) st.textContent = '✓ '+s.total+' signals · WR '+s.win_rate+'% · bars from '+dbg.symbols_scanned+' stocks';
+    window._s52BtResult = d;
+    _s52RenderBt(d);
+  })
+  .catch(function(e){
+    if(rb){ rb.disabled = false; rb.textContent = '▶ RUN BACKTEST'; }
+    if(st) st.textContent = '✗ '+e;
+    if(body) body.innerHTML='<div style="padding:20px;color:var(--st);font-size:9px">Request failed: '+e+'</div>';
+  });
+}
+
+function _s52RenderBt(r){
+  var body = document.getElementById('s52-bt-body');
+  if(!body) return;
+  var s = r.summary || {};
+  var wr = Number(s.win_rate||0);
+  var wrCls = wr >= 70 ? 'var(--go)' : wr >= 55 ? 'var(--am)' : 'var(--st)';
+  var pf = Number(s.profit_factor||0);
+  var pfCls = pf >= 2 ? 'var(--go)' : pf >= 1 ? 'var(--am)' : 'var(--st)';
+  var apct = Number(s.avg_pnl_pct||0);
+  var apCls = apct >= 0 ? 'var(--go)' : 'var(--st)';
+
+  // Summary cards
+  var sumCards = [
+    ['SIGNALS',     s.total||0,            'var(--t0)'],
+    ['WIN RATE',    wr+'%',                wrCls],
+    ['WINS',        s.wins||0,             'var(--go)'],
+    ['SL HITS',     s.losses||0,           'var(--st)'],
+    ['EXPIRED',     s.expired||0,          'var(--t2)'],
+    ['AVG P&L',     (apct>=0?'+':'')+apct+'%', apCls],
+    ['AVG HOLD',    (s.avg_hold_days||0)+' d', 'var(--t1)'],
+    ['PROFIT FACTOR', pf,                 pfCls],
+    ['MAX DD',      (s.max_dd_pct||0)+'%','var(--st)'],
+  ].map(function(c){
+    return '<div class="ps-sum-card"><div class="ps-sum-k">'+c[0]+'</div><div class="ps-sum-v" style="color:'+c[2]+'">'+c[1]+'</div></div>';
+  }).join('');
+
+  // Monthly table
+  var monthRows = (r.monthly||[]).map(function(m){
+    var wr2 = Number(m.win_rate||0);
+    var wrc = wr2>=70?'var(--go)':wr2>=50?'var(--am)':'var(--st)';
+    var pnlc = (m.pnl_pct||0)>=0?'var(--go)':'var(--st)';
+    return '<tr><td>'+m.month+'</td><td style="text-align:center">'+m.signals+'</td>'
+      +'<td style="text-align:center;color:var(--go)">'+m.wins+'</td>'
+      +'<td style="text-align:center;color:var(--st)">'+m.losses+'</td>'
+      +'<td style="text-align:center;color:'+wrc+'">'+wr2+'%</td>'
+      +'<td style="text-align:right;color:'+pnlc+'">'+(m.pnl_pct>=0?'+':'')+m.pnl_pct+'%</td></tr>';
+  }).join('');
+
+  // Sector table
+  var secRows = (r.by_sector||[]).map(function(s2){
+    var wrc = Number(s2.win_rate)>=70?'var(--go)':Number(s2.win_rate)>=50?'var(--am)':'var(--st)';
+    var pc = Number(s2.avg_pnl)>=0?'var(--go)':'var(--st)';
+    return '<tr><td>'+s2.sector.replace('_',' ')+'</td><td style="text-align:center">'+s2.signals+'</td>'
+      +'<td style="text-align:center;color:'+wrc+'">'+s2.win_rate+'%</td>'
+      +'<td style="text-align:right;color:'+pc+'">'+(s2.avg_pnl>=0?'+':'')+s2.avg_pnl+'%</td></tr>';
+  }).join('');
+
+  // Trade log (last 50)
+  var trades = (r.trades||[]).slice(0,60);
+  var tradeRows = trades.map(function(t){
+    var oc = t.outcome==='T1_HIT'||t.outcome==='T2_HIT'?'var(--go)':t.outcome==='SL_HIT'?'var(--st)':'var(--t2)';
+    var pc = t.pnl_pct>=0?'var(--go)':'var(--st)';
+    return '<tr>'
+      +'<td>'+t.date+'</td>'
+      +'<td style="font-weight:700">'+t.symbol+'</td>'
+      +'<td style="color:var(--t2);font-size:7px">'+t.sector.replace('_',' ')+'</td>'
+      +'<td style="text-align:right">₹'+t.close+'</td>'
+      +'<td style="text-align:center;color:var(--am)">'+t.vol_ratio+'×</td>'
+      +'<td style="text-align:right">₹'+t.entry+'</td>'
+      +'<td style="text-align:right;color:var(--st)">₹'+t.sl+'</td>'
+      +'<td style="text-align:right;color:var(--go)">₹'+t.t1+'</td>'
+      +'<td style="text-align:right">₹'+(t.exit_price||'—')+'</td>'
+      +'<td style="text-align:center;color:'+oc+'">'+t.outcome.replace('_',' ')+'</td>'
+      +'<td style="text-align:right;color:'+pc+'">'+(t.pnl_pct>=0?'+':'')+t.pnl_pct+'%</td>'
+      +'<td style="text-align:center;color:var(--t2)">'+t.hold_days+'d</td>'
+      +'</tr>';
+  }).join('');
+
+  var tblStyle = 'width:100%;border-collapse:collapse;font-size:8px';
+  var thStyle  = 'padding:7px 8px;text-align:left;background:rgba(16,185,129,.12);color:#10b981;font-weight:800;letter-spacing:.5px;white-space:nowrap;position:sticky;top:0;z-index:1';
+  var tdStyle  = 'padding:7px 8px;border-bottom:1px solid rgba(16,185,129,.08)';
+
+  body.innerHTML =
+    '<div class="ps-summary-row">' + sumCards + '</div>'
+
+    + '<div class="ps-bt-body-inner" style="margin-top:14px">'
+    +   '<div style="font-size:9px;font-weight:800;letter-spacing:1px;color:#10b981;margin-bottom:10px">MONTHLY BREAKDOWN</div>'
+    +   '<div style="overflow-x:auto"><table style="'+tblStyle+'">'
+    +   '<thead><tr>'
+    +   '<th style="'+thStyle+'">MONTH</th><th style="'+thStyle+';text-align:center">SIGNALS</th>'
+    +   '<th style="'+thStyle+';text-align:center">WINS</th><th style="'+thStyle+';text-align:center">SL</th>'
+    +   '<th style="'+thStyle+';text-align:center">WIN%</th><th style="'+thStyle+';text-align:right">P&L%</th>'
+    +   '</tr></thead><tbody>'
+    +   (monthRows || '<tr><td colspan="6" style="text-align:center;color:var(--t2);padding:12px">No data</td></tr>')
+    +   '</tbody></table></div>'
+    + '</div>'
+
+    + '<div class="ps-bt-body-inner" style="margin-top:14px">'
+    +   '<div style="font-size:9px;font-weight:800;letter-spacing:1px;color:#10b981;margin-bottom:10px">BY SECTOR</div>'
+    +   '<div style="overflow-x:auto"><table style="'+tblStyle+'">'
+    +   '<thead><tr>'
+    +   '<th style="'+thStyle+'">SECTOR</th><th style="'+thStyle+';text-align:center">SIGNALS</th>'
+    +   '<th style="'+thStyle+';text-align:center">WIN%</th><th style="'+thStyle+';text-align:right">AVG P&L%</th>'
+    +   '</tr></thead><tbody>'
+    +   (secRows || '<tr><td colspan="4" style="text-align:center;color:var(--t2);padding:12px">No data</td></tr>')
+    +   '</tbody></table></div>'
+    + '</div>'
+
+    + '<div class="ps-bt-body-inner" style="margin-top:14px">'
+    +   '<div style="font-size:9px;font-weight:800;letter-spacing:1px;color:#10b981;margin-bottom:10px">TRADE LOG (last 60)</div>'
+    +   '<div style="overflow-x:auto"><table style="'+tblStyle+'">'
+    +   '<thead><tr>'
+    +   ['DATE','SYMBOL','SECTOR','SIGNAL CLOSE','VOL','ENTRY','SL','T1','EXIT','OUTCOME','P&L%','HOLD'].map(function(h){
+         return '<th style="'+thStyle+'">' + h + '</th>';
+       }).join('')
+    +   '</tr></thead><tbody>'
+    +   (tradeRows || '<tr><td colspan="12" style="text-align:center;color:var(--t2);padding:12px">No trades</td></tr>')
+    +   '</tbody></table></div>'
+    + '</div>';
+}
+
+// ── Init date inputs with sensible defaults ────────────────────────────────
+(function(){
+  var now = new Date();
+  var to  = now.toISOString().slice(0,10);
+  var fr  = new Date(now - 30 * 86400000).toISOString().slice(0,10);
+  var fi = document.getElementById('s52-bt-from');
+  var ti = document.getElementById('s52-bt-to');
+  if(fi && !fi.value) fi.value = fr;
+  if(ti && !ti.value) ti.value = to;
+})();
+
 function swOpenHistModal(){
   const m = document.getElementById('sw-hist-modal');
   if(!m) return;
@@ -9103,6 +9697,150 @@ document.addEventListener('keydown', function(ev){
   const hm = document.getElementById('sw-hist-modal');
   if(hm && hm.style.display === 'block') swCloseHistModal();
 });
+
+// ── ADV-SWING (Nifty 500 backtest + report) ───────────────────────────────
+function advSwingEnsureDates(){
+  const toEl = document.getElementById('advs-to');
+  const frEl = document.getElementById('advs-from');
+  const today = new Date().toISOString().slice(0,10);
+  if(toEl && !toEl.value) toEl.value = today;
+  if(frEl && !frEl.value){
+    const t = (toEl && toEl.value) ? new Date(toEl.value) : new Date();
+    const f = new Date(t.getTime() - 90*86400000);
+    frEl.value = f.toISOString().slice(0,10);
+  }
+}
+function advSwingQuickRange(days){
+  const toEl = document.getElementById('advs-to');
+  const frEl = document.getElementById('advs-from');
+  const today = new Date().toISOString().slice(0,10);
+  if(toEl) toEl.value = today;
+  if(frEl){
+    const t = new Date();
+    const f = new Date(t.getTime() - Number(days||90)*86400000);
+    frEl.value = f.toISOString().slice(0,10);
+  }
+}
+async function advSwingLoadUniverse(){
+  const el = document.getElementById('advs-uni');
+  if(!el) return;
+  el.textContent = 'Universe: …';
+  try{
+    const base = (window._backendBase || '').replace(/\/$/, '');
+    const r = await fetch((base ? base : '') + '/api/adv-swing/universe');
+    const d = await r.json();
+    el.textContent = 'NSE ' + (d.nifty500_symbols||0) + ' · Kite EQ ' + (d.kite_eq_mapped||0);
+  }catch(e){
+    el.textContent = 'Universe: ?';
+  }
+}
+function advSwingRenderReport(rep){
+  const sum = document.getElementById('advs-summary');
+  const body = document.getElementById('advs-body');
+  if(!rep || !body) return;
+  const wr = rep.win_rate_pct != null ? Number(rep.win_rate_pct).toFixed(1) : '—';
+  const wrCol = Number(wr) >= 55 ? 'var(--go)' : Number(wr) >= 45 ? 'var(--am)' : 'var(--st)';
+  if(sum){
+    sum.style.display = 'flex';
+    sum.innerHTML =
+      '<div style="flex:1;min-width:120px;background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:8px 12px">' +
+        '<div style="font-size:7px;font-weight:800;color:#22d3ee;letter-spacing:.6px">TRADES</div>' +
+        '<div style="font-size:18px;font-weight:900;color:var(--t0)">' + (rep.total_trades||0) + '</div></div>' +
+      '<div style="flex:1;min-width:120px;background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:8px 12px">' +
+        '<div style="font-size:7px;font-weight:800;color:#22d3ee;letter-spacing:.6px">WIN RATE (TGT vs SL)</div>' +
+        '<div style="font-size:18px;font-weight:900;color:' + wrCol + '">' + wr + '%</div></div>' +
+      '<div style="flex:1;min-width:120px;background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:8px 12px">' +
+        '<div style="font-size:7px;font-weight:800;color:#22d3ee;letter-spacing:.6px">TARGET / SL / EXP</div>' +
+        '<div style="font-size:11px;font-weight:800;color:var(--t1)">' + (rep.target_hits||0) + ' · ' + (rep.sl_hits||0) + ' · ' + (rep.expired||0) + '</div></div>' +
+      '<div style="flex:1;min-width:120px;background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:8px 12px">' +
+        '<div style="font-size:7px;font-weight:800;color:#22d3ee;letter-spacing:.6px">AVG HOLD (D)</div>' +
+        '<div style="font-size:16px;font-weight:900;color:var(--t0)">' + (rep.avg_hold_days != null ? Number(rep.avg_hold_days).toFixed(1) : '—') + '</div></div>';
+  }
+  const rows = (rep.by_setup || []).map(function(x){
+    return '<tr><td style="padding:6px 8px;font-weight:700">' + String(x.key||'').replace(/</g,'&lt;') + '</td>' +
+      '<td style="padding:6px 8px;text-align:right">' + (x.trades||0) + '</td>' +
+      '<td style="padding:6px 8px;text-align:right">' + (x.win_rate_pct!=null?Number(x.win_rate_pct).toFixed(1):'—') + '%</td>' +
+      '<td style="padding:6px 8px;text-align:right">' + (x.avg_pnl_pct!=null?Number(x.avg_pnl_pct).toFixed(3):'—') + '</td></tr>';
+  }).join('');
+  const months = (rep.by_month || []).slice(-14).map(function(x){
+    return '<tr><td style="padding:5px 8px">' + String(x.key||'') + '</td><td style="padding:5px 8px;text-align:right">' + (x.trades||0) +
+      '</td><td style="padding:5px 8px;text-align:right">' + (x.win_rate_pct!=null?Number(x.win_rate_pct).toFixed(1):'—') + '%</td></tr>';
+  }).join('');
+  body.innerHTML =
+    '<div style="font-size:8px;color:var(--t3);margin-bottom:8px">Range: <b>' + (rep.from_date||'—') + '</b> → <b>' + (rep.to_date||'—') + '</b> · universe <b>' + String(rep.universe||'NIFTY_500') + '</b></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +
+      '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:8px;overflow:hidden">' +
+        '<div style="padding:6px 10px;background:var(--s2);font-size:8px;font-weight:800;color:#22d3ee">BY SETUP</div>' +
+        '<table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr><th style="text-align:left;padding:5px 8px">Setup</th><th style="text-align:right;padding:5px 8px">N</th><th style="text-align:right;padding:5px 8px">WR%</th><th style="text-align:right;padding:5px 8px">Avg%</th></tr></thead><tbody>' +
+        (rows || '<tr><td colspan="4" style="padding:12px;color:var(--t3)">No breakdown</td></tr>') + '</tbody></table></div>' +
+      '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:8px;overflow:hidden">' +
+        '<div style="padding:6px 10px;background:var(--s2);font-size:8px;font-weight:800;color:#22d3ee">BY MONTH (tail)</div>' +
+        '<table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr><th style="text-align:left;padding:5px 8px">Month</th><th style="text-align:right;padding:5px 8px">N</th><th style="text-align:right;padding:5px 8px">WR%</th></tr></thead><tbody>' +
+        (months || '<tr><td colspan="3" style="padding:12px;color:var(--t3)">—</td></tr>') + '</tbody></table></div></div>' +
+    '<div style="font-size:7px;color:var(--t3);line-height:1.5">Past performance does not guarantee future results. ADV-SWING uses simulated daily exits (target/SL/horizon) on cash equities.</div>';
+}
+async function advSwingLoadReport(){
+  const st = document.getElementById('advs-status');
+  const fr = document.getElementById('advs-from');
+  const to = document.getElementById('advs-to');
+  const base = (window._backendBase || '').replace(/\/$/, '');
+  let url = (base ? base : '') + '/api/adv-swing/report';
+  const q = [];
+  if(fr && fr.value) q.push('from_date=' + encodeURIComponent(fr.value));
+  if(to && to.value) q.push('to_date=' + encodeURIComponent(to.value));
+  if(q.length) url += '?' + q.join('&');
+  if(st) st.textContent = 'Loading report…';
+  try{
+    const r = await fetch(url);
+    const d = await r.json();
+    if(d.error){ if(st) st.textContent = d.error; return; }
+    advSwingRenderReport(d);
+    if(st) st.textContent = 'Report updated · ' + (d.total_trades||0) + ' closed rows';
+  }catch(e){
+    if(st) st.textContent = 'Report failed — network or backend';
+  }
+}
+async function advSwingRunBacktest(){
+  const st = document.getElementById('advs-status');
+  const btn = document.getElementById('advs-run-btn');
+  const fr = document.getElementById('advs-from');
+  const to = document.getElementById('advs-to');
+  advSwingEnsureDates();
+  const base = (window._backendBase || '').replace(/\/$/, '');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Running…'; }
+  if(st) st.innerHTML = 'Running ADV-SWING (Nifty 500 daily fetch + replay)… <span style="color:var(--t3)">may take several minutes</span>';
+  try{
+    const r = await fetch((base ? base : '') + '/api/adv-swing/backtest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from_date: fr && fr.value ? fr.value : undefined,
+        to_date: to && to.value ? to.value : undefined,
+        clear_existing: true,
+      }),
+    });
+    const d = await r.json();
+    if(!r.ok || d.error){
+      if(st) st.innerHTML = '<span style="color:var(--st)">' + (d.error || ('HTTP ' + r.status)) + '</span>';
+      if(typeof notify === 'function') notify(d.error || 'ADV-SWING backtest failed');
+    }else{
+      if(st) st.innerHTML = 'Inserted <b>' + (d.inserted||0) + '</b> · symbols loaded <b>' + (d.symbols_loaded||0) + '</b> / NSE list <b>' + (d.nifty500_listed||0) + '</b>';
+      if(d.report) advSwingRenderReport(d.report);
+      else advSwingLoadReport();
+      if(typeof notify === 'function') notify('ADV-SWING backtest done');
+    }
+  }catch(e){
+    if(st) st.textContent = 'Network error';
+    if(typeof notify === 'function') notify('ADV-SWING request failed');
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = '▶ RUN BACKTEST'; }
+  }
+}
+window.advSwingRunBacktest = advSwingRunBacktest;
+window.advSwingLoadReport = advSwingLoadReport;
+window.advSwingLoadUniverse = advSwingLoadUniverse;
+window.advSwingQuickRange = advSwingQuickRange;
+window.advSwingEnsureDates = advSwingEnsureDates;
 
 async function loadSwingTriggerHistory(){
   const base = (window._backendBase || '').replace(/\/$/, '');
@@ -12167,6 +12905,17 @@ function ixFmtSignalTime(s) {
       if(el) el.innerHTML = '<span style="color:'+(col||'var(--t2)')+'">'+msg+'</span>';
     }
 
+    function psOpenDatePicker(id){
+      var el = document.getElementById(id);
+      if(!el) return;
+      if(typeof el.showPicker === 'function'){
+        try { el.showPicker(); } catch(e) { el.focus(); }
+      } else {
+        el.focus();
+      }
+    }
+    window.psOpenDatePicker = psOpenDatePicker;
+
     function psFmt(n){ return (n>=1000||n<=-1000)?Math.round(n).toLocaleString('en-IN'):String(Math.round(n)); }
 
     function psPnlStr(n){
@@ -12232,6 +12981,30 @@ function ixFmtSignalTime(s) {
         +'</tr></thead><tbody>'+rows+'</tbody></table></div>';
     }
 
+    function psReportGrid(reports){
+      var order = ['1m','3m','6m','1y'];
+      var labels = {'1m':'1 MONTH','3m':'3 MONTHS','6m':'6 MONTHS','1y':'1 YEAR'};
+      return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">'
+        + order.map(function(key){
+            var r = reports && reports[key] ? reports[key] : {};
+            var wr = Number(r.accuracy || r.win_rate || 0);
+            var pnl = Number(r.net_pnl_1lot || 0);
+            var dd = Number(r.max_drawdown_1lot || 0);
+            var td = Number(r.total || 0);
+            var mx = Number(r.max_trades_in_a_day || 0);
+            return '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px">'
+              + '<div style="font-size:7px;color:var(--t3);letter-spacing:1px">'+labels[key]+'</div>'
+              + '<div style="font-size:16px;font-weight:900;color:'+psWrColor(wr)+'">'+wr.toFixed(2)+'%</div>'
+              + '<div style="font-size:7px;color:var(--t2)">Accuracy on resolved trades</div>'
+              + '<div style="display:flex;justify-content:space-between;gap:8px;font-size:8px"><span style="color:var(--t3)">Trades</span><span style="color:var(--t0);font-weight:700">'+td+'</span></div>'
+              + '<div style="display:flex;justify-content:space-between;gap:8px;font-size:8px"><span style="color:var(--t3)">1-lot P&amp;L</span><span style="color:'+(pnl>=0?'var(--go)':'var(--st)')+';font-weight:700">'+(pnl>=0?'+₹':'-₹')+psFmt(Math.abs(pnl))+'</span></div>'
+              + '<div style="display:flex;justify-content:space-between;gap:8px;font-size:8px"><span style="color:var(--t3)">Max DD</span><span style="color:var(--st);font-weight:700">₹'+psFmt(Math.abs(dd))+'</span></div>'
+              + '<div style="display:flex;justify-content:space-between;gap:8px;font-size:8px"><span style="color:var(--t3)">Max/day</span><span style="color:var(--t0);font-weight:700">'+mx+'</span></div>'
+            + '</div>';
+          }).join('')
+        +'</div>';
+    }
+
     function psRenderResult(data){
       var sumEl = document.getElementById('ps-summary');
       var body  = document.getElementById('ps-body');
@@ -12248,10 +13021,10 @@ function ixFmtSignalTime(s) {
         psCard('WIN RATE', (data.win_rate||0)+'%', (data.wins||0)+' T1 / '+(data.losses||0)+' SL', psWrColor(data.win_rate||0)),
         psCard('NET P&L', npStr, 'lot-adjusted', npCol),
         psCard('RESOLVED', data.resolved||0, 'HIT T1 + HIT SL', 'var(--t1)'),
-        '<div style="flex:2;min-width:180px;background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:7px 12px;display:flex;flex-direction:column;justify-content:center;gap:4px">'
-          +'<div style="font-size:7.5px;color:var(--t3);letter-spacing:.5px">IS / OOS WALK-FORWARD</div>'
-          +'<div style="font-size:9px">'+psWalkHtml(data.walk_forward)+'</div>'
-          +'<div style="font-size:6.5px;color:var(--t3)">First 70% days = IS · Last 30% days = OOS (real-world proxy)</div>'
+        '<div style="flex:2;min-width:220px;max-width:100%;background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;justify-content:flex-start;gap:6px">'
+          +'<div style="font-size:8px;font-weight:800;color:#f59e0b;letter-spacing:.55px">IS / OOS WALK-FORWARD</div>'
+          +'<div style="font-size:10px;line-height:1.5;color:var(--t1)">'+psWalkHtml(data.walk_forward)+'</div>'
+          +'<div style="font-size:7.5px;color:var(--t2);line-height:1.45">First 70% days = IS · Last 30% days = OOS (real-world proxy)</div>'
         +'</div>',
       ].join('');
 
@@ -12277,6 +13050,7 @@ function ixFmtSignalTime(s) {
 
       // Trade table
       var trades = data.trades||[];
+      var v2cols = !!(trades.length && (trades[0].book != null || trades[0].regime != null));
       var tradeRows = '';
       if(trades.length){
         tradeRows = trades.map(function(t,idx){
@@ -12289,10 +13063,13 @@ function ixFmtSignalTime(s) {
           var pnlStr = t.pnl>0?('<span style="color:var(--go)">+₹'+psFmt(t.pnl)+'</span>')
                      : t.pnl<0?('<span style="color:var(--st)">−₹'+psFmt(Math.abs(t.pnl))+'</span>')
                      : '<span style="color:var(--t3)">—</span>';
+          var br = v2cols ? ('<td style="padding:5px 6px;text-align:center;font-weight:700;color:'+(t.book==='A'?'#34d399':'var(--t2)')+'">'+(t.book||'—')+'</td>'
+            +'<td style="padding:5px 6px;text-align:center;font-size:7px;color:var(--t2)">'+(t.regime||'—')+'</td>') : '';
           return '<tr style="background:'+bg+';border-bottom:1px solid var(--b1)">'
             +'<td style="padding:5px 8px;color:var(--t2);white-space:nowrap">'+t.date+'</td>'
             +'<td style="padding:5px 6px;text-align:center;font-weight:700;color:'+wc+'">'+t.window+'</td>'
             +'<td style="padding:5px 8px;font-weight:700">'+t.symbol+'</td>'
+            +br
             +'<td style="padding:5px 6px;text-align:center;font-weight:800;color:'+tc+'">'+t.type+'</td>'
             +'<td style="padding:5px 8px;text-align:center;color:var(--t2)">'+t.time+'</td>'
             +'<td style="padding:5px 8px;text-align:right;color:var(--t1)">'+t.chg_pct+'%</td>'
@@ -12321,6 +13098,7 @@ function ixFmtSignalTime(s) {
             +'<th style="padding:5px 8px;text-align:left">Date</th>'
             +'<th style="padding:5px 6px;text-align:center">Win</th>'
             +'<th style="padding:5px 8px;text-align:left">Symbol</th>'
+            +(v2cols?'<th style="padding:5px 6px;text-align:center">Bk</th><th style="padding:5px 6px;text-align:center">Rg</th>':'')
             +'<th style="padding:5px 6px;text-align:center">Type</th>'
             +'<th style="padding:5px 8px;text-align:center">Time</th>'
             +'<th style="padding:5px 8px;text-align:right">Chg%</th>'
@@ -12342,6 +13120,20 @@ function ixFmtSignalTime(s) {
       body.innerHTML = breakdownHtml + tableHtml;
     }
 
+    function psRenderAdvReport(data){
+      if(!data || !data.overall) return;
+      psRenderResult(data.overall);
+      var body = document.getElementById('ps-body');
+      if(!body) return;
+      var topHtml = '<div style="display:flex;flex-direction:column;gap:10px">'
+        + '<div style="background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:10px">'
+          + '<div style="font-size:8px;font-weight:800;letter-spacing:1px;color:#f59e0b;margin-bottom:8px">ADV PRIME STRIKE REPORT · 1 LOT BASIS</div>'
+          + psReportGrid(data.period_reports || {})
+        + '</div>'
+      + '</div>';
+      body.innerHTML = topHtml + body.innerHTML;
+    }
+
     function psSubTab(t){
       var lp=document.getElementById('ps-live-panel'), bp=document.getElementById('ps-bt-panel');
       var lb=document.getElementById('ps-sub-live'),   bb=document.getElementById('ps-sub-bt');
@@ -12354,12 +13146,13 @@ function ixFmtSignalTime(s) {
         if(bp) bp.style.display='flex'; if(lp) lp.style.display='none';
         if(bb){ bb.style.color='#f59e0b'; bb.style.borderBottom='2px solid #f59e0b'; bb.style.background='var(--s2)'; }
         if(lb){ lb.style.color='var(--t2)'; lb.style.borderBottom='2px solid transparent'; lb.style.background='var(--s1)'; }
+        try{ if(typeof window.psSyncPrimeStrikeRange === 'function') window.psSyncPrimeStrikeRange(); }catch(_e){}
       }
     }
     window.psSubTab = psSubTab;
 
     function psLoadLive(){
-      var today = new Date().toISOString().slice(0,10);
+      var today = typeof btAppAnchorYmd === 'function' ? btAppAnchorYmd() : new Date().toISOString().slice(0,10);
       var lbody = document.getElementById('ps-live-body');
       var lstats= document.getElementById('ps-live-stats');
       if(lbody) lbody.innerHTML='<div style="text-align:center;padding:20px;color:var(--t2);font-size:9px">Loading...</div>';
@@ -12455,23 +13248,23 @@ function ixFmtSignalTime(s) {
     window.psLoadLive = psLoadLive;
 
     function psRunBacktest(){
-      var today  = new Date().toISOString().slice(0,10);
       var fromEl = document.getElementById('ps-from');
       var toEl   = document.getElementById('ps-to');
-      if(!fromEl.value) fromEl.value = new Date(Date.now()-30*86400000).toISOString().slice(0,10);
-      if(!toEl.value)   toEl.value   = today;
+      if(!fromEl || !toEl) return;
+      if(!fromEl.value || !toEl.value){
+        try{ if(typeof window.psSyncPrimeStrikeRange === 'function') window.psSyncPrimeStrikeRange(); }catch(_e){}
+      }
+      if(!fromEl.value) fromEl.value = typeof btYmdMinusDays === 'function' ? btYmdMinusDays(typeof btAppAnchorYmd === 'function' ? btAppAnchorYmd() : new Date().toISOString().slice(0,10), 90) : new Date(Date.now()-90*86400000).toISOString().slice(0,10);
+      if(!toEl.value)   toEl.value   = typeof btAppAnchorYmd === 'function' ? btAppAnchorYmd() : new Date().toISOString().slice(0,10);
       var from = fromEl.value, to = toEl.value;
 
       var btn = document.getElementById('ps-run-btn');
-
-      /* Kite minute-data hard limit: 60 calendar days per API call */
-      var daysDiff = (new Date(to)-new Date(from))/(86400000);
-      if(daysDiff>61){
-        psSetStatus('⚠ Range exceeds 60-day Kite limit — please narrow dates','var(--st)');
-        return;
-      }
+      var reportBtn = document.getElementById('ps-report-btn');
+      var reportBtn2 = document.getElementById('ps-report-v2-btn');
       if(btn){ btn.disabled=true; btn.textContent='⏳ Running…'; }
-      psSetStatus('Fetching 1-min data from Kite… this may take 20–40s', '#f59e0b');
+      if(reportBtn){ reportBtn.disabled=true; }
+      if(reportBtn2){ reportBtn2.disabled=true; }
+      psSetStatus('Fetching 1-min data from Kite… longer ranges now run in chunks', '#f59e0b');
 
       var body = document.getElementById('ps-body');
       if(body) body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t2);font-size:9px"><div style="font-size:22px;margin-bottom:10px;opacity:.4">⏳</div>Running Prime Strike backtest…<br><span style="font-size:7.5px;color:var(--t3)">Applying VIX gate · PCR filter · momentum screen · quality tier…</span></div>';
@@ -12485,6 +13278,8 @@ function ixFmtSignalTime(s) {
       .then(function(obj){
         var r=obj.r, d=obj.d;
         if(btn){ btn.disabled=false; btn.textContent='▶ RUN BACKTEST'; }
+        if(reportBtn){ reportBtn.disabled=false; }
+        if(reportBtn2){ reportBtn2.disabled=false; }
         /* handle both our {error:...} and FastAPI {detail:...} error shapes */
         var errMsg = d.error || (typeof d.detail==='string' ? d.detail : null);
         if(!errMsg && Array.isArray(d.detail)) errMsg = JSON.stringify(d.detail);
@@ -12505,11 +13300,114 @@ function ixFmtSignalTime(s) {
       })
       .catch(function(e){
         if(btn){ btn.disabled=false; btn.textContent='▶ RUN BACKTEST'; }
+        if(reportBtn){ reportBtn.disabled=false; }
+        if(reportBtn2){ reportBtn2.disabled=false; }
         psSetStatus('Network error: '+e.message,'var(--st)');
       });
     }
 
     window.psRunBacktest = psRunBacktest;
+
+    function psRunRangeReport(){
+      var today = typeof btAppAnchorYmd === 'function' ? btAppAnchorYmd() : new Date().toISOString().slice(0,10);
+      var fromEl = document.getElementById('ps-from');
+      var toEl = document.getElementById('ps-to');
+      var btn = document.getElementById('ps-run-btn');
+      var reportBtn = document.getElementById('ps-report-btn');
+      var reportBtn2 = document.getElementById('ps-report-v2-btn');
+      if(!toEl.value) toEl.value = today;
+      var to = toEl.value;
+      var autoFrom = new Date(new Date(to).getTime() - 364*86400000).toISOString().slice(0,10);
+      if(fromEl) fromEl.value = autoFrom;
+      if(btn){ btn.disabled = true; }
+      if(reportBtn){ reportBtn.disabled = true; reportBtn.textContent = '⏳ Building…'; }
+      if(reportBtn2){ reportBtn2.disabled = true; }
+      psSetStatus('Running ADV PRIME STRIKE 1M-1Y report on 1-lot basis… this can take a few minutes', '#f59e0b');
+      var body = document.getElementById('ps-body');
+      if(body) body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t2);font-size:9px"><div style="font-size:22px;margin-bottom:10px;opacity:.4">◈</div>Building ADV PRIME STRIKE report...<br><span style="font-size:7.5px;color:var(--t3)">Computing 1m / 3m / 6m / 1y accuracy, 1-lot P&amp;L, and max drawdown</span></div>';
+      fetch((window._backendBase||'')+'/api/adv-prime-strike/report', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({from_date:autoFrom, to_date:to})
+      })
+      .then(function(r){ return r.json().then(function(d){ return {r:r,d:d}; }).catch(function(){ return {r:r,d:{error:'Bad JSON from server'}}; }); })
+      .then(function(obj){
+        var r=obj.r, d=obj.d;
+        if(btn){ btn.disabled = false; }
+        if(reportBtn){ reportBtn.disabled = false; reportBtn.textContent = '1M-1Y REPORT'; }
+        if(reportBtn2){ reportBtn2.disabled = false; }
+        var errMsg = d.error || (typeof d.detail==='string' ? d.detail : null);
+        if(!errMsg && Array.isArray(d.detail)) errMsg = JSON.stringify(d.detail);
+        if(!r.ok && !errMsg) errMsg = 'HTTP ' + r.status;
+        if(errMsg || !d.overall){
+          psSetStatus('Error: ' + (errMsg || 'Unexpected response'), 'var(--st)');
+          if(body) body.innerHTML = '<div style="text-align:center;padding:30px;color:var(--st);font-size:9px;line-height:2"><b>Backend error</b><br><span style="color:var(--t1)">' + (errMsg || 'Unexpected response') + '</span></div>';
+          return;
+        }
+        var wr = d.overall.accuracy || d.overall.win_rate || 0;
+        var pnl = Number(d.period_reports && d.period_reports['1y'] ? d.period_reports['1y'].net_pnl_1lot || 0 : 0);
+        psSetStatus('ADV PRIME STRIKE report ready · <span style="color:'+psWrColor(wr)+';font-weight:700">'+Number(wr).toFixed(2)+'%</span> overall accuracy · 1Y 1-lot P&L <span style="color:'+(pnl>=0?'var(--go)':'var(--st)')+'">'+(pnl>=0?'+₹':'-₹')+psFmt(Math.abs(pnl))+'</span>', 'var(--t0)');
+        psRenderAdvReport(d);
+      })
+      .catch(function(e){
+        if(btn){ btn.disabled = false; }
+        if(reportBtn){ reportBtn.disabled = false; reportBtn.textContent = '1M-1Y REPORT'; }
+        if(reportBtn2){ reportBtn2.disabled = false; }
+        psSetStatus('Network error: '+e.message,'var(--st)');
+      });
+    }
+
+    function psRunRangeReportV2(compareV1){
+      var today = typeof btAppAnchorYmd === 'function' ? btAppAnchorYmd() : new Date().toISOString().slice(0,10);
+      var fromEl = document.getElementById('ps-from');
+      var toEl = document.getElementById('ps-to');
+      var btn = document.getElementById('ps-run-btn');
+      var reportBtn = document.getElementById('ps-report-btn');
+      var reportBtn2 = document.getElementById('ps-report-v2-btn');
+      if(!toEl.value) toEl.value = today;
+      var to = toEl.value;
+      var autoFrom = new Date(new Date(to).getTime() - 364*86400000).toISOString().slice(0,10);
+      if(fromEl) fromEl.value = autoFrom;
+      if(btn){ btn.disabled = true; }
+      if(reportBtn){ reportBtn.disabled = true; }
+      if(reportBtn2){ reportBtn2.disabled = true; reportBtn2.textContent = '⏳ V2…'; }
+      psSetStatus('Running ADV PRIME STRIKE V2 (dual-book + regime exits)…', '#f59e0b');
+      var body = document.getElementById('ps-body');
+      if(body) body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t2);font-size:9px"><div style="font-size:22px;margin-bottom:10px;opacity:.4">◈</div>Building V2 report…<br><span style="font-size:7.5px;color:var(--t3)">A/B books · calm/noisy T1/SL · day loss &amp; SL-streak brakes</span></div>';
+      fetch((window._backendBase||'')+'/api/adv-prime-strike-v2/report', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({from_date:autoFrom, to_date:to, compare_v1: !!compareV1})
+      })
+      .then(function(r){ return r.json().then(function(d){ return {r:r,d:d}; }).catch(function(){ return {r:r,d:{error:'Bad JSON from server'}}; }); })
+      .then(function(obj){
+        var r=obj.r, d=obj.d;
+        if(btn){ btn.disabled = false; }
+        if(reportBtn){ reportBtn.disabled = false; }
+        if(reportBtn2){ reportBtn2.disabled = false; reportBtn2.textContent = 'V2 REPORT'; }
+        var errMsg = d.error || (typeof d.detail==='string' ? d.detail : null);
+        if(!errMsg && Array.isArray(d.detail)) errMsg = JSON.stringify(d.detail);
+        if(!r.ok && !errMsg) errMsg = 'HTTP ' + r.status;
+        if(errMsg || !d.overall){
+          psSetStatus('Error: ' + (errMsg || 'Unexpected response'), 'var(--st)');
+          if(body) body.innerHTML = '<div style="text-align:center;padding:30px;color:var(--st);font-size:9px;line-height:2"><b>Backend error</b><br><span style="color:var(--t1)">' + (errMsg || 'Unexpected response') + '</span></div>';
+          return;
+        }
+        var wr = d.overall.accuracy || d.overall.win_rate || 0;
+        var pnl = Number(d.period_reports && d.period_reports['1y'] ? d.period_reports['1y'].net_pnl_1lot || 0 : 0);
+        psSetStatus('V2 ready · <span style="color:'+psWrColor(wr)+';font-weight:700">'+Number(wr).toFixed(2)+'%</span> · 1Y 1-lot <span style="color:'+(pnl>=0?'var(--go)':'var(--st)')+'">'+(pnl>=0?'+₹':'-₹')+psFmt(Math.abs(pnl))+'</span>', 'var(--t0)');
+        psRenderAdvReport(d);
+      })
+      .catch(function(e){
+        if(btn){ btn.disabled = false; }
+        if(reportBtn){ reportBtn.disabled = false; }
+        if(reportBtn2){ reportBtn2.disabled = false; reportBtn2.textContent = 'V2 REPORT'; }
+        psSetStatus('Network error: '+e.message,'var(--st)');
+      });
+    }
+
+    window.psRunRangeReport = psRunRangeReport;
+    window.psRunRangeReportV2 = psRunRangeReportV2;
   })();
   // ── /PRIME STRIKES ─────────────────────────────────────────────────────────
 
@@ -12974,7 +13872,7 @@ async function loadSignalHistory(){
         window._sigHistBackfillTried = true;
       body.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--t2);padding:18px">Backfilling recent signal history...</td></tr>';
         try {
-          await fetch((window._backendBase || '') + '/api/signals/history/backfill?days=7', {method:'POST'});
+          await fetch((window._backendBase || '') + '/api/signals/history/backfill?days=90', {method:'POST'});
           return loadSignalHistory();
         } catch(e) {}
       }
@@ -15252,6 +16150,381 @@ function _topActiveStocks(stocks){
   setTimeout(refreshStrategyProfileUI, 700);
 })();
 
+// ═══════════════════════════════════════════════════════════════════════════
+// APEX HUNT — frontend logic
+// ═══════════════════════════════════════════════════════════════════════════
+(function(){
+  'use strict';
+
+  // ── state ────────────────────────────────────────────────────────────────
+  let _ahSignals   = [];    // live signals received
+  let _ahBasket    = null;  // latest basket state
+  let _ahBtResult  = null;  // last backtest result
+  let _ahSubActive = 'live';
+
+  // ── sub-tab switch ────────────────────────────────────────────────────────
+  window.ahSubTab = function(tab) {
+    _ahSubActive = tab;
+    const livePanel = document.getElementById('ah-live-panel');
+    const btPanel   = document.getElementById('ah-bt-panel');
+    const livBtn    = document.getElementById('ah-sub-live');
+    const btBtn     = document.getElementById('ah-sub-bt');
+    if(!livePanel || !btPanel) return;
+    if(tab === 'live'){
+      livePanel.style.display = 'flex';
+      btPanel.style.display   = 'none';
+      if(livBtn){ livBtn.style.color='#00e5a0'; livBtn.style.borderBottom='2px solid #00e5a0'; livBtn.style.background='var(--s2)'; }
+      if(btBtn){  btBtn.style.color='var(--t2)'; btBtn.style.borderBottom='2px solid transparent'; btBtn.style.background='var(--s1)'; }
+    } else {
+      livePanel.style.display = 'none';
+      btPanel.style.display   = 'flex';
+      if(btBtn){  btBtn.style.color='#00e5a0'; btBtn.style.borderBottom='2px solid #00e5a0'; btBtn.style.background='var(--s2)'; }
+      if(livBtn){ livBtn.style.color='var(--t2)'; livBtn.style.borderBottom='2px solid transparent'; livBtn.style.background='var(--s1)'; }
+      try{ if(typeof window.ahSyncBtRangeFromApp === 'function') window.ahSyncBtRangeFromApp(90); }catch(_e){}
+    }
+  };
+
+  // ── apply WebSocket message ──────────────────────────────────────────────
+  window.ahApplyWS = function(msg) {
+    const newSigs = msg.signals || [];
+    const basket  = msg.basket  || null;
+    const all     = msg.all     || [];
+
+    if(basket) _ahBasket = basket;
+    if(all.length) _ahSignals = all;
+
+    // New signal notification
+    if(newSigs.length) {
+      newSigs.forEach(function(s){
+        if(typeof notify === 'function')
+          notify('🔥 APEX HUNT: ' + s.signal + ' @ ' + s.entry + ' (Heat ' + s.heat_score + ')');
+      });
+    }
+
+    _ahRenderHeat();
+    _ahRenderLiveSignals();
+  };
+
+  // ── fetch live on tab open ────────────────────────────────────────────────
+  window.ahFetchLive = function() {
+    fetch('/api/apex-hunt/live')
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(d.basket)  _ahBasket  = d.basket;
+        if(d.signals) _ahSignals = d.signals;
+        _ahRenderHeat();
+        _ahRenderLiveSignals();
+      })
+      .catch(function(){});
+  };
+
+  // ── heat gauge render ─────────────────────────────────────────────────────
+  function _ahRenderHeat() {
+    if(!_ahBasket) return;
+    const heat = _ahBasket.heat || {};
+    const hs   = heat.heat_score || 0;
+    const dir  = heat.direction  || '—';
+
+    const valEl = document.getElementById('ah-heat-val');
+    const barEl = document.getElementById('ah-heat-bar');
+    const dirEl = document.getElementById('ah-heat-dir');
+    if(valEl) valEl.textContent = hs.toFixed(1);
+    if(barEl) barEl.style.width = Math.min(100, hs) + '%';
+    if(dirEl){
+      dirEl.textContent = dir;
+      dirEl.style.color = dir === 'BULL' ? 'var(--go)' : dir === 'BEAR' ? 'var(--st)' : 'var(--t2)';
+    }
+    // Component scores
+    const sc = function(id, val){
+      const el = document.getElementById(id);
+      if(el) el.textContent = val != null ? val.toFixed(1) : '—';
+    };
+    sc('ah-sc-basket', heat.basket_pts);
+    sc('ah-sc-pcr',    heat.pcr_pts);
+    sc('ah-sc-vix',    heat.vix_pts);
+    sc('ah-sc-mom',    heat.mom_pts);
+
+    // Basket chips (top 8 heavyweights)
+    const chips = document.getElementById('ah-basket-chips');
+    if(chips){
+      const hw = (_ahBasket.heavyweights || []).slice(0, 8);
+      chips.innerHTML = hw.map(function(h){
+        const chg = (h.chg || 0);
+        const col = chg > 0.1 ? 'var(--go)' : chg < -0.1 ? 'var(--st)' : 'var(--t2)';
+        const sign = chg >= 0 ? '+' : '';
+        return '<span style="font-size:7px;padding:2px 5px;border-radius:3px;background:var(--s2);border:1px solid var(--b1);color:' + col + ';white-space:nowrap">'
+          + h.sym + ' ' + sign + chg.toFixed(2) + '%</span>';
+      }).join('');
+    }
+  }
+
+  // ── live signals render ───────────────────────────────────────────────────
+  function _ahRenderLiveSignals() {
+    const list  = document.getElementById('ah-live-list');
+    const empty = document.getElementById('ah-live-empty');
+    if(!list) return;
+
+    const sigs = _ahSignals.slice().reverse();   // most-recent first
+
+    // Session counts
+    let wins = 0, loss = 0;
+    sigs.forEach(function(s){
+      if(s.outcome === 'T1' || s.outcome === 'T2') wins++;
+      else if(s.outcome === 'SL') loss++;
+    });
+    const tot  = document.getElementById('ah-live-total');
+    const winE = document.getElementById('ah-live-wins');
+    const losE = document.getElementById('ah-live-loss');
+    if(tot)  tot.textContent  = sigs.length;
+    if(winE) winE.textContent = wins;
+    if(losE) losE.textContent = loss;
+
+    if(!sigs.length){
+      if(empty) empty.style.display = '';
+      return;
+    }
+    if(empty) empty.style.display = 'none';
+
+    const fmt = function(n){ return n >= 100 ? Math.round(n).toLocaleString('en-IN') : n.toFixed(2); };
+    const ocHtml = function(oc){
+      if(!oc) return '<span style="color:var(--am);font-size:8px;font-weight:700">● LIVE</span>';
+      if(oc === 'T1' || oc === 'T2') return '<span style="color:var(--go);font-size:8px;font-weight:700">✓ ' + oc + '</span>';
+      if(oc === 'SL')                return '<span style="color:var(--st);font-size:8px;font-weight:700">✗ SL</span>';
+      return '<span style="color:var(--t2);font-size:8px">' + oc + '</span>';
+    };
+
+    list.innerHTML = sigs.map(function(s){
+      const isBull = s.type === 'bull';
+      const dirCol = isBull ? 'var(--go)' : 'var(--st)';
+      const heat   = (s.heat_score || 0).toFixed(1);
+      const conf   = (s.confidence || 0).toFixed(1);
+      const bsc    = (s.basket_score || 0).toFixed(1);
+      const bscCol = parseFloat(bsc) > 0 ? 'var(--go)' : 'var(--st)';
+      return '<div style="border:1px solid var(--b1);border-left:3px solid ' + dirCol + ';border-radius:5px;margin-bottom:7px;padding:8px 10px;background:var(--s2)">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">'
+          + '<span style="font-size:10px;font-weight:900;color:' + dirCol + '">'
+            + (isBull ? '▲' : '▼') + ' ' + s.signal + '</span>'
+          + '<span style="font-size:8px;color:var(--t2)">' + (s.time || '—') + '</span>'
+          + '<span>' + ocHtml(s.outcome) + '</span>'
+        + '</div>'
+        + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:5px">'
+          + '<div style="font-size:7.5px;color:var(--t2)">STRIKE <span style="color:var(--t0);font-weight:700">' + (s.strike_label || '—') + '</span></div>'
+          + '<div style="font-size:7.5px;color:var(--t2)">ENTRY <span style="color:var(--t0);font-weight:700">' + fmt(s.entry || 0) + '</span></div>'
+          + '<div style="font-size:7.5px;color:var(--st)">SL <span style="font-weight:700">' + fmt(s.sl || 0) + '</span></div>'
+          + '<div style="font-size:7.5px;color:var(--go)">T1 <span style="font-weight:700">' + fmt(s.t1 || 0) + '</span></div>'
+          + '<div style="font-size:7.5px;color:var(--go)">T2 <span style="font-weight:700">' + fmt(s.t2 || 0) + '</span></div>'
+          + '<div style="font-size:7.5px;color:var(--t2)">R:R <span style="color:var(--t0);font-weight:700">' + (s.rr || '—') + 'R</span></div>'
+        + '</div>'
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+          + '<span style="font-size:7px;padding:2px 6px;border-radius:3px;background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.3);color:#00e5a0">HEAT ' + heat + '</span>'
+          + '<span style="font-size:7px;padding:2px 6px;border-radius:3px;background:var(--s3);color:var(--t2)">CONF ' + conf + '</span>'
+          + '<span style="font-size:7px;padding:2px 6px;border-radius:3px;background:var(--s3);color:' + bscCol + '">BASKET ' + bsc + '</span>'
+          + '<span style="font-size:7px;padding:2px 6px;border-radius:3px;background:var(--s3);color:var(--t2)">PCR ' + (s.pcr || '—') + '</span>'
+          + '<span style="font-size:7px;padding:2px 6px;border-radius:3px;background:var(--s3);color:var(--t2)">VIX ' + (s.vix || '—') + '</span>'
+          + (s.strength === 'hi' ? '<span style="font-size:7px;padding:2px 6px;border-radius:3px;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);color:#fbbf24;font-weight:700">HIGH</span>' : '')
+        + '</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  // ── backtest quick range ──────────────────────────────────────────────────
+  window.ahBtRange = function(days) {
+    const anchor = typeof btAppAnchorYmd === 'function' ? btAppAnchorYmd() : new Date().toISOString().slice(0,10);
+    const p = String(anchor).split('-');
+    const to = new Date(+p[0], +p[1] - 1, +p[2]);
+    const from = new Date(to);
+    from.setDate(from.getDate() - (Number(days) || 1) + 1);
+    const fmt = function(d){
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return d.getFullYear() + '-' + mm + '-' + dd;
+    };
+    const fi = document.getElementById('ah-bt-from');
+    const ti = document.getElementById('ah-bt-to');
+    if(fi) fi.value = fmt(from);
+    if(ti) ti.value = fmt(to);
+    ahBtRun();
+  };
+
+  // ── shared helpers (mirror psFmt/psWrColor pattern) ─────────────────────
+  function _ahFmt(n){ return (Math.abs(n)>=1000)?Math.round(n).toLocaleString('en-IN'):String(Math.round(n)); }
+  function _ahWrCol(wr){ return wr>=70?'var(--go)':wr>=55?'var(--am)':'var(--st)'; }
+  function _ahPnlStr(n){
+    if(!n) return '<span style="color:var(--t3)">—</span>';
+    return n>0 ? '<span style="color:var(--go)">+₹'+_ahFmt(n)+'</span>'
+               : '<span style="color:var(--st)">−₹'+_ahFmt(Math.abs(n))+'</span>';
+  }
+  function _ahCard(label, val, sub, col){
+    return '<div style="background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:7px 12px;min-width:90px;flex:1">'
+      +'<div style="font-size:7.5px;color:var(--t3);letter-spacing:.5px;margin-bottom:3px">'+label+'</div>'
+      +'<div style="font-size:15px;font-weight:900;color:'+(col||'var(--t0)')+'">'+val+'</div>'
+      +(sub?'<div style="font-size:7px;color:var(--t2);margin-top:2px">'+sub+'</div>':'')
+      +'</div>';
+  }
+
+  // ── backtest run ──────────────────────────────────────────────────────────
+  window.ahBtRun = function() {
+    var fi = document.getElementById('ah-bt-from');
+    var ti = document.getElementById('ah-bt-to');
+    var st = document.getElementById('ah-bt-status');
+    var rb = document.getElementById('ah-run-btn');
+    if(!fi || !ti) return;
+    var from = fi.value, to = ti.value;
+    if(!from || !to){ if(st) st.textContent = 'Select dates first'; return; }
+    if(st) st.textContent = '⏳ Running…';
+    if(rb){ rb.disabled = true; rb.textContent = '⏳ Running…'; }
+    // Reset results area
+    var sumEl = document.getElementById('ah-summary');
+    var body  = document.getElementById('ah-body');
+    if(sumEl) sumEl.style.display = 'none';
+    if(body)  body.innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2);font-size:8px">Running… fetching NIFTY 1-min data from Kite</div>';
+
+    fetch('/api/apex-hunt/backtest', {
+      method:  'POST',
+      headers: {'Content-Type':'application/json'},
+      body:    JSON.stringify({from_date: from, to_date: to}),
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(rb){ rb.disabled = false; rb.textContent = '▶ RUN BACKTEST'; }
+      if(d && d.error){
+        if(st) st.textContent = '✗ ' + d.error;
+        if(body) body.innerHTML = '<div style="text-align:center;padding:30px;color:var(--st);font-size:8px">Error: ' + d.error + '</div>';
+        return;
+      }
+      _ahBtResult = d;
+      var total = ((d||{}).summary||{}).total || 0;
+      var dbg = d.debug || {};
+      var dbgTxt = dbg.bars_fetched != null ? ' · bars=' + dbg.bars_fetched : '';
+      if(st) st.textContent = '✓ Done — ' + total + ' signals' + dbgTxt;
+      _ahRenderBt(d);
+    })
+    .catch(function(e){
+      if(rb){ rb.disabled = false; rb.textContent = '▶ RUN BACKTEST'; }
+      if(st) st.textContent = '✗ ' + e;
+      if(body) body.innerHTML = '<div style="text-align:center;padding:30px;color:var(--st);font-size:8px">Request failed: ' + e + '</div>';
+    });
+  };
+
+  // ── backtest render (ADV PRIME STRIKE style) ──────────────────────────────
+  function _ahRenderBt(r) {
+    if(!r) return;
+    var s       = r.summary || {};
+    var sumEl   = document.getElementById('ah-summary');
+    var body    = document.getElementById('ah-body');
+    if(!sumEl || !body) return;
+
+    // ── Summary cards ────────────────────────────────────────────────────────
+    var pnl_pts = s.total_pnl_pts || 0;
+    var pnl_rs  = s.total_pnl_rs  || 0;
+    var pf      = s.profit_factor || 0;
+    var wr      = s.win_rate      || 0;
+
+    sumEl.style.display = 'flex';
+    sumEl.innerHTML = [
+      _ahCard('TOTAL SIGNALS', s.total||0, (r.from||'')+'  →  '+(r.to||'')),
+      _ahCard('WIN RATE', wr.toFixed(1)+'%', (s.wins||0)+' T1/T2  /  '+(s.losses||0)+' SL', _ahWrCol(wr)),
+      _ahCard('P&L PTS', (pnl_pts>=0?'+':'')+pnl_pts.toFixed(1)+' pts', 'index points total', pnl_pts>=0?'var(--go)':'var(--st)'),
+      _ahCard('P&L ₹ (1 LOT)', (pnl_rs>=0?'+₹':'-₹')+_ahFmt(Math.abs(pnl_rs)), 'ATM delta 0.5 · lot 75', pnl_rs>=0?'var(--go)':'var(--st)'),
+      _ahCard('PROFIT FACTOR', pf.toFixed(2), 'gross win / gross loss', pf>=1.5?'var(--go)':pf>=1.0?'var(--am)':'var(--st)'),
+      _ahCard('MAX DRAWDOWN', (s.max_dd_pts||0).toFixed(1)+' pts', 'peak-to-trough', 'var(--st)'),
+    ].join('');
+
+    // ── Monthly breakdown table ───────────────────────────────────────────────
+    var monthly = r.monthly || [];
+    var monthHtml = monthly.length
+      ? '<table style="width:100%;border-collapse:collapse;font-size:8px">'
+          +'<thead><tr style="background:rgba(0,0,0,.08);color:var(--t2);text-transform:uppercase;letter-spacing:.5px;font-size:7px">'
+          +'<th style="padding:5px 10px;text-align:left">Month</th>'
+          +'<th style="padding:5px 8px;text-align:center">Signals</th>'
+          +'<th style="padding:5px 8px;text-align:center">W</th>'
+          +'<th style="padding:5px 8px;text-align:center">L</th>'
+          +'<th style="padding:5px 8px;text-align:center">Win%</th>'
+          +'<th style="padding:5px 8px;text-align:right">Pts</th>'
+          +'<th style="padding:5px 8px;text-align:right">P&L ₹</th>'
+          +'</tr></thead><tbody>'
+          + monthly.map(function(m, idx){
+              var bg  = idx%2===0?'var(--s1)':'var(--bg)';
+              var pc  = m.pnl_pts||0;
+              var prc = m.pnl_rs ||0;
+              var wrc = _ahWrCol(m.win_rate||0);
+              var ptc = pc>=0?'var(--go)':'var(--st)';
+              return '<tr style="background:'+bg+';border-bottom:1px solid var(--b1)">'
+                +'<td style="padding:5px 10px;font-weight:800;color:var(--t1)">'+m.month+'</td>'
+                +'<td style="padding:5px 8px;text-align:center">'+m.signals+'</td>'
+                +'<td style="padding:5px 8px;text-align:center;color:var(--go);font-weight:700">'+(m.wins||0)+'</td>'
+                +'<td style="padding:5px 8px;text-align:center;color:var(--st);font-weight:700">'+(m.losses||0)+'</td>'
+                +'<td style="padding:5px 8px;text-align:center;font-weight:800;color:'+wrc+'">'+(m.win_rate||0).toFixed(1)+'%</td>'
+                +'<td style="padding:5px 8px;text-align:right;font-weight:700;color:'+ptc+'">'+(pc>=0?'+':'')+pc.toFixed(1)+'</td>'
+                +'<td style="padding:5px 8px;text-align:right">'+_ahPnlStr(prc)+'</td>'
+                +'</tr>';
+            }).join('')
+          +'</tbody></table>'
+      : '<div style="text-align:center;padding:14px;color:var(--t2);font-size:8px">No monthly data</div>';
+
+    var monthBlock = '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:6px;overflow:hidden">'
+      +'<div style="padding:6px 10px;background:var(--s2);font-size:7.5px;font-weight:800;letter-spacing:1px;color:#00e5a0">MONTHLY BREAKDOWN</div>'
+      + monthHtml
+      +'</div>';
+
+    // ── Trade log table ────────────────────────────────────────────────────────
+    var trades = r.trades || [];
+    var tradeRows = trades.map(function(t, idx){
+      var bg     = idx%2===0?'var(--s1)':'var(--bg)';
+      var isBull = t.direction === 'BULL';
+      var dc     = isBull?'var(--go)':'var(--st)';
+      var pc     = t.pnl_pts||0;
+      var ptc    = pc>=0?'var(--go)':'var(--st)';
+      var oc     = t.outcome||'—';
+      var ocHtml = oc==='T1'||oc==='T2'
+        ? '<span style="color:var(--go);font-weight:700">✓ '+oc+'</span>'
+        : oc==='SL'
+        ? '<span style="color:var(--st);font-weight:700">✗ SL</span>'
+        : '<span style="color:var(--t2)">— EXP</span>';
+      return '<tr style="background:'+bg+';border-bottom:1px solid var(--b1)">'
+        +'<td style="padding:5px 8px;color:var(--t2);white-space:nowrap">'+t.date+'</td>'
+        +'<td style="padding:5px 6px;text-align:center;color:var(--t2)">'+t.time+'</td>'
+        +'<td style="padding:5px 6px;text-align:center;font-weight:800;color:'+dc+'">'+(isBull?'▲ CE':'▼ PE')+'</td>'
+        +'<td style="padding:5px 8px;text-align:right;font-variant-numeric:tabular-nums">'+t.entry+'</td>'
+        +'<td style="padding:5px 8px;text-align:right;color:var(--st);font-size:7.5px">'+t.sl+'</td>'
+        +'<td style="padding:5px 8px;text-align:right;color:var(--go);font-size:7.5px">'+t.t1+'</td>'
+        +'<td style="padding:5px 8px;text-align:right;color:var(--go);font-size:7.5px">'+t.t2+'</td>'
+        +'<td style="padding:5px 8px;text-align:right">'+t.exit+'</td>'
+        +'<td style="padding:5px 8px;text-align:center">'+ocHtml+'</td>'
+        +'<td style="padding:5px 8px;text-align:right;font-weight:700;color:'+ptc+'">'+(pc>=0?'+':'')+pc.toFixed(1)+'</td>'
+        +'<td style="padding:5px 8px;text-align:right">'+_ahPnlStr(t.pnl_rs||0)+'</td>'
+        +'</tr>';
+    }).join('');
+
+    var tableBlock = '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:6px;overflow:hidden">'
+      +'<div style="padding:6px 10px;background:var(--s2);font-size:7.5px;font-weight:800;letter-spacing:1px;color:#00e5a0;display:flex;gap:12px;align-items:center">'
+        +'<span>TRADE LOG</span>'
+        +'<span style="font-size:7px;color:var(--t3);font-weight:400">most-recent first · SL −8 pts · T1 +15 pts · T2 +25 pts · entry = next-bar open</span>'
+      +'</div>'
+      +(trades.length
+        ? '<table style="width:100%;border-collapse:collapse;font-size:8px">'
+            +'<thead><tr style="background:rgba(0,0,0,.08);color:var(--t2);text-transform:uppercase;letter-spacing:.5px;font-size:7px">'
+            +'<th style="padding:5px 8px;text-align:left">Date</th>'
+            +'<th style="padding:5px 6px;text-align:center">Time</th>'
+            +'<th style="padding:5px 6px;text-align:center">Dir</th>'
+            +'<th style="padding:5px 8px;text-align:right">Entry</th>'
+            +'<th style="padding:5px 8px;text-align:right">SL</th>'
+            +'<th style="padding:5px 8px;text-align:right">T1</th>'
+            +'<th style="padding:5px 8px;text-align:right">T2</th>'
+            +'<th style="padding:5px 8px;text-align:right">Exit</th>'
+            +'<th style="padding:5px 8px;text-align:center">Result</th>'
+            +'<th style="padding:5px 8px;text-align:right">Pts</th>'
+            +'<th style="padding:5px 8px;text-align:right">P&L ₹</th>'
+            +'</tr></thead>'
+            +'<tbody>'+tradeRows+'</tbody></table>'
+        : '<div style="text-align:center;padding:20px;color:var(--t2);font-size:9px">No trades in this period</div>')
+      +'</div>';
+
+    body.innerHTML = monthBlock + tableBlock;
+  }
+
+})();
+
 // ═══════════════════════════════════════════════
 // CONFIDENCE SCORE DISPLAY
 // ═══════════════════════════════════════════════
@@ -15774,6 +17047,7 @@ async function tbDateChange(val) {
     window._histDate = val;  // cache date for header
     const dvDateEl = document.getElementById('dv-date');
     if(dvDateEl) dvDateEl.value = val;
+    try{ if(typeof window.psSyncPrimeStrikeRange === 'function') window.psSyncPrimeStrikeRange(); }catch(_e){}
     window._btWorkspace = 'live';
     try{
       const btTab = document.querySelector('.tab.tab-bt');
@@ -17770,6 +19044,7 @@ function tbGoLive() {
   // Reconnect WS to get fresh live data
   if(window._liveConnect) window._liveConnect();
   btLiveStatusSync();
+  try{ if(typeof window.psSyncPrimeStrikeRange === 'function') window.psSyncPrimeStrikeRange(); }catch(_e){}
   notify('Back to live data');
 }
 
@@ -17908,47 +19183,124 @@ function openKiteUrlSingleTab(url) {
   } catch (e) { return null; }
 }
 
+// ── Kite OAuth auto-capture via postMessage + BroadcastChannel ──────────────
+(function(){
+  function _onKiteOAuthMsg(data){
+    if(!data) return;
+    var rt = data.request_token || data.requestToken;
+    if(!rt) return;
+    if(typeof window._kiteAutoExchange === 'function'){
+      window._kiteAutoExchange(rt);
+    } else {
+      window._pendingKiteToken = rt;
+    }
+  }
+  // postMessage from popup (/kite-oauth-return page sends type: "stockr_kite_oauth")
+  window.addEventListener('message', function(ev){
+    if(!ev.data) return;
+    var t = ev.data.type || '';
+    if(t === 'stockr_kite_oauth' || t === 'kite_oauth_token') _onKiteOAuthMsg(ev.data);
+  });
+  // BroadcastChannel — same-origin relay from /kite-oauth-return
+  try {
+    var _bc = new BroadcastChannel('stockr_kite_oauth_v1');
+    _bc.onmessage = function(ev){ _onKiteOAuthMsg(ev.data); };
+  } catch(e) {}
+})();
+
 async function tokenOneTimeLogin() {
-  const msg = document.getElementById('token-banner-msg');
+  const msg  = document.getElementById('token-banner-msg');
   const icon = document.getElementById('token-banner-icon');
   const banner = document.getElementById('token-banner');
   if (banner) banner.style.display = 'flex';
-  if (msg) { msg.style.color = 'var(--am)'; msg.textContent = 'Opening Kite login for one-time manual token refresh…'; }
+  if (msg) { msg.style.color = 'var(--am)'; msg.textContent = 'Opening Kite login…'; }
   if (icon) icon.textContent = '↗';
-  try {
-    const r = await fetch(API + '/api/token-login-url');
-    const d = await r.json();
-    if (!d.ok || !d.login_url) throw new Error(d.msg || 'Could not build Kite login URL');
-    openKiteUrlSingleTab(d.login_url);
-    const pasted = window.prompt(
-      'Kite login opened in a small popup.\n\n1. Log in manually.\n2. After Zerodha redirects, copy the full URL from the popup address bar.\n3. Paste the full redirect URL here.\n\nYou can also paste only the request_token.',
-      ''
-    );
-    if (!pasted) {
-      if (msg) { msg.textContent = 'One-time login cancelled. You can reopen it anytime.'; msg.style.color = 'var(--am)'; }
-      return;
-    }
-    if (msg) { msg.textContent = 'Exchanging request_token for a live access token…'; msg.style.color = 'var(--am)'; }
+
+  // ── Helper: exchange a request_token / redirect URL ─────────────────────
+  async function doExchange(raw) {
+    if (msg) { msg.textContent = 'Exchanging token…'; msg.style.color = 'var(--am)'; }
     if (icon) icon.textContent = '⟳';
     const xr = await fetch(API + '/api/token-exchange', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ redirect_url: String(pasted || '').trim() })
+      body: JSON.stringify({ redirect_url: String(raw || '').trim() })
     });
     const xd = await xr.json();
     if (xd.ok) {
       if (typeof notify === 'function') notify('Kite token applied: ' + (xd.user || 'ok'));
-      if (msg) { msg.textContent = '✓ One-time login applied — ' + (xd.user || 'live data refreshing…'); msg.style.color = 'var(--go)'; }
+      if (msg) { msg.textContent = '✓ Login applied — ' + (xd.user || 'live data refreshing…'); msg.style.color = 'var(--go)'; }
       if (icon) icon.textContent = '✓';
       try {
-        fetch(API + '/api/refresh-state', { method: 'POST' }).catch(function () {});
-        if (typeof window.bootstrapLiveState === 'function') setTimeout(function () { try { window.bootstrapLiveState(); } catch (e) {} }, 400);
-      } catch (e) {}
-      setTimeout(function () { const b = document.getElementById('token-banner'); if (b) b.style.display = 'none'; }, 3500);
+        fetch(API + '/api/refresh-state', { method: 'POST' }).catch(function(){});
+        if (typeof window.bootstrapLiveState === 'function')
+          setTimeout(function(){ try{ window.bootstrapLiveState(); }catch(e){} }, 400);
+      } catch(e) {}
+      setTimeout(function(){ const b = document.getElementById('token-banner'); if(b) b.style.display='none'; }, 3500);
     } else {
-      if (msg) { msg.textContent = 'ONE-TIME LOGIN: ' + (xd.msg || 'failed'); msg.style.color = '#ff3355'; }
+      if (msg) { msg.textContent = '✗ ' + (xd.msg || 'exchange failed'); msg.style.color = '#ff3355'; }
       if (icon) icon.textContent = '⚠';
     }
+  }
+
+  // Register as global so postMessage listener can call it
+  window._kiteAutoExchange = doExchange;
+
+  try {
+    const r = await fetch(API + '/api/token-login-url');
+    const d = await r.json();
+    if (!d.ok || !d.login_url) throw new Error(d.msg || 'Could not build Kite login URL');
+
+    const popup = openKiteUrlSingleTab(d.login_url);
+
+    // ── Inline paste modal (non-blocking, replaces window.prompt) ───────────
+    if (msg) {
+      msg.style.color = 'var(--am)';
+      msg.innerHTML = 'Waiting for Kite login&hellip; &nbsp;'
+        + '<input id="_kite_rt_input" placeholder="Paste redirect URL or request_token if popup fails" '
+        + 'style="font-family:monospace;font-size:8px;padding:2px 6px;border-radius:3px;border:1px solid #2fd7ff55;'
+        + 'background:#0f1117;color:#2fd7ff;width:320px;outline:none" />'
+        + '<button onclick="(function(){var v=document.getElementById(\'_kite_rt_input\').value.trim();if(v)window._kiteAutoExchange(v);})()" '
+        + 'style="margin-left:4px;font-family:var(--fn);font-size:7.5px;padding:2px 7px;border:1px solid #2fd7ff55;border-radius:3px;background:transparent;color:#2fd7ff;cursor:pointer">GO</button>';
+      // Auto-submit on paste into the input
+      setTimeout(function(){
+        var inp = document.getElementById('_kite_rt_input');
+        if(inp) inp.addEventListener('paste', function(e){
+          setTimeout(function(){
+            var v = (document.getElementById('_kite_rt_input')||{}).value;
+            if(v && v.trim()) window._kiteAutoExchange(v.trim());
+          }, 60);
+        });
+      }, 100);
+    }
+
+    // ── Poll popup location — catches port-8000 redirect before /kite-oauth-return ─
+    if (popup) {
+      var _wasOnKite = true;  // starts on kite.zerodha.com (cross-origin → always throws)
+      var pollTimer = setInterval(function(){
+        if (!popup || popup.closed) { clearInterval(pollTimer); return; }
+        try {
+          var href = popup.location.href || '';
+          // Same-origin redirect landed — grab the token directly
+          if (href && href.indexOf('request_token=') !== -1) {
+            clearInterval(pollTimer);
+            popup.close();
+            window._kiteAutoExchange(href);
+            return;
+          }
+          // about:blank or empty = popup reset (Kite redirected to unreachable host)
+          if (!href || href === 'about:blank') {
+            _wasOnKite = false;
+          }
+        } catch(secErr) {
+          // SecurityError = cross-origin page still loading (Kite domain or redirect target)
+          // If we were on kite and now hit a different SecurityError origin, redirect happened
+          _wasOnKite = true;
+        }
+      }, 400);
+      // Stop polling after 5 min
+      setTimeout(function(){ clearInterval(pollTimer); }, 300000);
+    }
+
   } catch (e) {
     if (msg) { msg.textContent = 'ONE-TIME LOGIN: ' + (e && e.message ? e.message : 'could not reach API'); msg.style.color = '#ff3355'; }
     if (icon) icon.textContent = '⚠';
@@ -18560,6 +19912,57 @@ function perfDownloadCSV(){
   document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(a.href), 1200);
 }
+/** Calendar day in Asia/Kolkata (YYYY-MM-DD). Avoids UTC midnight shifting "today" wrong for India. */
+function dpIstYmd(){
+  try{
+    const ist = new Date(new Date().toLocaleString('en-US', {timeZone: 'Asia/Kolkata'}));
+    return ist.toISOString().slice(0,10);
+  }catch(e){
+    return new Date().toISOString().slice(0,10);
+  }
+}
+/** Single-day anchor for range UIs: top-bar replay date → (hist only) dv-date → IST today. */
+function btAppAnchorYmd(){
+  try{
+    const tb = document.getElementById('tb-date');
+    if(tb && tb.value && String(tb.value).trim().length >= 10) return String(tb.value).trim().slice(0, 10);
+  }catch(_e){}
+  try{
+    if(window._histMode){
+      const dv = document.getElementById('dv-date');
+      if(dv && dv.value && String(dv.value).trim().length >= 10) return String(dv.value).trim().slice(0, 10);
+    }
+  }catch(_e2){}
+  return typeof dpIstYmd === 'function' ? dpIstYmd() : new Date().toISOString().slice(0, 10);
+}
+function btYmdMinusDays(ymd, n){
+  const parts = String(ymd || '').split('-');
+  if(parts.length !== 3) return String(ymd || '').slice(0, 10);
+  const y = parseInt(parts[0], 10), mo = parseInt(parts[1], 10) - 1, d = parseInt(parts[2], 10);
+  const dt = new Date(y, mo, d);
+  if(Number.isNaN(dt.getTime())) return String(ymd).slice(0, 10);
+  dt.setDate(dt.getDate() - (Number(n) || 0));
+  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getDate()).padStart(2, '0');
+  return dt.getFullYear() + '-' + mm + '-' + dd;
+}
+/** ADV PRIME STRIKE BACKTEST: default ~3M window ending on app anchor (aligns with History BACKFILL 3M + DAY modal). */
+window.psSyncPrimeStrikeRange = function(){
+  const to = btAppAnchorYmd();
+  const from = btYmdMinusDays(to, 90);
+  const fe = document.getElementById('ps-from'), te = document.getElementById('ps-to');
+  if(te) te.value = to;
+  if(fe) fe.value = from;
+};
+/** Apex Hunt BACKTEST inputs — same anchor; span = days (default 90). */
+window.ahSyncBtRangeFromApp = function(spanDays){
+  const to = btAppAnchorYmd();
+  const span = Number(spanDays) > 0 ? Number(spanDays) : 90;
+  const from = btYmdMinusDays(to, span - 1);
+  const fi = document.getElementById('ah-bt-from'), ti = document.getElementById('ah-bt-to');
+  if(fi) fi.value = from;
+  if(ti) ti.value = to;
+};
 function dpNavDate(dir){
   var picker = document.getElementById('perf-date-picker');
   if(!picker || !picker.value) return;
@@ -18572,8 +19975,7 @@ function dpNavDate(dir){
   dpLoadDate(iso);
 }
 function dpLoadDate(dateStr){
-  var today = new Date().toISOString().slice(0,10);
-  if(dateStr==='today') dateStr = today;
+  if(dateStr==='today') dateStr = dpIstYmd();
   var picker = document.getElementById('perf-date-picker');
   if(picker) picker.value = dateStr;
   loadDayPerf(dateStr);
@@ -18586,11 +19988,17 @@ function openDayPerf(dateStr){
   const m = document.getElementById('perf-modal');
   if(!m) return;
   m.classList.add('open');
-  const today = new Date().toISOString().slice(0,10);
-  const d = dateStr || today;
+  let d = (dateStr != null && String(dateStr).trim()) ? String(dateStr).trim() : '';
+  if(!d){
+    try{
+      const tb = document.getElementById('tb-date');
+      if(tb && tb.value) d = String(tb.value).trim();
+    }catch(e){}
+  }
+  if(!d) d = dpIstYmd();
   const picker = document.getElementById('perf-date-picker');
   if(picker) picker.value = d;
-  loadDayPerf(d === today ? undefined : d);
+  loadDayPerf(d);
   advDpRender();
 }
 
@@ -18609,7 +20017,7 @@ function dpSwitchTab(pane){
 
 // ── SPIKE HUNT (NIFTY 200) Day Performance renderer ───────────────────────
 window._advDpFilter = 'all';
-window._advCapPerTrade = 30000; // ₹ default per trade
+window._advCapPerTrade = 20000; // ₹ default per trade (must match /api/performance/day notional)
 
 function advSetCap(val){
   const n = parseInt(String(val).replace(/[^0-9]/g,''), 10);
@@ -18634,7 +20042,7 @@ function advDpFilter(f, btn){
 function advDpRender(){
   const log = window._advLiveSpikeLog || [];
   const f = window._advDpFilter || 'all';
-  const GLOBAL_CAP = window._advCapPerTrade || 30000;
+  const GLOBAL_CAP = window._advCapPerTrade || 20000;
 
   // P&L calculator — uses per-row customCapital or global
   function _advPnl(s) {
@@ -18828,12 +20236,7 @@ async function loadDayPerf(overrideDate){
     }catch(e){}
   }
   if(!day){
-    try{
-      const ist = new Date(new Date().toLocaleString('en-US', {timeZone: 'Asia/Kolkata'}));
-      day = ist.toISOString().slice(0,10);
-    }catch(e){
-      day = new Date().toISOString().slice(0,10);
-    }
+    day = dpIstYmd();
   }
   if(sub) sub.textContent = day + ' · All sections';
   try{
@@ -18897,11 +20300,11 @@ function renderDayPerfFromCache(){
   const openSub = document.getElementById('perf-open-sub');
   if(openSub){ openSub.textContent = open + ' position' + (open !== 1 ? 's' : '') + ' running'; }
   const notion = data.capital_model && data.capital_model.notional_per_signal_inr;
-  const nk = notion != null ? ('₹' + Number(notion).toLocaleString('en-IN') + '/sig') : '₹30,000/sig';
+  const nk = notion != null ? ('₹' + Number(notion).toLocaleString('en-IN') + '/sig') : '₹20,000/sig';
   if(tsub) tsub.textContent = rows.length + ' rows · ' + nk + ' · OPEN shows MTM';
   const capHint = document.getElementById('perf-cap-hint');
   if(capHint){
-    const ru = notion != null ? Number(notion).toLocaleString('en-IN') : '30,000';
+    const ru = notion != null ? Number(notion).toLocaleString('en-IN') : '20,000';
     capHint.textContent = 'Stocks: qty = floor(₹' + ru + ' ÷ entry). INDEX RADAR options: fixed 1 lot execution, cash budget shown as ₹' + ru + ' per trade. P&L = premium move × lot size. Entry/exit times are IST.';
   }
   if(valEl){
@@ -18930,7 +20333,7 @@ function renderDayPerfFromCache(){
     const keys = Object.keys(secs);
     const items = ['ALL', ...keys];
     if(!keys.length){
-      sec.innerHTML = '<div style="color:var(--t2);font-size:9px">No alerts found for this date.</div>';
+      sec.innerHTML = '<div style="color:var(--t2);font-size:9px">No alerts for <b>' + (day || 'this date') + '</b> in the performance database.<br><span style="font-size:8px;opacity:.9">Try <b>History → BACKFILL 3M</b>, or pick a session day that already has stored signals.</span></div>';
     } else {
       sec.innerHTML = items.map(k=>{
         if(k === 'ALL'){
@@ -18969,7 +20372,10 @@ function renderDayPerfFromCache(){
   // Rows table (filtered)
   if(tb){
     if(!rows.length){
-      tb.innerHTML = '<tr><td colspan="14" style="padding:16px;color:var(--t2)">No alerts in this section.</td></tr>';
+      const noStored = !allRows.length;
+      tb.innerHTML = noStored
+        ? '<tr><td colspan="14" style="padding:18px;color:var(--t2);line-height:1.5">No stored signals for <b>' + (day || 'this date') + '</b>.<br><span style="font-size:10px">Run <b>History</b> → <b>BACKFILL 3M</b> to load spike history, or open <b>DAY</b> while the top-bar date matches the day you backfilled.</span></td></tr>'
+        : '<tr><td colspan="14" style="padding:16px;color:var(--t2)">No alerts in this section (try another outcome filter).</td></tr>';
     } else {
       tb.innerHTML = rows.map(r=>{
         const rpnl = _perfPickPnl(r);
@@ -18996,12 +20402,12 @@ function renderDayPerfFromCache(){
         const lotsM = (r.lots_model != null && r.lots_model !== '') ? Number(r.lots_model) : 0;
         const qtyHint = (r.section === 'INDEX_RADAR' && lotsM > 0 && qty > 0)
           ? (lotsM + ' lot(s) · ' + qty + ' units (NSE qty)')
-          : (qty > 0 ? 'Contract / share qty for ₹30K model' : '');
+          : (qty > 0 ? 'Contract / share qty for ₹20K model' : '');
         const dep = (r.investment_inr != null && Number(r.investment_inr) > 0)
           ? ('₹' + Math.round(Number(r.investment_inr)).toLocaleString('en-IN'))
           : (qty > 0 && r.entry ? ('₹' + Math.round(qty * Number(r.entry)).toLocaleString('en-IN')) : '—');
         const depHint = (r.section === 'INDEX_RADAR')
-          ? ('Fixed cash budget ₹30,000 per INDEX RADAR trade (execution = 1 lot)')
+          ? ('Fixed cash budget ₹20,000 per INDEX RADAR trade (execution = 1 lot)')
           : 'qty × entry (≤ notional)';
         const ltpPx = _perfFmtPx((r.ltp != null && r.ltp !== 0) ? r.ltp : null);
         const exitPx = _perfFmtPx((r.exit != null && r.exit !== 0) ? r.exit : null);
@@ -19049,7 +20455,7 @@ document.addEventListener('keydown', e => {
     const kb = document.getElementById('kbd-modal');
     if(kb){ kb.remove(); return; }
   }
-  const tabIds = ['sigengine','edge','stocks','chain','__volradar__','idxradar','advspikescanner','sestocks','levels'];
+  const tabIds = ['sigengine','edge','stocks','chain','__volradar__','idxradar','advspikescanner','apexhunt','sestocks'];
   if(e.key>='1' && e.key<='9'){
     const t = tabIds[parseInt(e.key, 10) - 1];
     if(t === '__volradar__'){ const vr = document.getElementById('tab-vol-radar'); if(vr) swVolRadarDeep(vr); return; }
@@ -21083,6 +22489,28 @@ function hpSetRange(m, btn){
   document.querySelectorAll('[id^="hp-range-"]').forEach(function(b){ b.classList.remove('on'); });
   if(btn) btn.classList.add('on');
   hpLoad();
+}
+
+function hpBackfill3M(btn){
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ BACKFILLING...'; }
+  fetch((window._backendBase||'') + '/api/signals/history/backfill?days=90', {method:'POST'})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(btn){ btn.disabled = false; btn.textContent = '⚡ BACKFILL 3M'; }
+      var ins = (d && d.inserted != null) ? d.inserted : '?';
+      var upd = (d && d.updated != null) ? d.updated : '?';
+      var rows = (d && d.count != null) ? d.count : '?';
+      alert('Backfill complete — ' + ins + ' new, ' + upd + ' updated (' + rows + ' sample rows returned). Calendar refreshing…');
+      hpLoad();
+      try{
+        var pm = document.getElementById('perf-modal');
+        if(pm && pm.classList.contains('open') && typeof loadDayPerf === 'function'){ loadDayPerf(); }
+      }catch(_e){}
+    })
+    .catch(function(e){
+      if(btn){ btn.disabled = false; btn.textContent = '⚡ BACKFILL 3M'; }
+      alert('Backfill failed: ' + e);
+    });
 }
 
 // ── Stats strip ──────────────────────────────────────────────

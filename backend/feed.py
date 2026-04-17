@@ -337,13 +337,16 @@ class FeedManager:
                     from scheduler import _apply_new_token
                     _apply_new_token()
                 else:
-                    raise RuntimeError("headless refresh returned false")
+                    logger.warning("headless refresh returned false — starting in degraded mode (no Kite token)")
+                    self._running = False
+                    return
             except Exception as e:
-                raise RuntimeError(
-                    "\n\n  KITE_ACCESS_TOKEN missing and auto-refresh failed.\n"
-                    "  Ensure KITE_USER_ID, KITE_PASSWORD, KITE_TOTP_SECRET, KITE_API_KEY, "
-                    f"KITE_API_SECRET are valid in backend/.env.\n  Error: {e}\n"
+                logger.warning(
+                    f"KITE_ACCESS_TOKEN missing and auto-refresh failed: {e}\n"
+                    "  Starting in degraded mode — use the UI to login via Kite OAuth."
                 )
+                self._running = False
+                return
 
         # Verify credentials work before starting ticker
         try:

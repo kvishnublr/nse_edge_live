@@ -1139,6 +1139,27 @@ def job_spikes():
         logger.warning(f"job_spikes: {e}")
 
 
+# ─── JOB: APEX HUNT ───────────────────────────────────────────────────────────
+def job_apex_hunt():
+    """Detect APEX HUNT signals and broadcast basket + heat state every 20 s."""
+    try:
+        if not (_signals and _ws):
+            return
+        import apex_hunt_engine as _ahe
+        state   = _signals.state
+        signals = _ahe.detect_apex_signals(state)
+        basket  = _ahe.get_live_basket_state(state)
+        _ws({
+            "type":    "apex_hunt",
+            "signals": signals,
+            "basket":  basket,
+            "all":     _ahe.get_live_signals(),
+            "ts":      time.time(),
+        })
+    except Exception as e:
+        logger.warning("job_apex_hunt: %s", e)
+
+
 # â”€â”€â”€ JOB: DAILY KITE TOKEN REFRESH (7:55 AM IST, Monâ€“Fri) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _send_token_manual_action_alert(reason: str, detail: str = "") -> None:
     """Send a throttled Telegram alert when auto refresh cannot recover."""
@@ -1218,12 +1239,14 @@ def job_token_refresh(reason: str = "scheduled"):
 def job_token_health_watchdog():
     """
     Silent health precheck: if Kite session is invalid, auto-recover immediately.
-    Runs every few minutes during active daytime windows.
+    Runs every few minutes on session weekdays (wider window so post-close
+    backtests / late restarts still trigger auto_token instead of waiting until morning).
     """
     if not is_market_session_day():
         return
     now_ist = datetime.now(IST)
-    if now_ist.hour < 7 or now_ist.hour > 15:
+    # 06:00–22:59 IST: covers pre-open prep through evening Kite usage (was 07–15 only).
+    if now_ist.hour < 6 or now_ist.hour > 22:
         return
     try:
         from feed import get_kite
@@ -1378,6 +1401,7 @@ def build_scheduler() -> BackgroundScheduler:
     sched.add_job(job_stocks,        "interval", seconds=30,  id="stocks")
     sched.add_job(job_fii,           "interval", seconds=300, id="fii")
     sched.add_job(job_spikes,        "interval", seconds=10,  id="spikes")
+    sched.add_job(job_apex_hunt,     "interval", seconds=20,  id="apex_hunt")
     sched.add_job(job_confluence_idle, "interval", seconds=45, id="confluence_idle")
     # Proactive token refresh slots before market + mid-session safety.
     # Large misfire_grace_time: if the host wakes late, jobs still run.

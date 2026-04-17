@@ -508,7 +508,7 @@ PRIME_STRIKE_CONFIG: dict = {
     "precision_hi_only":  False,
     "precision_chg_min":  0.0,
     "precision_chg_max":  0.0,
-    "chg_min_pct":         0.09,
+    "chg_min_pct":         0.07,
     "chg_max_pct":         0.40,
     "chg_hi_strength_pct": 0.20,
     # â”€â”€ Direction lock â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -516,7 +516,7 @@ PRIME_STRIKE_CONFIG: dict = {
     "confirm_bars_n":    1,
     # â”€â”€ Trend filter (30-min) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     "trend_support_min_pct": 0.03,
-    "trend_against_pct":     0.20,
+    "trend_against_pct":     0.22,
     # â”€â”€ 15-min confluence (10-min lookback, lower threshold) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     "hunt_15m_sec":     600,    # 10-min lookback (achievable in calm sessions)
     "hunt_15m_min_pct": 0.022,  # ~5pt on NIFTY@24000 in 10 min
@@ -529,19 +529,19 @@ PRIME_STRIKE_CONFIG: dict = {
     # â”€â”€ Micro-step â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     "micro_step_min_pct": 0.010,
     # â”€â”€ Quality floor (main selectivity lever without precision_boost) â”€â”€â”€â”€â”€â”€â”€â”€
-    "quality_floor":         56,
+    "quality_floor":         52,
     "precision_min_quality":  0,   # disabled (precision_boost=False)
     # â”€â”€ Dedup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    "dedup_minutes": 30,
+    "dedup_minutes": 26,
     # â”€â”€ Daily pick (best-ranked signals, time-spaced â‰¥40 min) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     "daily_pick_enabled":       True,
     "daily_pick_min_per_symbol": 1,
     "daily_pick_max_per_symbol": 3,
-    "daily_pick_gap_minutes":   40,
+    "daily_pick_gap_minutes":   32,
     "daily_pick_use_ml_score":  True,
     # â”€â”€ R:R â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    "opt_t1_mult": 1.30,
-    "opt_sl_mult": 0.78,
+    "opt_t1_mult": 1.24,
+    "opt_sl_mult": 0.82,
     "opt_t2_mult": 1.70,
     # â”€â”€ Outcome simulation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     "outcome_t1_index_pct": 0.10,
@@ -551,11 +551,40 @@ PRIME_STRIKE_CONFIG: dict = {
     "ml_filter_enabled": False,
     "ml_min_win_prob":   0.65,
     # â”€â”€ Daily limits â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    "max_signals_per_day": 3,
-    "max_consec_sl":       2,
+    "max_signals_per_day": 2,
+    "max_signals_per_day_total": 3,
+    "max_consec_sl":       1,
     # â”€â”€ Tier thresholds â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     "tier_full_min_quality": 80,
     "tier_half_min_quality": 64,
+}
+
+# ADV PRIME STRIKE V2 — dual-book + regime exits + day risk brakes (backtest/report only unless wired live).
+# Merges on top of PRIME_STRIKE_CONFIG inside main._run_adv_prime_strike_v2_core.
+ADV_PRIME_STRIKE_V2_CONFIG: dict = {
+    # Regime: VIX from DB; missing VIX → noisy (conservative).
+    "vix_calm_max": 15.5,
+    "calm_outcome_t1_index_pct": 0.09,
+    "calm_outcome_sl_index_pct": 0.22,
+    "noisy_outcome_t1_index_pct": 0.105,
+    "noisy_outcome_sl_index_pct": 0.255,
+    "calm_opt_t1_mult": 1.22,
+    "calm_opt_sl_mult": 0.84,
+    "noisy_opt_t1_mult": 1.26,
+    "noisy_opt_sl_mult": 0.80,
+    # Noisy days: raise quality floor slightly (reduces chop SL without killing B-book).
+    "noisy_extra_quality_floor": 4,
+    # A-book: fewer, higher-conviction (quality + strength).
+    "a_min_quality": 74,
+    "a_require_hi_strength": True,
+    "a_max_per_symbol": 2,
+    "a_pick_gap_minutes": 28,
+    # B-book: flow / remainder, time-spaced from A picks.
+    "b_max_per_symbol": 2,
+    "b_pick_gap_minutes": 22,
+    # Day brakes (1-lot normalized cumulative PnL for that calendar day across processed symbols).
+    "day_max_loss_1lot": 4500,
+    "day_stop_after_sl_streak": 2,
 }
 
 # â”€â”€â”€ SWING RADAR (positional picks â€” scheduler â†’ log_swing_radar_triggers + UI carousel) â”€
@@ -596,6 +625,35 @@ SWING_RADAR = {
     "pullback_short_min_rank_score": 0,
     "blocked_symbols": [],
 }
+
+# â”€â”€â”€ ADV-SWING (Nifty 500 cash + strict overlay on SWING_RADAR in adv_swing_backtest) â”€
+ADV_SWING_RADAR = {
+    "min_score_log": 72,
+    "min_pc_log": 4,
+    "min_rr": 2.05,
+    "min_abs_chg_pct": 0.22,
+    "max_abs_chg_pct": 4.25,
+    "min_vol_ratio": 1.06,
+    "counter_trend_min_pc": 5,
+    "pcr_soft_min_pc": 5,
+    "vol_breakout_min": 1.14,
+    "vol_breakout_min_vix": 1.24,
+    "vix_extra_min_score": 4,
+    "no_trade_bypass_min_score": 82,
+    "no_trade_bypass_min_pc": 4,
+    "recovery_vol_min": 1.05,
+    "breakout_long_min_pc": 4,
+    "breakout_long_min_rs": 0.08,
+    "breakout_long_min_vol": 1.12,
+    "breakout_long_max_chg": 3.2,
+    "rs_long_min_vs_nifty": 0.08,
+    "rs_short_max_vs_nifty": -0.08,
+}
+ADV_SWING_CANDIDATE_LIMIT = 10
+ADV_SWING_MAX_FORWARD_DAYS = 20
+ADV_SWING_DEFAULT_RANGE_DAYS = 90
+ADV_SWING_MAX_RANGE_DAYS = 365
+ADV_SWING_KITE_SLEEP_SEC = 0.11
 
 # â”€â”€â”€ STRATEGY PROFILES (runtime switchable) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 _INDEX_RADAR_BASE = dict(INDEX_RADAR)

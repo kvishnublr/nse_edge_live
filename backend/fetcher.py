@@ -553,6 +553,10 @@ _nifty200_symbols_cache: list = []
 _nifty200_symbols_ts: float = 0.0
 _nifty200_token_cache: dict = {}
 _nifty200_token_ts: float = 0.0
+_nifty500_symbols_cache: list = []
+_nifty500_symbols_ts: float = 0.0
+_nifty500_token_cache: dict = {}
+_nifty500_token_ts: float = 0.0
 
 def _get_nfo_futures(kite) -> List[dict]:
     """Get near-month stock futures, cached 6 hours."""
@@ -704,6 +708,70 @@ def get_nifty200_kite_tokens(kite) -> Dict[str, int]:
         _nifty200_token_ts = time.time()
         logger.info(f"NIFTY 200 mapped to Kite tokens: {len(mapped)}")
     return _nifty200_token_cache
+
+
+def get_nifty500_symbols() -> List[str]:
+    """NIFTY 500 constituent symbols from NSE (cached 6h)."""
+    global _nifty500_symbols_cache, _nifty500_symbols_ts
+    if _nifty500_symbols_cache and time.time() - _nifty500_symbols_ts < 21600:
+        return list(_nifty500_symbols_cache)
+    best: List[str] = []
+    for q in ("NIFTY%20500", "NIFTY500"):
+        raw = _nse_get(f"{NSE_BASE}/api/equity-stockIndices?index={q}")
+        chunk: List[str] = []
+        try:
+            data = (raw or {}).get("data", []) if isinstance(raw, dict) else []
+            for r in data:
+                s = str((r or {}).get("symbol", "") or "").strip().upper()
+                if s and "NIFTY" not in s and s not in ("NIFTY500", "NIFTY 500"):
+                    chunk.append(s)
+            chunk = sorted(set(chunk))
+            if len(chunk) > len(best):
+                best = chunk
+        except Exception as e:
+            logger.warning("NIFTY500 symbol fetch parse failed (%s): %s", q, e)
+    syms = best
+    if not syms:
+        fb = get_nifty200_symbols()
+        if fb:
+            syms = list(fb)
+            logger.warning("NIFTY 500 API empty — falling back to NIFTY 200 list (%s names)", len(syms))
+    if syms:
+        _nifty500_symbols_cache = syms
+        _nifty500_symbols_ts = time.time()
+        logger.info("NIFTY 500 symbols loaded: %s", len(syms))
+    return list(_nifty500_symbols_cache or [])
+
+
+def get_nifty500_kite_tokens(kite) -> Dict[str, int]:
+    """Map NIFTY 500 symbols to Kite NSE equity instrument tokens (cached 6h)."""
+    global _nifty500_token_cache, _nifty500_token_ts
+    if _nifty500_token_cache and time.time() - _nifty500_token_ts < 21600:
+        return dict(_nifty500_token_cache)
+    symbols = get_nifty500_symbols()
+    if not symbols or kite is None:
+        return dict(_nifty500_token_cache)
+    try:
+        nse_inst = kite.instruments("NSE")
+    except Exception as e:
+        logger.warning("Kite NSE instruments failed for NIFTY500 mapping: %s", e)
+        return dict(_nifty500_token_cache)
+    by_sym: Dict[str, int] = {}
+    for i in nse_inst:
+        ts = str(i.get("tradingsymbol", "") or "").upper()
+        tok = i.get("instrument_token")
+        if ts and tok and i.get("instrument_type") == "EQ":
+            by_sym[ts] = int(tok)
+    mapped: Dict[str, int] = {}
+    for s in symbols:
+        t = by_sym.get(s)
+        if t:
+            mapped[s] = t
+    if mapped:
+        _nifty500_token_cache = mapped
+        _nifty500_token_ts = time.time()
+        logger.info("NIFTY 500 mapped to Kite EQ tokens: %s", len(mapped))
+    return dict(_nifty500_token_cache)
 
 
 # â”€â”€â”€ NIFTY 50 (constituents + weights for ADV INDEX) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

@@ -545,6 +545,7 @@ def swing_radar_candidates(
     _pass_count: int,
     min_score: int = 60,
     limit: int | None = 12,
+    swr_override: dict | None = None,
 ) -> list:
     """
     Core Swing Radar stock filtering (same rules as live persist). Returns up to 12 picks.
@@ -580,6 +581,12 @@ def swing_radar_candidates(
             "weak_symbol_penalty": 8,
             "recovery_vol_min": 1.0,
         }
+
+    if swr_override:
+        try:
+            SWR = {**SWR, **dict(swr_override)}
+        except Exception:
+            pass
 
     weak_syms: set[str] = set()
     probation_syms: set[str] = set()
@@ -1180,11 +1187,17 @@ def get_live_signal_history(
 
 
 def import_historical_spike_results(results: list):
-    """Backfill historical spike backtest results into live signal history."""
+    """Backfill historical spike backtest results into live signal history.
+
+    Rows are keyed by (trade_date, symbol, time, rounded entry, side). Existing
+    keys are updated so re-runs refresh outcomes; new keys are inserted.
+    Returns: {"inserted": int, "updated": int}
+    """
     if not results:
-        return 0
+        return {"inserted": 0, "updated": 0}
     conn = get_conn()
     inserted = 0
+    updated = 0
     try:
         for r in results:
             dt_raw = str(r.get("time", "") or "")
@@ -1204,34 +1217,98 @@ def import_historical_spike_results(results: list):
             pnl_pct = float(r.get("pnl_pct", 0) or 0)
             pnl_pts = round(entry * pnl_pct / 100, 2) if entry and pnl_pct else None
             signal_key = f"BACKFILL|{trade_date}|{symbol}|{signal_time}|{round(entry,2)}|{signal_type}"
-            exists = conn.execute("SELECT 1 FROM live_signal_history WHERE signal_key=?", (signal_key,)).fetchone()
-            if exists:
-                continue
-            now_ts = time.time()
-            conn.execute(
-                """
-                INSERT INTO live_signal_history
-                (signal_key, trade_date, symbol, signal_type, trigger, strength, signal_time,
-                 entry_price, stop_loss, target_price, exit_price, exit_time, status, outcome,
-                 pnl_pts, pnl_pct, hold_minutes, gate_pass_count, gate_snapshot, verdict,
-                 vix, pcr, created_ts, updated_ts)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                """,
-                (
-                    signal_key, trade_date, symbol, signal_type,
-                    f"Price {float(r.get('chg_pct', 0) or 0):+.2f}% Â· Vol {float(r.get('vol_mult', 0) or 0):.1f}x",
-                    "hi" if result == "HIT_T2" or float(r.get("score", 0) or 0) >= 70 else "md" if float(r.get("score", 0) or 0) >= 55 else "lo",
-                    signal_time, entry, sl, t2 or t1, exit_price,
-                    signal_time if exit_price is not None else None,
-                    "CLOSED", outcome, pnl_pts, pnl_pct, 45, None, "{}", "BACKFILLED",
-                    None, None, now_ts, now_ts,
-                )
+            trig = (
+                f"Price {float(r.get('chg_pct', 0) or 0):+.2f}% · Vol {float(r.get('vol_mult', 0) or 0):.1f}x"
             )
-            inserted += 1
+            strength = (
+                "hi"
+                if result == "HIT_T2" or float(r.get("score", 0) or 0) >= 70
+                else "md"
+                if float(r.get("score", 0) or 0) >= 55
+                else "lo"
+            )
+            exit_time = signal_time if exit_price is not None else None
+            now_ts = time.time()
+            exists = conn.execute(
+                "SELECT id FROM live_signal_history WHERE signal_key=?",
+                (signal_key,),
+            ).fetchone()
+            if exists:
+                conn.execute(
+                    """
+                    UPDATE live_signal_history SET
+                        trade_date=?, symbol=?, signal_type=?, trigger=?, strength=?,
+                        signal_time=?, entry_price=?, stop_loss=?, target_price=?,
+                        exit_price=?, exit_time=?, status=?, outcome=?,
+                        pnl_pts=?, pnl_pct=?, hold_minutes=?, verdict=?,
+                        updated_ts=?
+                    WHERE signal_key=?
+                    """,
+                    (
+                        trade_date,
+                        symbol,
+                        signal_type,
+                        trig,
+                        strength,
+                        signal_time,
+                        entry,
+                        sl,
+                        t2 or t1,
+                        exit_price,
+                        exit_time,
+                        "CLOSED",
+                        outcome,
+                        pnl_pts,
+                        pnl_pct,
+                        45,
+                        "BACKFILLED",
+                        now_ts,
+                        signal_key,
+                    ),
+                )
+                updated += 1
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO live_signal_history
+                    (signal_key, trade_date, symbol, signal_type, trigger, strength, signal_time,
+                     entry_price, stop_loss, target_price, exit_price, exit_time, status, outcome,
+                     pnl_pts, pnl_pct, hold_minutes, gate_pass_count, gate_snapshot, verdict,
+                     vix, pcr, created_ts, updated_ts)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        signal_key,
+                        trade_date,
+                        symbol,
+                        signal_type,
+                        trig,
+                        strength,
+                        signal_time,
+                        entry,
+                        sl,
+                        t2 or t1,
+                        exit_price,
+                        exit_time,
+                        "CLOSED",
+                        outcome,
+                        pnl_pts,
+                        pnl_pct,
+                        45,
+                        None,
+                        "{}",
+                        "BACKFILLED",
+                        None,
+                        None,
+                        now_ts,
+                        now_ts,
+                    ),
+                )
+                inserted += 1
         conn.commit()
     finally:
         conn.close()
-    return inserted
+    return {"inserted": inserted, "updated": updated}
 
 
 def get_signal_accuracy_filters():

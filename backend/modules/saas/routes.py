@@ -1389,6 +1389,7 @@ def init_saas_db() -> None:
             "notify_whatsapp": "INTEGER NOT NULL DEFAULT 0",
             "notify_token_reminder": "INTEGER NOT NULL DEFAULT 1",
             "last_token_reminder_at": "TEXT",
+            "risk_lock_ist_date": "TEXT DEFAULT ''",
         }
         for name, spec in missing_user_cols.items():
             if name not in have:
@@ -2263,6 +2264,7 @@ def _queue_auto_execution(user_id: int, user_email: str, strategy_code: str, sig
 
 
 def _public_user(conn: sqlite3.Connection, user_id: int) -> dict[str, Any]:
+    _clear_stale_risk_lock(conn, user_id)
     row = _user_row(conn, user_id)
     if row is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -2297,7 +2299,14 @@ def _public_user(conn: sqlite3.Connection, user_id: int) -> dict[str, Any]:
             "coupon_profit_cap": round(float(row["coupon_profit_cap"] or COUPON_PROFIT_CAP), 2),
         },
         "subscription": {"plan_code": sub["plan_code"] if sub else None, "status": sub["status"] if sub else "NONE", "expires_at": sub["expires_at"] if sub else None, "amount": float(sub["amount"] or 0) if sub else 0},
-        "controls": {"daily_loss_limit": float(row["daily_loss_limit"] or 0), "max_trades_per_day": int(row["max_trades_per_day"] or 0), "max_open_signals": int(row["max_open_signals"] or 0), "profit_share_pct": float(row["profit_share_pct"] or 0), "auto_execute": bool(row["auto_execute"] or 0)},
+        "controls": {
+            "daily_loss_limit": float(row["daily_loss_limit"] or 0),
+            "max_trades_per_day": int(row["max_trades_per_day"] or 0),
+            "max_open_signals": int(row["max_open_signals"] or 0),
+            "profit_share_pct": float(row["profit_share_pct"] or 0),
+            "auto_execute": bool(row["auto_execute"] or 0),
+            **_risk_control_public_fields(conn, user_id, row),
+        },
         "unread_signals": unread,
         "notes": row["notes"] or "",
         "created_at": row["created_at"],
@@ -2380,7 +2389,93 @@ def _maybe_block_coupon_wallet(conn: sqlite3.Connection, user_id: int) -> None:
     conn.execute("UPDATE saas_users SET status='LIMITED', updated_at=? WHERE id=?", (now, user_id))
 
 
+def _row_col(row: sqlite3.Row, key: str, default: Any = None) -> Any:
+    try:
+        return row[key]
+    except (KeyError, IndexError, TypeError):
+        return default
+
+
+def _clear_stale_risk_lock(conn: sqlite3.Connection, user_id: int) -> None:
+    row = conn.execute("SELECT risk_lock_ist_date FROM saas_users WHERE id=?", (user_id,)).fetchone()
+    if row is None:
+        return
+    lock = str(_row_col(row, "risk_lock_ist_date", "") or "").strip()[:10]
+    today = _today_ist().isoformat()
+    if lock and lock < today:
+        conn.execute("UPDATE saas_users SET risk_lock_ist_date='', updated_at=? WHERE id=?", (_utc_iso(), user_id))
+
+
+def _today_journal_pnl_sum_ist(conn: sqlite3.Connection, user_id: int) -> float:
+    today = _today_ist().isoformat()
+    return float(
+        conn.execute(
+            "SELECT COALESCE(SUM(pnl),0) FROM saas_trade_journal WHERE user_id=? AND substr(opened_at,1,10)=?",
+            (user_id, today),
+        ).fetchone()[0]
+        or 0
+    )
+
+
+def _liquidate_open_trades_for_risk(conn: sqlite3.Connection, user_id: int) -> int:
+    """Close all OPEN desk journal rows at flat (exit = entry, pnl 0). Live exchange exits are separate."""
+    now = _utc_iso()
+    rows = conn.execute(
+        "SELECT id, entry_price FROM saas_trade_journal WHERE user_id=? AND UPPER(IFNULL(status,''))='OPEN'",
+        (user_id,),
+    ).fetchall()
+    n = 0
+    for r in rows:
+        tid = int(r["id"])
+        ep = float(r["entry_price"] or 0)
+        conn.execute(
+            "UPDATE saas_trade_journal SET exit_price=?, pnl=0, status='CLOSED', closed_at=?, notes=COALESCE(notes,'') || ?, updated_at=? WHERE id=? AND user_id=?",
+            (ep, now, " | MAX-DAILY-LOSS flatten (desk)", now, tid, user_id),
+        )
+        n += 1
+    return n
+
+
+def _apply_daily_max_loss_if_breached(conn: sqlite3.Connection, user_id: int) -> dict[str, Any]:
+    """
+    When today's summed journal PnL (opened today, IST) <= -daily_loss_limit:
+    flatten all OPEN rows and set risk_lock_ist_date to today (IST) so no further signals/auto-exec that day.
+    """
+    row = _user_row(conn, user_id)
+    if row is None:
+        return {"ok": False, "reason": "no-user"}
+    _clear_stale_risk_lock(conn, user_id)
+    row = _user_row(conn, user_id)
+    if row is None:
+        return {"ok": False, "reason": "no-user"}
+    today = _today_ist().isoformat()
+    lock = str(_row_col(row, "risk_lock_ist_date", "") or "").strip()[:10]
+    if lock == today:
+        return {"ok": True, "state": "already_locked"}
+    daily_loss = float(row["daily_loss_limit"] or 0)
+    if daily_loss <= 0:
+        return {"ok": True, "state": "no_limit"}
+    pnl = _today_journal_pnl_sum_ist(conn, user_id)
+    if pnl > -abs(daily_loss):
+        return {"ok": True, "state": "under_limit", "today_pnl": pnl}
+    nflat = _liquidate_open_trades_for_risk(conn, user_id)
+    conn.execute("UPDATE saas_users SET risk_lock_ist_date=?, updated_at=? WHERE id=?", (today, _utc_iso(), user_id))
+    return {"ok": True, "state": "locked", "flattened": nflat, "today_pnl": pnl}
+
+
+def _risk_control_public_fields(conn: sqlite3.Connection, user_id: int, row: sqlite3.Row) -> dict[str, Any]:
+    today = _today_ist().isoformat()
+    lock = str(_row_col(row, "risk_lock_ist_date", "") or "").strip()[:10]
+    tp = round(_today_journal_pnl_sum_ist(conn, user_id), 2)
+    return {
+        "risk_lock_ist_date": lock,
+        "risk_day_locked": lock == today,
+        "today_journal_pnl": tp,
+    }
+
+
 def _can_receive(conn: sqlite3.Connection, user_id: int, strategy_code: str, confidence: float) -> tuple[bool, str]:
+    _clear_stale_risk_lock(conn, user_id)
     row = _user_row(conn, user_id)
     if row is None:
         return False, "user-missing"
@@ -2388,12 +2483,15 @@ def _can_receive(conn: sqlite3.Connection, user_id: int, strategy_code: str, con
         return False, "user-inactive"
     if str(row["wallet_status"] or "ACTIVE").upper() == "BLOCKED":
         return False, "wallet-blocked"
+    today = _today_ist().isoformat()
+    lock = str(_row_col(row, "risk_lock_ist_date", "") or "").strip()[:10]
+    if lock == today:
+        return False, "day-risk-lock"
     strat = conn.execute("SELECT us.*, s.active FROM saas_user_strategies us JOIN saas_strategies s ON s.code=us.strategy_code WHERE us.user_id=? AND us.strategy_code=?", (user_id, strategy_code)).fetchone()
     if strat is None or not int(strat["enabled"] or 0) or not int(strat["active"] or 0):
         return False, "strategy-disabled"
     if float(confidence or 0) < float(strat["min_confidence"] or 0):
         return False, "low-confidence"
-    today = _today_ist().isoformat()
     max_trades = int(strat["max_trades_per_day"] or row["max_trades_per_day"] or 0)
     if max_trades > 0:
         traded = int(conn.execute("SELECT COUNT(*) FROM saas_trade_journal WHERE user_id=? AND strategy_code=? AND substr(opened_at,1,10)=?", (user_id, strategy_code, today)).fetchone()[0] or 0)
@@ -2401,8 +2499,9 @@ def _can_receive(conn: sqlite3.Connection, user_id: int, strategy_code: str, con
             return False, "trade-limit"
     daily_loss = float(row["daily_loss_limit"] or 0)
     if daily_loss > 0:
-        pnl = float(conn.execute("SELECT COALESCE(SUM(pnl),0) FROM saas_trade_journal WHERE user_id=? AND substr(opened_at,1,10)=?", (user_id, today)).fetchone()[0] or 0)
+        pnl = _today_journal_pnl_sum_ist(conn, user_id)
         if pnl <= -abs(daily_loss):
+            _apply_daily_max_loss_if_breached(conn, user_id)
             return False, "daily-loss-hit"
     return True, "ok"
 
@@ -3863,6 +3962,7 @@ async def user_trade_create(request: Request, authorization: Optional[str] = Hea
                 now,
             ),
         )
+        _apply_daily_max_loss_if_breached(conn, int(user["id"]))
         conn.commit()
         return {"ok": True, "trade_id": int(cur.lastrowid)}
     finally:
@@ -3907,6 +4007,7 @@ async def user_trade_update(trade_id: int, request: Request, authorization: Opti
                 int(user["id"]),
             ),
         )
+        _apply_daily_max_loss_if_breached(conn, int(user["id"]))
         conn.commit()
         return {"ok": True, "performance": _performance_snapshot(conn, int(user["id"])), "wallet": _wallet_snapshot(conn, int(user["id"]))}
     finally:

@@ -402,7 +402,7 @@ app.mount("/frontend-static", StaticFiles(directory=os.path.abspath(FRONTEND_DIR
 @app.get("/")
 async def serve_frontend(request: Request):
     # Kite often redirects to http://127.0.0.1:PORT/?request_token=… (app root). Forward to OAuth
-    # callback so the popup can postMessage to Nexus and close.
+    # callback so the popup can postMessage to opener and close itself.
     if request.query_params.get("request_token"):
         q = request.url.query
         return RedirectResponse(url=f"/kite-oauth-return?{q}", status_code=307)
@@ -411,6 +411,46 @@ async def serve_frontend(request: Request):
     resp.headers["Pragma"] = "no-cache"
     resp.headers["Expires"] = "0"
     return resp
+
+
+from fastapi.responses import HTMLResponse
+
+@app.get("/kite-oauth-return")
+async def kite_oauth_return(request: Request):
+    """Kite OAuth callback page — auto-extracts request_token, postMessages to opener, closes."""
+    rt  = request.query_params.get("request_token", "")
+    st  = request.query_params.get("status", "")
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Kite Login</title>
+<style>
+  body{{font-family:monospace;background:#0f1117;color:#e2e8f0;
+       display:flex;align-items:center;justify-content:center;
+       height:100vh;margin:0;flex-direction:column;gap:14px;text-align:center}}
+  .ok{{color:#10b981;font-size:28px}}
+  .err{{color:#ef4444;font-size:20px}}
+  .sub{{font-size:12px;color:#64748b}}
+</style></head><body>
+<script>
+(function(){{
+  var q = new URLSearchParams(window.location.search);
+  var rt = q.get('request_token') || '{rt}';
+  var st = q.get('status') || '{st}';
+  if(rt){{
+    if(window.opener){{
+      try{{ window.opener.postMessage({{type:'kite_oauth_token',request_token:rt,status:st}},'*'); }}catch(e){{}}
+    }}
+    document.body.innerHTML = '<div class="ok">✓</div><div>Login successful — token captured!</div><div class="sub">This window will close in 2 seconds…</div>';
+    setTimeout(function(){{ try{{window.close();}}catch(e){{}} }}, 2000);
+  }} else {{
+    document.body.innerHTML = '<div class="err">⚠ No request_token found</div><div class="sub">'+window.location.search+'</div>';
+  }}
+}})();
+</script>
+<div class="ok">✓</div>
+<div>Kite login successful — applying token…</div>
+<div class="sub">This window will close automatically</div>
+</body></html>"""
+    return HTMLResponse(content=html)
 
 
 @app.get("/admin")
@@ -1252,24 +1292,158 @@ async def index_signals_backtest(request: Request):
 
 
 # ─── PRIME STRIKES BACKTEST ───────────────────────────────────────────────────
-@app.post("/api/prime-strikes/backtest")
-async def prime_strikes_backtest(request: Request):
-    """
-    PRIME STRIKE — 3-layer confirmed intraday option-buying backtest.
-    VIX hard gate + PCR alignment + 5m momentum + quality-tier lot sizing.
-    In-memory only — not written to DB.
-    """
-    import datetime as _dt, traceback as _tb, sqlite3 as _sq
+def _kite_historical_chunked(kite, instrument_token: int, from_date: str, to_date: str, interval: str = "minute", chunk_days: int = 55):
+    start = datetime.datetime.strptime(str(from_date), "%Y-%m-%d").date()
+    end = datetime.datetime.strptime(str(to_date), "%Y-%m-%d").date()
+    if end < start:
+        return []
+    rows = []
+    seen = set()
+    cur = start
+    while cur <= end:
+        chunk_end = min(cur + datetime.timedelta(days=max(1, int(chunk_days)) - 1), end)
+        part = kite.historical_data(instrument_token, cur.isoformat(), chunk_end.isoformat(), interval) or []
+        for candle in part:
+            dtv = candle.get("date")
+            key = dtv.isoformat() if hasattr(dtv, "isoformat") else str(dtv)
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(candle)
+        cur = chunk_end + datetime.timedelta(days=1)
+    rows.sort(key=lambda x: x.get("date"))
+    return rows
+
+
+def _prime_bucket_stats(trades):
+    resolved = [t for t in trades if t["outcome"] in ("HIT_T1", "HIT_SL")]
+    wins = sum(1 for t in resolved if t["outcome"] == "HIT_T1")
+    gross_win = sum(float(t.get("pnl_1lot") or 0) for t in resolved if float(t.get("pnl_1lot") or 0) > 0)
+    gross_loss = -sum(float(t.get("pnl_1lot") or 0) for t in resolved if float(t.get("pnl_1lot") or 0) < 0)
+    return {
+        "total": len(trades),
+        "resolved": len(resolved),
+        "wins": wins,
+        "losses": len(resolved) - wins,
+        "wr": round(wins / len(resolved) * 100) if resolved else 0,
+        "pnl": round(sum(float(t.get("pnl") or 0) for t in trades)),
+        "pnl_1lot": round(sum(float(t.get("pnl_1lot") or 0) for t in trades)),
+        "profit_factor_1lot": round(gross_win / gross_loss, 2) if gross_loss > 0 else (round(gross_win, 2) if gross_win > 0 else 0),
+    }
+
+
+def _prime_max_drawdown_1lot(trades):
+    curve = 0.0
+    peak = 0.0
+    max_dd = 0.0
+    for t in sorted(trades, key=lambda x: (x.get("date") or "", x.get("time") or "")):
+        curve += float(t.get("pnl_1lot") or 0)
+        if curve > peak:
+            peak = curve
+        max_dd = max(max_dd, peak - curve)
+    return round(max_dd)
+
+
+def _summarize_prime_trades(trades, from_date: str, to_date: str, *, strategy_name: str):
     from collections import defaultdict
 
-    body = await request.json()
-    from_date = body.get("from_date", (_dt.date.today() - _dt.timedelta(days=30)).isoformat())
-    to_date   = body.get("to_date",   _dt.date.today().isoformat())
+    resolved = [t for t in trades if t["outcome"] in ("HIT_T1", "HIT_SL")]
+    wins = sum(1 for t in resolved if t["outcome"] == "HIT_T1")
+    net_pnl = round(sum(float(t.get("pnl") or 0) for t in trades))
+    net_pnl_1lot = round(sum(float(t.get("pnl_1lot") or 0) for t in trades))
+    gross_win = sum(float(t.get("pnl_1lot") or 0) for t in resolved if float(t.get("pnl_1lot") or 0) > 0)
+    gross_loss = -sum(float(t.get("pnl_1lot") or 0) for t in resolved if float(t.get("pnl_1lot") or 0) < 0)
+    active_days = sorted({t["date"] for t in trades})
+    day_counts = defaultdict(int)
+    month_totals = defaultdict(float)
+    for t in trades:
+        day_counts[t["date"]] += 1
+        month_totals[str(t["date"])[:7]] += float(t.get("pnl_1lot") or 0)
 
-    # ── imports ──
+    def _vbkt(t):
+        v = t["vix"]
+        if not v:
+            return "no_data"
+        if v < 13:
+            return "<13"
+        if v < 16:
+            return "13-16"
+        if v < 17:
+            return "16-17"
+        return ">17"
+
+    window_stats = {k: _prime_bucket_stats([t for t in trades if t["window"] == k]) for k in ("W1", "W2", "W3")}
+    window_stats["W1"]["label"] = "10:00-11:00 (best)"
+    window_stats["W2"]["label"] = "11:00-12:00"
+    window_stats["W3"]["label"] = "12:00-13:00"
+    vix_stats = {k: _prime_bucket_stats([t for t in trades if _vbkt(t) == k]) for k in ("<13", "13-16", "16-17", ">17", "no_data")}
+    tier_stats = {k: _prime_bucket_stats([t for t in trades if t["tier"] == k]) for k in ("FULL", "HALF")}
+    type_stats = {k: _prime_bucket_stats([t for t in trades if t["type"] == k]) for k in ("CE", "PE")}
+
+    try:
+        from trading_policy import index_hunt_walk_forward_stats
+        walk_forward = index_hunt_walk_forward_stats(
+            [{"trade_date": t["date"], "outcome": t["outcome"]} for t in trades]
+        )
+    except Exception:
+        walk_forward = {"ok": False}
+
+    return {
+        "strategy": strategy_name,
+        "total": len(trades),
+        "resolved": len(resolved),
+        "wins": wins,
+        "losses": len(resolved) - wins,
+        "win_rate": round(wins / len(resolved) * 100) if resolved else 0,
+        "accuracy": round(wins / len(resolved) * 100, 2) if resolved else 0.0,
+        "net_pnl": net_pnl,
+        "net_pnl_1lot": net_pnl_1lot,
+        "avg_pnl_per_trade_1lot": round(net_pnl_1lot / len(trades), 2) if trades else 0.0,
+        "profit_factor_1lot": round(gross_win / gross_loss, 2) if gross_loss > 0 else (round(gross_win, 2) if gross_win > 0 else 0),
+        "max_drawdown_1lot": _prime_max_drawdown_1lot(trades),
+        "trade_days": len(active_days),
+        "avg_trades_per_active_day": round(len(trades) / len(active_days), 2) if active_days else 0.0,
+        "max_trades_in_a_day": max(day_counts.values()) if day_counts else 0,
+        "best_month_1lot": round(max(month_totals.values()), 2) if month_totals else 0.0,
+        "worst_month_1lot": round(min(month_totals.values()), 2) if month_totals else 0.0,
+        "from": from_date,
+        "to": to_date,
+        "trades": trades,
+        "window_stats": window_stats,
+        "vix_stats": vix_stats,
+        "tier_stats": tier_stats,
+        "type_stats": type_stats,
+        "walk_forward": walk_forward,
+        "note": (
+            f"{strategy_name}: buying-only intraday index options | VIX day gate | PCR align | "
+            "10:00-13:00 | session lock | confirm bars | 15m hunt | max 3 signals/day. "
+            "Report includes normalized 1-lot P&L and max drawdown."
+            + (
+                " V2: A/B books (Bk), calm/noisy regime (Rg), day max-loss + SL-streak halt."
+                if "V2" in str(strategy_name).upper()
+                else ""
+            )
+        ),
+    }
+
+
+def _adv_prime_period_reports(trades, to_date: str):
+    end_dt = datetime.datetime.strptime(str(to_date), "%Y-%m-%d").date()
+    out = {}
+    for label, days in (("1m", 30), ("3m", 90), ("6m", 180), ("1y", 365)):
+        from_dt = end_dt - datetime.timedelta(days=days - 1)
+        subset = [t for t in trades if from_dt.isoformat() <= str(t.get("date")) <= end_dt.isoformat()]
+        out[label] = _summarize_prime_trades(subset, from_dt.isoformat(), end_dt.isoformat(), strategy_name="ADV PRIME STRIKE")
+    return out
+
+
+def _run_prime_strike_backtest_core(from_date: str, to_date: str, *, strategy_name: str = "PRIME STRIKE"):
+    import traceback as _tb
+    import sqlite3 as _sq
+    from collections import defaultdict
+
     try:
         from config import PRIME_STRIKE_CONFIG, _INDEX_RADAR_BASE
-        from trading_policy import index_hunt_walk_forward_stats
         from index_radar_logic import (
             build_minute_close_map, cm_from_candle, daily_pick_select,
             index_hunt_candidate_score, index_radar_quality, passes_index_radar_1m,
@@ -1278,106 +1452,97 @@ async def prime_strikes_backtest(request: Request):
         PS.update(PRIME_STRIKE_CONFIG)
     except Exception as e:
         logger.error("prime_strikes_backtest import/config error: %s", e)
-        return JSONResponse({"error": f"Config error: {e}"}, status_code=500)
+        raise RuntimeError(f"Config error: {e}") from e
 
-    # ── kite ──
     try:
         from feed import get_kite
         kite = get_kite()
         if not kite:
-            return JSONResponse({"error": "Kite not available — check token"}, status_code=503)
+            raise RuntimeError("Kite not available - check token")
     except Exception as e:
-        return JSONResponse({"error": f"Kite error: {e}"}, status_code=503)
+        raise RuntimeError(f"Kite error: {e}") from e
 
-    # ── DB (VIX + PCR lookup) ──
     try:
         db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "backtest.db")
         conn = _sq.connect(db_path)
     except Exception as e:
-        return JSONResponse({"error": f"DB error: {e}"}, status_code=500)
+        raise RuntimeError(f"DB error: {e}") from e
 
     NIFTY_TOK = 256265
-    BN_TOK    = 260105
-    CONFIGS   = [("NIFTY", NIFTY_TOK, 25, 50), ("BANKNIFTY", BN_TOK, 15, 100)]
-
-    t_win0    = int(PS.get("time_start_min", 600))
-    t_win1    = int(PS.get("time_end_min",   780))
-    _t1_th    = float(PS.get("outcome_t1_index_pct", 0.10))
-    _sl_th    = float(PS.get("outcome_sl_index_pct", 0.24))
-    use_hl    = bool(PS.get("outcome_use_hl", True))
+    BN_TOK = 260105
+    CONFIGS = [("NIFTY", NIFTY_TOK, 25, 50), ("BANKNIFTY", BN_TOK, 15, 100)]
+    t_win0 = int(PS.get("time_start_min", 600))
+    t_win1 = int(PS.get("time_end_min", 780))
+    _t1_th = float(PS.get("outcome_t1_index_pct", 0.10))
+    _sl_th = float(PS.get("outcome_sl_index_pct", 0.24))
+    use_hl = bool(PS.get("outcome_use_hl", True))
     tier_full = int(PS.get("tier_full_min_quality", 80))
     tier_half = int(PS.get("tier_half_min_quality", 64))
-    max_day   = int(PS.get("max_signals_per_day", 3))
-    max_csl   = int(PS.get("max_consec_sl", 2))
-    all_trades: list = []
-    flt: dict = defaultdict(int)
+    max_day = int(PS.get("max_signals_per_day", 3))
+    max_day_total = int(PS.get("max_signals_per_day_total", max_day))
+    max_csl = int(PS.get("max_consec_sl", 2))
+    all_trades = []
+    global_day_counts = defaultdict(int)
+    flt = defaultdict(int)
 
     try:
-        # ── pre-fetch Nifty 1-min for cross-index + PE day % ──
-        nifty_by_date: dict = defaultdict(list)
+        nifty_by_date = defaultdict(list)
         try:
-            _nh = kite.historical_data(NIFTY_TOK, from_date, to_date, "minute")
+            _nh = _kite_historical_chunked(kite, NIFTY_TOK, from_date, to_date, "minute")
         except Exception:
             _nh = []
         for c in (_nh or []):
             nifty_by_date[c["date"].date().isoformat()].append(c)
         nifty_days = sorted(nifty_by_date.keys())
-        nifty_prev: dict = {}
-        nifty_min:  dict = {}
+        nifty_prev = {}
+        nifty_min = {}
         for di, dk in enumerate(nifty_days):
             if di > 0:
-                nifty_prev[dk] = float(nifty_by_date[nifty_days[di-1]][-1]["close"] or 0)
+                nifty_prev[dk] = float(nifty_by_date[nifty_days[di - 1]][-1]["close"] or 0)
             nifty_min[dk] = build_minute_close_map(nifty_by_date[dk])
 
-        bn_by_date: dict = defaultdict(list)
+        bn_by_date = defaultdict(list)
         try:
-            _bh = kite.historical_data(BN_TOK, from_date, to_date, "minute")
+            _bh = _kite_historical_chunked(kite, BN_TOK, from_date, to_date, "minute")
         except Exception:
             _bh = []
         for c in (_bh or []):
             bn_by_date[c["date"].date().isoformat()].append(c)
-        bn_min: dict = {dk: build_minute_close_map(bn_by_date[dk]) for dk in bn_by_date}
+        bn_min = {dk: build_minute_close_map(bn_by_date[dk]) for dk in bn_by_date}
 
-        # ── main loop ──
         for sym, tok, lot_sz, step in CONFIGS:
             try:
-                candles = kite.historical_data(tok, from_date, to_date, "minute")
+                candles = _kite_historical_chunked(kite, tok, from_date, to_date, "minute")
             except Exception:
                 continue
             if not candles:
                 continue
 
-            by_day: dict = defaultdict(list)
+            by_day = defaultdict(list)
             for c in candles:
                 by_day[c["date"].date().isoformat()].append(c)
 
             for day, day_c in sorted(by_day.items()):
-                mkt = sorted(
-                    [c for c in day_c if t_win0 <= cm_from_candle(c) <= t_win1],
-                    key=lambda x: x["date"]
-                )
+                mkt = sorted([c for c in day_c if t_win0 <= cm_from_candle(c) <= t_win1], key=lambda x: x["date"])
                 if len(mkt) < 15:
                     continue
 
-                # VIX + PCR from DB
                 vr = conn.execute("SELECT vix FROM vix_daily WHERE date=?", (day,)).fetchone()
                 vix_d = float(vr[0]) if vr and vr[0] is not None else 0.0
                 pr = conn.execute("SELECT pcr FROM chain_daily WHERE date=?", (day,)).fetchone()
                 pcr_d = float(pr[0]) if pr and pr[0] else 1.0
 
-                # Hard VIX day block (only when we actually have VIX data)
                 vix_block = float(PS.get("vix_block_above", 17.0))
                 if vix_d > 0 and vix_d >= vix_block:
                     flt["vix_day_blocked"] += 1
                     continue
 
                 npc = nifty_prev.get(day, 0.0)
-                nm  = nifty_min.get(day, {})
-
-                pool: list = []
+                nm = nifty_min.get(day, {})
+                pool = []
                 for idx, c in enumerate(mkt):
                     cm_i = cm_from_candle(c)
-                    px   = float(c.get("close") or 0)
+                    px = float(c.get("close") or 0)
                     if not px:
                         continue
                     flt["bars_scanned"] += 1
@@ -1388,19 +1553,17 @@ async def prime_strikes_backtest(request: Request):
                     cross = None
                     if sym == "NIFTY":
                         bm = bn_min.get(day, {})
-                        x0, x1 = bm.get(cm_i-5), bm.get(cm_i)
+                        x0, x1 = bm.get(cm_i - 5), bm.get(cm_i)
                         if x0 and x1:
-                            cross = (x1-x0)/x0*100
+                            cross = (x1 - x0) / x0 * 100
                     else:
                         xm = nifty_min.get(day, {})
-                        x0, x1 = xm.get(cm_i-5), xm.get(cm_i)
+                        x0, x1 = xm.get(cm_i - 5), xm.get(cm_i)
                         if x0 and x1:
-                            cross = (x1-x0)/x0*100
+                            cross = (x1 - x0) / x0 * 100
 
                     ok, chg, is_ce, why = passes_index_radar_1m(
-                        mkt, idx, PS,
-                        vix_eod=vix_d, pcr_day=pcr_d,
-                        nifty_day_pct_for_pe=nifty_pe, cross_other_5m=cross,
+                        mkt, idx, PS, vix_eod=vix_d, pcr_day=pcr_d, nifty_day_pct_for_pe=nifty_pe, cross_other_5m=cross
                     )
                     if not ok:
                         flt[f"reject_{why or 'unk'}"] += 1
@@ -1416,28 +1579,29 @@ async def prime_strikes_backtest(request: Request):
                         continue
 
                     entry = max(20.0, round(px * 0.007, 1))
-                    atm   = round(px / step) * step
-                    ml_p  = None
+                    atm = round(px / step) * step
+                    ml_p = None
                     try:
                         if PS.get("daily_pick_use_ml_score"):
                             from index_radar_ml import win_probability
                             ml_p = win_probability({
-                                "chg_pct": float(chg), "type": "CE" if is_ce else "PE",
-                                "symbol": sym, "strength": strength,
-                                "time": c["date"].strftime("%H:%M"),
-                                "vix": vix_d, "rr": 1.67,
-                                "quality": quality, "pcr": pcr_d,
+                                "chg_pct": float(chg), "type": "CE" if is_ce else "PE", "symbol": sym,
+                                "strength": strength, "time": c["date"].strftime("%H:%M"), "vix": vix_d,
+                                "rr": 1.67, "quality": quality, "pcr": pcr_d,
                             })
                     except Exception:
                         pass
+                    if PS.get("ml_filter_enabled") and ml_p is not None:
+                        ml_min = float(PS.get("ml_min_win_prob", 0.60))
+                        if float(ml_p) < ml_min:
+                            flt["reject_ml_prob"] += 1
+                            continue
 
                     sc = index_hunt_candidate_score(float(quality), float(chg), strength, ml_p=ml_p)
                     pool.append({
-                        "i": idx, "cm": cm_i, "score": sc,
-                        "sig_type": "CE" if is_ce else "PE",
-                        "chg": chg, "is_ce": is_ce, "px": px,
-                        "quality": quality, "strength": strength,
-                        "candle": c, "entry": entry, "atm": atm,
+                        "i": idx, "cm": cm_i, "score": sc, "sig_type": "CE" if is_ce else "PE",
+                        "chg": chg, "is_ce": is_ce, "px": px, "quality": quality,
+                        "strength": strength, "candle": c, "entry": entry, "atm": atm,
                     })
 
                 chosen = daily_pick_select(pool, PS)
@@ -1447,22 +1611,27 @@ async def prime_strikes_backtest(request: Request):
 
                 day_n, csl = 0, 0
                 for item in chosen:
+                    if global_day_counts[day] >= max_day_total:
+                        flt["cap_day_total"] += 1
+                        break
                     if day_n >= max_day:
-                        flt["cap_day"] += 1; break
+                        flt["cap_day"] += 1
+                        break
                     if csl >= max_csl:
-                        flt["cap_csl"] += 1; break
+                        flt["cap_csl"] += 1
+                        break
 
-                    idx2     = item["i"]
-                    c2       = item["candle"]
-                    chg2     = item["chg"]
-                    is_ce2   = item["is_ce"]
-                    px2      = item["px"]
+                    idx2 = item["i"]
+                    c2 = item["candle"]
+                    chg2 = item["chg"]
+                    is_ce2 = item["is_ce"]
+                    px2 = item["px"]
                     quality2 = item["quality"]
-                    strength2= item["strength"]
-                    entry2   = item["entry"]
-                    atm2     = item["atm"]
-                    cm2      = item["cm"]
-                    stype    = item["sig_type"]
+                    strength2 = item["strength"]
+                    entry2 = item["entry"]
+                    atm2 = item["atm"]
+                    cm2 = item["cm"]
+                    stype = item["sig_type"]
 
                     if float(quality2) < float(tier_half):
                         flt["skip_below_half_tier"] += 1
@@ -1470,127 +1639,618 @@ async def prime_strikes_backtest(request: Request):
 
                     t1m = float(PS.get("opt_t1_mult", 1.30))
                     slm = float(PS.get("opt_sl_mult", 0.78))
-                    t1  = round(entry2 * t1m, 2)
-                    sl  = round(entry2 * slm, 2)
-                    rr  = round((t1-entry2)/max(entry2-sl, 0.01), 1)
-
+                    t1 = round(entry2 * t1m, 2)
+                    sl = round(entry2 * slm, 2)
+                    rr = round((t1 - entry2) / max(entry2 - sl, 0.01), 1)
                     tier = "FULL" if float(quality2) >= float(tier_full) else "HALF"
                     lots = 2 if tier == "FULL" else 1
-                    win  = "W1" if cm2 <= 660 else ("W2" if cm2 <= 720 else "W3")
+                    win = "W1" if cm2 <= 660 else ("W2" if cm2 <= 720 else "W3")
 
                     outcome = None
-                    for jj in range(idx2+1, min(idx2+46, len(mkt))):
+                    for jj in range(idx2 + 1, min(idx2 + 46, len(mkt))):
                         fc = mkt[jj]
                         if use_hl:
                             hi = float(fc.get("high") or fc.get("close") or 0)
-                            lo = float(fc.get("low")  or fc.get("close") or 0)
+                            lo = float(fc.get("low") or fc.get("close") or 0)
                             if not hi or not lo:
                                 continue
                             if is_ce2:
-                                if (hi-px2)/px2*100 >= _t1_th: outcome="HIT_T1"; break
-                                if (lo-px2)/px2*100 <= -_sl_th: outcome="HIT_SL"; break
+                                if (hi - px2) / px2 * 100 >= _t1_th:
+                                    outcome = "HIT_T1"
+                                    break
+                                if (lo - px2) / px2 * 100 <= -_sl_th:
+                                    outcome = "HIT_SL"
+                                    break
                             else:
-                                if (lo-px2)/px2*100 <= -_t1_th: outcome="HIT_T1"; break
-                                if (hi-px2)/px2*100 >= _sl_th:  outcome="HIT_SL"; break
+                                if (lo - px2) / px2 * 100 <= -_t1_th:
+                                    outcome = "HIT_T1"
+                                    break
+                                if (hi - px2) / px2 * 100 >= _sl_th:
+                                    outcome = "HIT_SL"
+                                    break
                         else:
-                            mv = (float(fc["close"])-px2)/px2*100
-                            if (is_ce2 and mv>=_t1_th) or (not is_ce2 and mv<=-_t1_th): outcome="HIT_T1"; break
-                            if (is_ce2 and mv<=-_sl_th) or (not is_ce2 and mv>=_sl_th): outcome="HIT_SL"; break
+                            mv = (float(fc["close"]) - px2) / px2 * 100
+                            if (is_ce2 and mv >= _t1_th) or (not is_ce2 and mv <= -_t1_th):
+                                outcome = "HIT_T1"
+                                break
+                            if (is_ce2 and mv <= -_sl_th) or (not is_ce2 and mv >= _sl_th):
+                                outcome = "HIT_SL"
+                                break
                     if outcome is None:
                         outcome = "EXPIRED"
 
                     tot_lots = lot_sz * lots
                     if outcome == "HIT_T1":
-                        pnl = round((t1-entry2)*tot_lots); csl=0
+                        pnl = round((t1 - entry2) * tot_lots)
+                        pnl_1lot = round((t1 - entry2) * lot_sz)
+                        csl = 0
                     elif outcome == "HIT_SL":
-                        pnl = round(-(entry2-sl)*tot_lots); csl+=1
+                        pnl = round(-(entry2 - sl) * tot_lots)
+                        pnl_1lot = round(-(entry2 - sl) * lot_sz)
+                        csl += 1
                     else:
-                        pnl = 0; csl=0
+                        pnl = 0
+                        pnl_1lot = 0
+                        csl = 0
 
                     day_n += 1
+                    global_day_counts[day] += 1
                     flt["signals"] += 1
-                    strike = atm2+step if is_ce2 else atm2-step
-
+                    strike = atm2 + step if is_ce2 else atm2 - step
                     all_trades.append({
-                        "date": day, "symbol": sym, "type": stype,
-                        "time": c2["date"].strftime("%H:%M"),
-                        "window": win, "chg_pct": round(float(chg2),2),
-                        "vix": vix_d, "pcr": round(pcr_d,3),
-                        "quality": quality2, "strength": strength2,
-                        "tier": tier, "lots": lots,
-                        "index_px": round(px2,2), "strike": strike,
-                        "entry": entry2, "t1": t1, "sl": sl, "rr": rr,
-                        "lot_sz": lot_sz, "outcome": outcome, "pnl": pnl,
+                        "date": day, "symbol": sym, "type": stype, "time": c2["date"].strftime("%H:%M"),
+                        "window": win, "chg_pct": round(float(chg2), 2), "vix": vix_d, "pcr": round(pcr_d, 3),
+                        "quality": quality2, "strength": strength2, "tier": tier, "lots": lots,
+                        "index_px": round(px2, 2), "strike": strike, "entry": entry2, "t1": t1, "sl": sl,
+                        "rr": rr, "lot_sz": lot_sz, "outcome": outcome, "pnl": pnl, "pnl_1lot": pnl_1lot,
                     })
 
     except Exception as e:
         logger.error("prime_strikes_backtest error: %s\n%s", e, _tb.format_exc())
+        raise RuntimeError(f"Backtest error: {e}") from e
+    finally:
         try:
             conn.close()
         except Exception:
             pass
-        return JSONResponse({"error": f"Backtest error: {e}"}, status_code=500)
 
-    conn.close()
+    out = _summarize_prime_trades(all_trades, from_date, to_date, strategy_name=strategy_name)
+    out["filter_stats"] = dict(sorted(flt.items(), key=lambda x: -x[1]))
+    return out
 
-    # ── aggregate ──
-    resolved = [t for t in all_trades if t["outcome"] in ("HIT_T1","HIT_SL")]
-    wins     = sum(1 for t in resolved if t["outcome"]=="HIT_T1")
-    wr       = round(wins/len(resolved)*100) if resolved else 0
-    net_pnl  = sum(t["pnl"] for t in all_trades)
 
-    def _bs(trades):
-        r=[t for t in trades if t["outcome"] in ("HIT_T1","HIT_SL")]
-        w=sum(1 for t in r if t["outcome"]=="HIT_T1")
-        return {"total":len(trades),"resolved":len(r),"wins":w,
-                "losses":len(r)-w,"wr":round(w/len(r)*100) if r else 0,
-                "pnl":sum(t["pnl"] for t in trades)}
+def _adv_prime_v2_period_reports(trades, to_date: str):
+    end_dt = datetime.datetime.strptime(str(to_date), "%Y-%m-%d").date()
+    out = {}
+    for label, days in (("1m", 30), ("3m", 90), ("6m", 180), ("1y", 365)):
+        from_dt = end_dt - datetime.timedelta(days=days - 1)
+        subset = [t for t in trades if from_dt.isoformat() <= str(t.get("date")) <= end_dt.isoformat()]
+        out[label] = _summarize_prime_trades(subset, from_dt.isoformat(), end_dt.isoformat(), strategy_name="ADV PRIME STRIKE V2")
+    return out
 
-    def _vbkt(t):
-        v=t["vix"]
-        if not v: return "no_data"
-        if v<13:  return "<13"
-        if v<16:  return "13-16"
-        if v<17:  return "16-17"
-        return ">17"
 
-    wstats = {k:_bs([t for t in all_trades if t["window"]==k]) for k in ("W1","W2","W3")}
-    wstats["W1"]["label"]="10:00-11:00 (best)"
-    wstats["W2"]["label"]="11:00-12:00"
-    wstats["W3"]["label"]="12:00-13:00"
-    vstats = {k:_bs([t for t in all_trades if _vbkt(t)==k]) for k in ("<13","13-16","16-17",">17","no_data")}
-    tstats = {k:_bs([t for t in all_trades if t["tier"]==k]) for k in ("FULL","HALF")}
-    dstats = {k:_bs([t for t in all_trades if t["type"]==k]) for k in ("CE","PE")}
+def _run_adv_prime_strike_v2_core(from_date: str, to_date: str):
+    """ADV PRIME STRIKE V2: A/B books, calm vs noisy regime exits, day-level loss + SL-streak halt."""
+    import traceback as _tb
+    import sqlite3 as _sq
+    from collections import defaultdict
 
     try:
-        from trading_policy import index_hunt_walk_forward_stats
-        wf = index_hunt_walk_forward_stats(
-            [{"trade_date":t["date"],"outcome":t["outcome"]} for t in all_trades])
-    except Exception:
-        wf = {"ok": False}
+        from config import PRIME_STRIKE_CONFIG, ADV_PRIME_STRIKE_V2_CONFIG, _INDEX_RADAR_BASE
+        from index_radar_logic import (
+            build_minute_close_map, cm_from_candle, daily_pick_select,
+            index_hunt_candidate_score, index_radar_quality, passes_index_radar_1m,
+        )
+        PS = dict(_INDEX_RADAR_BASE)
+        PS.update(PRIME_STRIKE_CONFIG)
+        V2 = dict(ADV_PRIME_STRIKE_V2_CONFIG or {})
+    except Exception as e:
+        logger.error("adv_prime_strike_v2 import/config error: %s", e)
+        raise RuntimeError(f"Config error: {e}") from e
 
-    return JSONResponse({
-        "total":    len(all_trades),
-        "resolved": len(resolved),
-        "wins":     wins,
-        "losses":   len(resolved)-wins,
-        "win_rate": wr,
-        "net_pnl":  net_pnl,
-        "from":     from_date,
-        "to":       to_date,
-        "trades":   all_trades,
-        "window_stats": wstats,
-        "vix_stats":    vstats,
-        "tier_stats":   tstats,
-        "type_stats":   dstats,
-        "walk_forward": wf,
-        "filter_stats": dict(sorted(flt.items(), key=lambda x:-x[1])),
-        "note": (
-            "PRIME STRIKE: VIX<17 day block | PCR align | 10:00–13:00 | session lock | "
-            "confirm bars | 15m hunt | trades only quality≥tier_half (64); FULL≥80=2 lots, else HALF=1. "
-            "WR=HIT_T1/(HIT_T1+HIT_SL) within 45 1m bars."
-        ),
-    })
+    try:
+        from feed import get_kite
+        kite = get_kite()
+        if not kite:
+            raise RuntimeError("Kite not available - check token")
+    except Exception as e:
+        raise RuntimeError(f"Kite error: {e}") from e
+
+    try:
+        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "backtest.db")
+        conn = _sq.connect(db_path)
+    except Exception as e:
+        raise RuntimeError(f"DB error: {e}") from e
+
+    NIFTY_TOK = 256265
+    BN_TOK = 260105
+    CONFIGS = [("NIFTY", NIFTY_TOK, 25, 50), ("BANKNIFTY", BN_TOK, 15, 100)]
+    t_win0 = int(PS.get("time_start_min", 600))
+    t_win1 = int(PS.get("time_end_min", 780))
+    use_hl = bool(PS.get("outcome_use_hl", True))
+    tier_full = int(PS.get("tier_full_min_quality", 80))
+    tier_half = int(PS.get("tier_half_min_quality", 64))
+    max_day = int(PS.get("max_signals_per_day", 3))
+    max_day_total = int(PS.get("max_signals_per_day_total", max_day))
+    max_csl = int(PS.get("max_consec_sl", 2))
+    vix_calm_max = float(V2.get("vix_calm_max", 15.5))
+    a_min_q = int(V2.get("a_min_quality", 74))
+    a_hi = bool(V2.get("a_require_hi_strength", True))
+    a_max = int(V2.get("a_max_per_symbol", 2))
+    a_gap = int(V2.get("a_pick_gap_minutes", 28))
+    b_max = int(V2.get("b_max_per_symbol", 2))
+    b_gap = int(V2.get("b_pick_gap_minutes", 22))
+    noisy_q_add = int(V2.get("noisy_extra_quality_floor", 4))
+    day_max_loss = float(V2.get("day_max_loss_1lot", 4500))
+    day_sl_cap = int(V2.get("day_stop_after_sl_streak", 2))
+
+    all_trades = []
+    global_day_counts = defaultdict(int)
+    flt = defaultdict(int)
+    day_pnl_1lot_bt = defaultdict(float)
+    day_sl_streak_bt = defaultdict(int)
+    halted_days = set()
+
+    def _gap_ok(cm: int, taken: list, gap: int) -> bool:
+        if gap <= 0:
+            return True
+        for x in taken:
+            if abs(cm - int(x)) < gap:
+                return False
+        return True
+
+    try:
+        nifty_by_date = defaultdict(list)
+        try:
+            _nh = _kite_historical_chunked(kite, NIFTY_TOK, from_date, to_date, "minute")
+        except Exception:
+            _nh = []
+        for c in (_nh or []):
+            nifty_by_date[c["date"].date().isoformat()].append(c)
+        nifty_days = sorted(nifty_by_date.keys())
+        nifty_prev = {}
+        nifty_min = {}
+        for di, dk in enumerate(nifty_days):
+            if di > 0:
+                nifty_prev[dk] = float(nifty_by_date[nifty_days[di - 1]][-1]["close"] or 0)
+            nifty_min[dk] = build_minute_close_map(nifty_by_date[dk])
+
+        bn_by_date = defaultdict(list)
+        try:
+            _bh = _kite_historical_chunked(kite, BN_TOK, from_date, to_date, "minute")
+        except Exception:
+            _bh = []
+        for c in (_bh or []):
+            bn_by_date[c["date"].date().isoformat()].append(c)
+        bn_min = {dk: build_minute_close_map(bn_by_date[dk]) for dk in bn_by_date}
+
+        for sym, tok, lot_sz, step in CONFIGS:
+            try:
+                candles = _kite_historical_chunked(kite, tok, from_date, to_date, "minute")
+            except Exception:
+                continue
+            if not candles:
+                continue
+
+            by_day = defaultdict(list)
+            for c in candles:
+                by_day[c["date"].date().isoformat()].append(c)
+
+            for day, day_c in sorted(by_day.items()):
+                if day in halted_days:
+                    flt["v2_skip_halted_day"] += 1
+                    continue
+
+                mkt = sorted([c for c in day_c if t_win0 <= cm_from_candle(c) <= t_win1], key=lambda x: x["date"])
+                if len(mkt) < 15:
+                    continue
+
+                vr = conn.execute("SELECT vix FROM vix_daily WHERE date=?", (day,)).fetchone()
+                vix_d = float(vr[0]) if vr and vr[0] is not None else 0.0
+                pr = conn.execute("SELECT pcr FROM chain_daily WHERE date=?", (day,)).fetchone()
+                pcr_d = float(pr[0]) if pr and pr[0] else 1.0
+
+                vix_block = float(PS.get("vix_block_above", 17.0))
+                if vix_d > 0 and vix_d >= vix_block:
+                    flt["vix_day_blocked"] += 1
+                    continue
+
+                regime = "calm" if (vix_d and 0 < vix_d < vix_calm_max) else "noisy"
+                flt[f"v2_regime_{regime}"] += 1
+
+                if regime == "calm":
+                    _t1_th = float(V2.get("calm_outcome_t1_index_pct", PS.get("outcome_t1_index_pct", 0.10)))
+                    _sl_th = float(V2.get("calm_outcome_sl_index_pct", PS.get("outcome_sl_index_pct", 0.24)))
+                    t1m = float(V2.get("calm_opt_t1_mult", PS.get("opt_t1_mult", 1.24)))
+                    slm = float(V2.get("calm_opt_sl_mult", PS.get("opt_sl_mult", 0.82)))
+                else:
+                    _t1_th = float(V2.get("noisy_outcome_t1_index_pct", PS.get("outcome_t1_index_pct", 0.10)))
+                    _sl_th = float(V2.get("noisy_outcome_sl_index_pct", PS.get("outcome_sl_index_pct", 0.24)))
+                    t1m = float(V2.get("noisy_opt_t1_mult", PS.get("opt_t1_mult", 1.24)))
+                    slm = float(V2.get("noisy_opt_sl_mult", PS.get("opt_sl_mult", 0.82)))
+
+                base_qf = max(
+                    int(PS.get("quality_floor", 68)),
+                    int(PS.get("precision_min_quality", 76)) if PS.get("precision_boost") else 0,
+                )
+                eff_qf = base_qf + (noisy_q_add if regime == "noisy" else 0)
+
+                npc = nifty_prev.get(day, 0.0)
+                nm = nifty_min.get(day, {})
+                pool = []
+                for idx, c in enumerate(mkt):
+                    cm_i = cm_from_candle(c)
+                    px = float(c.get("close") or 0)
+                    if not px:
+                        continue
+                    flt["bars_scanned"] += 1
+
+                    npx = nm.get(cm_i)
+                    nifty_pe = (npx - npc) / npc * 100 if (npc and npx) else None
+
+                    cross = None
+                    if sym == "NIFTY":
+                        bm = bn_min.get(day, {})
+                        x0, x1 = bm.get(cm_i - 5), bm.get(cm_i)
+                        if x0 and x1:
+                            cross = (x1 - x0) / x0 * 100
+                    else:
+                        xm = nifty_min.get(day, {})
+                        x0, x1 = xm.get(cm_i - 5), xm.get(cm_i)
+                        if x0 and x1:
+                            cross = (x1 - x0) / x0 * 100
+
+                    ok, chg, is_ce, why = passes_index_radar_1m(
+                        mkt, idx, PS, vix_eod=vix_d, pcr_day=pcr_d, nifty_day_pct_for_pe=nifty_pe, cross_other_5m=cross
+                    )
+                    if not ok:
+                        flt[f"reject_{why or 'unk'}"] += 1
+                        continue
+
+                    strength, quality = index_radar_quality(float(chg), is_ce, PS, vix_d, pcr_d)
+                    if eff_qf > 0 and int(quality) < eff_qf:
+                        flt["reject_quality_v2"] += 1
+                        continue
+
+                    entry = max(20.0, round(px * 0.007, 1))
+                    atm = round(px / step) * step
+                    ml_p = None
+                    try:
+                        if PS.get("daily_pick_use_ml_score"):
+                            from index_radar_ml import win_probability
+                            ml_p = win_probability({
+                                "chg_pct": float(chg), "type": "CE" if is_ce else "PE", "symbol": sym,
+                                "strength": strength, "time": c["date"].strftime("%H:%M"), "vix": vix_d,
+                                "rr": 1.67, "quality": quality, "pcr": pcr_d,
+                            })
+                    except Exception:
+                        pass
+                    if PS.get("ml_filter_enabled") and ml_p is not None:
+                        ml_min = float(PS.get("ml_min_win_prob", 0.60))
+                        if float(ml_p) < ml_min:
+                            flt["reject_ml_prob"] += 1
+                            continue
+
+                    sc = index_hunt_candidate_score(float(quality), float(chg), strength, ml_p=ml_p)
+                    is_a = int(quality) >= a_min_q and (not a_hi or strength == "hi")
+                    book = "A" if is_a else "B"
+                    flt[f"v2_pool_{book}"] += 1
+                    pool.append({
+                        "i": idx, "cm": cm_i, "score": sc, "sig_type": "CE" if is_ce else "PE",
+                        "chg": chg, "is_ce": is_ce, "px": px, "quality": quality,
+                        "strength": strength, "candle": c, "entry": entry, "atm": atm,
+                        "book": book, "regime": regime,
+                    })
+
+                pool_a = [p for p in pool if p.get("book") == "A"]
+                pool_b = [p for p in pool if p.get("book") == "B"]
+                ir_a = dict(PS)
+                ir_a["daily_pick_min_per_symbol"] = 0
+                ir_a["daily_pick_max_per_symbol"] = a_max
+                ir_a["daily_pick_gap_minutes"] = a_gap
+                chosen_a = daily_pick_select(pool_a, ir_a)
+
+                picked_cm = [int(x.get("cm") or 0) for x in chosen_a]
+                sep = max(a_gap, b_gap)
+                pool_b2 = [p for p in pool_b if _gap_ok(int(p.get("cm") or 0), picked_cm, sep)]
+                ir_b = dict(PS)
+                ir_b["daily_pick_min_per_symbol"] = 0
+                ir_b["daily_pick_max_per_symbol"] = b_max
+                ir_b["daily_pick_gap_minutes"] = b_gap
+                chosen_b = daily_pick_select(pool_b2, ir_b)
+
+                merged = list(chosen_a) + list(chosen_b)
+                merged.sort(key=lambda x: int(x.get("i") or 0))
+                seen_i = set()
+                deduped = []
+                for m in merged:
+                    ii = int(m.get("i") or 0)
+                    if ii in seen_i:
+                        continue
+                    seen_i.add(ii)
+                    deduped.append(m)
+                deduped.sort(key=lambda x: int(x.get("i") or 0))
+                deduped = deduped[:max_day]
+
+                flt["pool"] += len(pool)
+                flt["kept"] += len(deduped)
+
+                day_n, csl = 0, 0
+                for item in deduped:
+                    if day in halted_days:
+                        flt["v2_halt_mid_day"] += 1
+                        break
+                    if global_day_counts[day] >= max_day_total:
+                        flt["cap_day_total"] += 1
+                        break
+                    if day_n >= max_day:
+                        flt["cap_day"] += 1
+                        break
+                    if csl >= max_csl:
+                        flt["cap_csl"] += 1
+                        break
+
+                    idx2 = item["i"]
+                    c2 = item["candle"]
+                    chg2 = item["chg"]
+                    is_ce2 = item["is_ce"]
+                    px2 = item["px"]
+                    quality2 = item["quality"]
+                    strength2 = item["strength"]
+                    entry2 = item["entry"]
+                    atm2 = item["atm"]
+                    cm2 = item["cm"]
+                    stype = item["sig_type"]
+                    book = item.get("book", "B")
+                    regime_t = item.get("regime", regime)
+
+                    if float(quality2) < float(tier_half):
+                        flt["skip_below_half_tier"] += 1
+                        continue
+
+                    t1 = round(entry2 * t1m, 2)
+                    sl = round(entry2 * slm, 2)
+                    rr = round((t1 - entry2) / max(entry2 - sl, 0.01), 1)
+                    tier = "FULL" if float(quality2) >= float(tier_full) else "HALF"
+                    lots = 2 if tier == "FULL" else 1
+                    win = "W1" if cm2 <= 660 else ("W2" if cm2 <= 720 else "W3")
+
+                    outcome = None
+                    for jj in range(idx2 + 1, min(idx2 + 46, len(mkt))):
+                        fc = mkt[jj]
+                        if use_hl:
+                            hi = float(fc.get("high") or fc.get("close") or 0)
+                            lo = float(fc.get("low") or fc.get("close") or 0)
+                            if not hi or not lo:
+                                continue
+                            if is_ce2:
+                                if (hi - px2) / px2 * 100 >= _t1_th:
+                                    outcome = "HIT_T1"
+                                    break
+                                if (lo - px2) / px2 * 100 <= -_sl_th:
+                                    outcome = "HIT_SL"
+                                    break
+                            else:
+                                if (lo - px2) / px2 * 100 <= -_t1_th:
+                                    outcome = "HIT_T1"
+                                    break
+                                if (hi - px2) / px2 * 100 >= _sl_th:
+                                    outcome = "HIT_SL"
+                                    break
+                        else:
+                            mv = (float(fc["close"]) - px2) / px2 * 100
+                            if (is_ce2 and mv >= _t1_th) or (not is_ce2 and mv <= -_t1_th):
+                                outcome = "HIT_T1"
+                                break
+                            if (is_ce2 and mv <= -_sl_th) or (not is_ce2 and mv >= _sl_th):
+                                outcome = "HIT_SL"
+                                break
+                    if outcome is None:
+                        outcome = "EXPIRED"
+
+                    tot_lots = lot_sz * lots
+                    if outcome == "HIT_T1":
+                        pnl = round((t1 - entry2) * tot_lots)
+                        pnl_1lot = round((t1 - entry2) * lot_sz)
+                        csl = 0
+                    elif outcome == "HIT_SL":
+                        pnl = round(-(entry2 - sl) * tot_lots)
+                        pnl_1lot = round(-(entry2 - sl) * lot_sz)
+                        csl += 1
+                    else:
+                        pnl = 0
+                        pnl_1lot = 0
+                        csl = 0
+
+                    if outcome in ("HIT_T1", "HIT_SL"):
+                        day_pnl_1lot_bt[day] += float(pnl_1lot)
+                        if outcome == "HIT_SL":
+                            day_sl_streak_bt[day] += 1
+                        else:
+                            day_sl_streak_bt[day] = 0
+                        if day_pnl_1lot_bt[day] <= -day_max_loss:
+                            halted_days.add(day)
+                            flt["v2_halt_day_loss"] += 1
+                        elif day_sl_streak_bt[day] >= day_sl_cap:
+                            halted_days.add(day)
+                            flt["v2_halt_day_sl_streak"] += 1
+
+                    day_n += 1
+                    global_day_counts[day] += 1
+                    flt["signals"] += 1
+                    strike = atm2 + step if is_ce2 else atm2 - step
+                    all_trades.append({
+                        "date": day, "symbol": sym, "type": stype, "time": c2["date"].strftime("%H:%M"),
+                        "window": win, "chg_pct": round(float(chg2), 2), "vix": vix_d, "pcr": round(pcr_d, 3),
+                        "quality": quality2, "strength": strength2, "tier": tier, "lots": lots,
+                        "index_px": round(px2, 2), "strike": strike, "entry": entry2, "t1": t1, "sl": sl,
+                        "rr": rr, "lot_sz": lot_sz, "outcome": outcome, "pnl": pnl, "pnl_1lot": pnl_1lot,
+                        "book": book, "regime": regime_t,
+                        "outcome_t1_pct": _t1_th, "outcome_sl_pct": _sl_th,
+                    })
+
+    except Exception as e:
+        logger.error("adv_prime_strike_v2 error: %s\n%s", e, _tb.format_exc())
+        raise RuntimeError(f"Backtest error: {e}") from e
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    out = _summarize_prime_trades(all_trades, from_date, to_date, strategy_name="ADV PRIME STRIKE V2")
+    out["filter_stats"] = dict(sorted(flt.items(), key=lambda x: -x[1]))
+    out["v2_config"] = dict(V2)
+    return out
+
+
+@app.post("/api/prime-strikes/backtest")
+async def prime_strikes_backtest(request: Request):
+    body = await request.json()
+    from_date = body.get("from_date", (datetime.date.today() - datetime.timedelta(days=30)).isoformat())
+    to_date = body.get("to_date", datetime.date.today().isoformat())
+    try:
+        return JSONResponse(_run_prime_strike_backtest_core(from_date, to_date, strategy_name="ADV PRIME STRIKE"))
+    except RuntimeError as e:
+        msg = str(e)
+        code = 503 if ("Kite error:" in msg or "Kite not available" in msg) else 500
+        return JSONResponse({"error": msg}, status_code=code)
+
+
+# ── APEX HUNT ─────────────────────────────────────────────────────────────────
+@app.post("/api/apex-hunt/backtest")
+async def apex_hunt_backtest(request: Request):
+    """Run APEX HUNT backtest on NIFTY 1-min data for the given date range."""
+    body      = await request.json()
+    today_str = datetime.date.today().isoformat()
+    to_date   = body.get("to_date",   today_str)
+    from_date = body.get("from_date",
+                         (datetime.date.today() - datetime.timedelta(days=30)).isoformat())
+    try:
+        import importlib, sys
+        import apex_hunt_engine as _ahe
+        importlib.reload(sys.modules["apex_hunt_engine"])   # always use latest code
+        import apex_hunt_engine as _ahe                      # re-bind after reload
+        result = await asyncio.get_event_loop().run_in_executor(
+            None, _ahe.run_apex_backtest, from_date, to_date
+        )
+        return JSONResponse(result)
+    except Exception as e:
+        logger.error("apex_hunt_backtest error: %s", e, exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/apex-hunt/live")
+async def apex_hunt_live():
+    """Return current APEX HUNT live signals + basket state."""
+    try:
+        import apex_hunt_engine as _ahe
+        import signals as _sig
+        basket = _ahe.get_live_basket_state(_sig.state)
+        return JSONResponse({
+            "signals": _ahe.get_live_signals(),
+            "basket":  basket,
+            "ts":      time.time(),
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ── SWING 52 (52-Week High Breakout) ──────────────────────────────────────────
+@app.post("/api/swing52/backtest")
+async def swing52_backtest(request: Request):
+    """Run 52W breakout backtest on NIFTY 500 daily bars for the given date range."""
+    body      = await request.json()
+    today_str = datetime.date.today().isoformat()
+    to_date   = body.get("to_date",   today_str)
+    from_date = body.get("from_date", (datetime.date.today() - datetime.timedelta(days=90)).isoformat())
+    try:
+        import importlib, sys
+        import swing52_engine as _s52
+        if "swing52_engine" in sys.modules:
+            importlib.reload(sys.modules["swing52_engine"])
+        import swing52_engine as _s52
+        result = await asyncio.get_event_loop().run_in_executor(
+            None, _s52.run_swing52_backtest, from_date, to_date
+        )
+        return JSONResponse(result)
+    except Exception as e:
+        logger.error("swing52_backtest error: %s", e, exc_info=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/swing52/live")
+async def swing52_live():
+    """Real-time 52W breakout candidates from live stock feed."""
+    try:
+        import swing52_engine as _s52
+        from feed import get_kite
+        kite   = get_kite()
+        stocks = signals.state.get("stocks") or signals.state.get("last_stocks") or []
+        result = await asyncio.get_event_loop().run_in_executor(
+            None, _s52.get_live_52w_candidates, kite, stocks
+        )
+        return JSONResponse(result)
+    except Exception as e:
+        return JSONResponse({"error": str(e), "candidates": []}, status_code=500)
+
+
+@app.post("/api/adv-prime-strike/report")
+async def adv_prime_strike_report(request: Request):
+    body = await request.json()
+    to_date = body.get("to_date", datetime.date.today().isoformat())
+    end_dt = datetime.datetime.strptime(str(to_date), "%Y-%m-%d").date()
+    from_date = body.get("from_date", (end_dt - datetime.timedelta(days=364)).isoformat())
+    try:
+        summary = _run_prime_strike_backtest_core(from_date, to_date, strategy_name="ADV PRIME STRIKE")
+        return JSONResponse({
+            "strategy": "ADV PRIME STRIKE",
+            "from": from_date,
+            "to": to_date,
+            "overall": summary,
+            "period_reports": _adv_prime_period_reports(summary.get("trades") or [], to_date),
+            "report_basis": "1 lot normalized P&L and drawdown, with raw trade log retained",
+        })
+    except RuntimeError as e:
+        msg = str(e)
+        code = 503 if ("Kite error:" in msg or "Kite not available" in msg) else 500
+        return JSONResponse({"error": msg}, status_code=code)
+
+
+@app.post("/api/adv-prime-strike-v2/report")
+async def adv_prime_strike_v2_report(request: Request):
+    body = await request.json()
+    to_date = body.get("to_date", datetime.date.today().isoformat())
+    end_dt = datetime.datetime.strptime(str(to_date), "%Y-%m-%d").date()
+    from_date = body.get("from_date", (end_dt - datetime.timedelta(days=364)).isoformat())
+    compare_v1 = bool(body.get("compare_v1", False))
+    try:
+        summary = _run_adv_prime_strike_v2_core(from_date, to_date)
+        out = {
+            "strategy": "ADV PRIME STRIKE V2",
+            "from": from_date,
+            "to": to_date,
+            "overall": summary,
+            "period_reports": _adv_prime_v2_period_reports(summary.get("trades") or [], to_date),
+            "report_basis": (
+                "V2: A-book + B-book ranked picks | calm vs noisy regime exits (index %) | "
+                "day max loss + SL-streak halt | 1-lot PnL and drawdown"
+            ),
+        }
+        if compare_v1:
+            v1 = _run_prime_strike_backtest_core(from_date, to_date, strategy_name="ADV PRIME STRIKE")
+            out["compare_v1"] = {
+                "total": v1.get("total"),
+                "resolved": v1.get("resolved"),
+                "accuracy": v1.get("accuracy"),
+                "net_pnl_1lot": v1.get("net_pnl_1lot"),
+                "max_drawdown_1lot": v1.get("max_drawdown_1lot"),
+            }
+        return JSONResponse(out)
+    except RuntimeError as e:
+        msg = str(e)
+        code = 503 if ("Kite error:" in msg or "Kite not available" in msg) else 500
+        return JSONResponse({"error": msg}, status_code=code)
 
 
 @app.get("/api/state")
@@ -1690,8 +2350,8 @@ async def day_performance(date: str = None):
 
     rows = []
     sections = {}
-    # Model sizing (user-facing): fixed ₹30,000 deployed per signal → qty = floor(30_000 / entry).
-    stock_notional_per_signal = 30000.0
+    # Model sizing (user-facing): fixed ₹20,000 deployed per signal → qty = floor(20_000 / entry).
+    stock_notional_per_signal = 20000.0
 
     # ── Spikes + Swing (live_signal_history) ───────────────────────────────
     try:
@@ -1844,7 +2504,7 @@ async def day_performance(date: str = None):
                 pnl = 0.0
                 unit_move = 0.0
         # User model for INDEX RADAR options:
-        # always 1 lot execution; cash allocation shown as fixed ₹30K per trade.
+        # always 1 lot execution; cash allocation shown as fixed ₹20K per trade.
         lot_u = max(int(lot or 0), 1)
         num_lots = 1
         qty_model = int(lot_u)
@@ -1977,7 +2637,7 @@ async def day_performance(date: str = None):
             "qty_rule": (
                 "STOCK: qty = floor(notional/entry); P&L = move × qty. "
                 "INDEX options: fixed 1 lot per signal (qty_units = lot_sz); "
-                "deploy is shown as fixed notional ₹30,000 per trade; P&L = premium_move × lot_sz."
+                "deploy is shown as fixed notional ₹20,000 per trade; P&L = premium_move × lot_sz."
             ),
         },
         "validation": {
@@ -2467,7 +3127,7 @@ async def get_signal_accuracy_filters_api():
 
 
 @app.post("/api/signals/history/backfill")
-async def backfill_signals_history(days: int = 7):
+async def backfill_signals_history(days: int = 90):
     import backtest_data as bd
     from datetime import datetime, timedelta
     ist = pytz.timezone('Asia/Kolkata')
@@ -2477,6 +3137,7 @@ async def backfill_signals_history(days: int = 7):
     to_date = str(today - timedelta(days=1))
     # spikes_backtest accepts max 30-day windows for minute data; run in chunks.
     inserted = 0
+    updated = 0
     chunk_meta = []
     cur_start = datetime.strptime(from_date, "%Y-%m-%d").date()
     end_date = datetime.strptime(to_date, "%Y-%m-%d").date()
@@ -2506,18 +3167,24 @@ async def backfill_signals_history(days: int = 7):
             payload = json.loads(resp.body.decode("utf-8"))
         except Exception:
             return JSONResponse({"error": "Invalid backfill payload"}, status_code=500)
-        ins = bd.import_historical_spike_results(payload.get("results", []))
-        inserted += int(ins or 0)
+        res = bd.import_historical_spike_results(payload.get("results", []))
+        if isinstance(res, dict):
+            inserted += int(res.get("inserted") or 0)
+            updated += int(res.get("updated") or 0)
+        else:
+            inserted += int(res or 0)
         chunk_meta.append({
             "from_date": str(cur_start),
             "to_date": str(cur_end),
-            "inserted": int(ins or 0),
+            "inserted": int(res.get("inserted") or 0) if isinstance(res, dict) else int(res or 0),
+            "updated": int(res.get("updated") or 0) if isinstance(res, dict) else 0,
             "signals": int((payload.get("summary") or {}).get("total", 0)),
         })
         cur_start = cur_end + timedelta(days=1)
     rows = bd.get_live_signal_history(limit=100, status="ALL")
     return JSONResponse({
         "inserted": inserted,
+        "updated": updated,
         "rows": rows,
         "count": len(rows),
         "from_date": from_date,
@@ -2581,6 +3248,103 @@ async def swing_radar_backtest_report(from_date: str | None = None, to_date: str
 
     report = srb.build_swing_backtest_report(from_date, to_date)
     return JSONResponse(report)
+
+
+@app.get("/api/adv-swing/universe")
+async def adv_swing_universe():
+    """NIFTY 500 constituent count (NSE) and Kite NSE EQ token mapping (needs Kite)."""
+    import fetcher
+    from feed import get_kite
+
+    syms = fetcher.get_nifty500_symbols()
+    kite = get_kite()
+    mapped = fetcher.get_nifty500_kite_tokens(kite) if kite else {}
+    return JSONResponse(
+        {
+            "nifty500_symbols": len(syms),
+            "kite_eq_mapped": len(mapped),
+            "sample": syms[:15],
+            "kite_available": bool(kite),
+        }
+    )
+
+
+@app.post("/api/adv-swing/backtest")
+async def adv_swing_backtest_api(request: Request):
+    """
+    Replay ADV-SWING on NIFTY 500 cash (Kite daily EQ) + same gate stack as Swing Radar backtest.
+    Inserts BT-ADVS|… rows with verdict ADV_SWING. Default ~90 calendar days (configurable, capped).
+    """
+    import adv_swing_backtest as asb
+    from datetime import datetime, timedelta
+    from feed import get_kite
+
+    from config import ADV_SWING_DEFAULT_RANGE_DAYS, ADV_SWING_MAX_RANGE_DAYS
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    ist = pytz.timezone("Asia/Kolkata")
+    today = datetime.now(ist).date()
+    to_d = str(body.get("to_date") or today.isoformat())[:10]
+    try:
+        to_dt = datetime.strptime(to_d, "%Y-%m-%d").date()
+    except ValueError:
+        return JSONResponse({"error": "Invalid to_date"}, status_code=400)
+    raw_from = str(body.get("from_date") or "").strip()[:10]
+    if raw_from:
+        from_d = raw_from
+    else:
+        span = max(7, min(int(body.get("range_days") or ADV_SWING_DEFAULT_RANGE_DAYS), ADV_SWING_MAX_RANGE_DAYS))
+        from_d = (to_dt - timedelta(days=span)).isoformat()
+    try:
+        from_dt = datetime.strptime(from_d, "%Y-%m-%d").date()
+    except ValueError:
+        return JSONResponse({"error": "Invalid from_date"}, status_code=400)
+    if from_dt > to_dt:
+        return JSONResponse({"error": "from_date must be <= to_date"}, status_code=400)
+    if (to_dt - from_dt).days > ADV_SWING_MAX_RANGE_DAYS:
+        return JSONResponse({"error": f"Span exceeds {ADV_SWING_MAX_RANGE_DAYS} days"}, status_code=400)
+
+    try:
+        max_fd = int(body.get("max_forward_days") or 0)
+    except Exception:
+        max_fd = 0
+
+    raw_clear = body.get("clear_existing", True)
+    if isinstance(raw_clear, str):
+        clear_existing = raw_clear.strip().lower() not in {"0", "false", "no", "off"}
+    else:
+        clear_existing = bool(raw_clear)
+
+    kite = get_kite()
+    if not kite:
+        return JSONResponse({"error": "Kite not available"}, status_code=503)
+
+    loop = asyncio.get_running_loop()
+
+    def _run():
+        return asb.run_adv_swing_radar_backtest(
+            kite,
+            from_d,
+            to_d,
+            max_forward_days=max_fd or None,
+            max_calendar_span_days=ADV_SWING_MAX_RANGE_DAYS,
+            clear_existing=clear_existing,
+        )
+
+    result = await loop.run_in_executor(None, _run)
+    if result.get("error"):
+        return JSONResponse(result, status_code=400)
+    return JSONResponse(result)
+
+
+@app.get("/api/adv-swing/report")
+async def adv_swing_backtest_report(from_date: str | None = None, to_date: str | None = None):
+    import adv_swing_backtest as asb
+
+    return JSONResponse(asb.build_adv_swing_backtest_report(from_date, to_date))
 
 
 @app.get("/api/chain/{symbol}")

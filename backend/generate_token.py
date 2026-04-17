@@ -4,8 +4,10 @@ Run this script ONCE every morning before starting the system.
 
 Usage:
     python generate_token.py
+    python generate_token.py --print-login-url
+    python generate_token.py --redirect-url "https://127.0.0.1/?request_token=...&status=success"
 
-Flow (TOTP / authenticator app):
+Flow (interactive):
   1. Opens Kite login in your browser
   2. You enter password, then the 6-digit code from your TOTP app (or SMS if enabled)
   3. After redirect, paste the full URL from the address bar OR only the request_token value
@@ -15,6 +17,7 @@ Fully automated TOTP (no browser): set KITE_USER_ID, KITE_PASSWORD, KITE_TOTP_SE
     python auto_token.py
 """
 
+import argparse
 import os
 import subprocess
 import sys
@@ -73,24 +76,92 @@ def _parse_request_token(raw: str) -> str:
     return toks[0] if toks else s
 
 
-def main():
+def _load_api_creds():
     load_dotenv(ENV_FILE)
-
-    api_key    = os.getenv("KITE_API_KEY", "").strip()
+    api_key = os.getenv("KITE_API_KEY", "").strip()
     api_secret = os.getenv("KITE_API_SECRET", "").strip()
-
     if not api_key:
         print("\nKITE_API_KEY not found in .env")
         api_key = input("Enter your Kite API Key: ").strip()
         set_key(ENV_FILE, "KITE_API_KEY", api_key)
-
     if not api_secret:
         print("\nKITE_API_SECRET not found in .env")
         api_secret = input("Enter your Kite API Secret: ").strip()
         set_key(ENV_FILE, "KITE_API_SECRET", api_secret)
+    return api_key, api_secret
 
-    kite      = KiteConnect(api_key=api_key)
+
+def _exchange_and_save(kite: KiteConnect, api_secret: str, request_token: str) -> None:
+    print("\nGenerating access token...")
+    try:
+        data = kite.generate_session(request_token, api_secret=api_secret)
+        access_token = data["access_token"]
+        user_id = data.get("user_id", "")
+        user_name = data.get("user_name", "")
+    except Exception as e:
+        print(f"ERROR generating session: {e}")
+        sys.exit(1)
+
+    set_key(ENV_FILE, "KITE_ACCESS_TOKEN", access_token)
+    root_env = os.path.normpath(os.path.join(os.path.dirname(ENV_FILE), "..", ".env"))
+    if os.path.isfile(root_env):
+        set_key(root_env, "KITE_ACCESS_TOKEN", access_token)
+
+    print("\n" + "=" * 60)
+    print("  SUCCESS")
+    print("=" * 60)
+    print(f"  User     : {user_name} ({user_id})")
+    print(f"  Token    : {access_token[:12]}...{access_token[-4:]}")
+    print(f"  Saved to : {ENV_FILE}" + (f" and {root_env}" if os.path.isfile(root_env) else ""))
+    print()
+    print("  Restart the backend, or use dashboard LOAD .ENV / POST /api/token-reload-env")
+    print("=" * 60 + "\n")
+
+
+def main():
+    p = argparse.ArgumentParser(description="Kite Connect manual / semi-manual token helper")
+    p.add_argument(
+        "--print-login-url",
+        action="store_true",
+        help="Print Kite OAuth URL from backend/.env and exit (open it in your browser).",
+    )
+    p.add_argument(
+        "--redirect-url",
+        type=str,
+        default="",
+        help="Full redirect URL after login (contains request_token=...).",
+    )
+    p.add_argument(
+        "--request-token",
+        type=str,
+        default="",
+        help="Raw request_token only (same as pasted from redirect URL).",
+    )
+    args = p.parse_args()
+
+    api_key, api_secret = _load_api_creds()
+    kite = KiteConnect(api_key=api_key)
     login_url = kite.login_url()
+
+    if args.print_login_url:
+        print("\nOpen this URL in your browser, complete login, then copy the redirect URL:\n")
+        print(login_url)
+        print(
+            "\nThen run:\n"
+            f'  python generate_token.py --redirect-url "PASTE_FULL_URL_HERE"\n'
+            "or paste only the token:\n"
+            "  python generate_token.py --request-token PASTE_TOKEN_HERE\n"
+        )
+        return
+
+    raw = (args.redirect_url or args.request_token or "").strip()
+    if raw:
+        request_token = _parse_request_token(raw)
+        if not request_token:
+            print("ERROR: No request_token found in --redirect-url / --request-token.")
+            sys.exit(1)
+        _exchange_and_save(kite, api_secret, request_token)
+        return
 
     print("\n" + "=" * 60)
     print("  STEP 1: Login to Kite (with TOTP)")
@@ -110,32 +181,7 @@ def main():
         print("ERROR: No request_token provided.")
         sys.exit(1)
 
-    print("\nGenerating access token...")
-    try:
-        data         = kite.generate_session(request_token, api_secret=api_secret)
-        access_token = data["access_token"]
-        user_id      = data.get("user_id", "")
-        user_name    = data.get("user_name", "")
-    except Exception as e:
-        print(f"ERROR generating session: {e}")
-        sys.exit(1)
-
-    # Save to .env
-    set_key(ENV_FILE, "KITE_ACCESS_TOKEN", access_token)
-    root_env = os.path.normpath(os.path.join(os.path.dirname(ENV_FILE), "..", ".env"))
-    if os.path.isfile(root_env):
-        set_key(root_env, "KITE_ACCESS_TOKEN", access_token)
-
-    print("\n" + "=" * 60)
-    print("  SUCCESS")
-    print("=" * 60)
-    print(f"  User     : {user_name} ({user_id})")
-    print(f"  Token    : {access_token[:12]}...{access_token[-4:]}")
-    print(f"  Saved to : {ENV_FILE}" + (f" and {root_env}" if os.path.isfile(root_env) else ""))
-    print()
-    print("  You can now start the system:")
-    print("  cd .. && ./start.sh")
-    print("=" * 60 + "\n")
+    _exchange_and_save(kite, api_secret, request_token)
 
 
 if __name__ == "__main__":
