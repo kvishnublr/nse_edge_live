@@ -12,6 +12,7 @@ import re
 import secrets
 import shutil
 import smtplib
+import sys
 import sqlite3
 import ssl
 import subprocess
@@ -1633,19 +1634,70 @@ def _public_kite_interactive_session(user_id: int) -> dict[str, Any]:
     }
 
 
-def _find_windows_browser() -> tuple[str, str]:
-    candidates = [
-        ("Microsoft Edge", shutil.which("msedge.exe")),
-        ("Google Chrome", shutil.which("chrome.exe")),
-        ("Microsoft Edge", r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
-        ("Microsoft Edge", r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"),
-        ("Google Chrome", r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
-        ("Google Chrome", r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
-    ]
+def _find_playwright_chromium_executable() -> tuple[str, str] | None:
+    """Playwright-bundled Chromium — works when Chrome/Edge are not installed system-wide."""
+    try:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as sp:
+            exe = str(getattr(sp.chromium, "executable_path", None) or "").strip()
+        if exe and os.path.isfile(exe):
+            return ("Playwright Chromium", exe)
+    except Exception:
+        pass
+    return None
+
+
+def _find_system_browser_for_kite_debug() -> tuple[str, str]:
+    """
+    Resolve a Chromium-based browser for --remote-debugging-port (interactive Kite capture).
+    Covers Windows per-user installs (LocalAppData) and Playwright fallback.
+    """
+    plat = sys.platform.lower()
+    candidates: list[tuple[str, str]] = []
+
+    if plat == "win32":
+        for w in ("msedge", "msedge.exe", "chrome", "chrome.exe", "brave", "brave.exe"):
+            p = shutil.which(w)
+            if p:
+                candidates.append((w.replace(".exe", "").title(), p))
+        candidates.extend(
+            [
+                ("Chrome (LocalAppData)", os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe")),
+                ("Edge (LocalAppData)", os.path.expandvars(r"%LocalAppData%\Microsoft\Edge\Application\msedge.exe")),
+                ("Chrome", r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
+                ("Chrome x86", r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
+                ("Edge x86", r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
+                ("Edge", r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"),
+                ("Brave", r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"),
+            ]
+        )
+    elif plat == "darwin":
+        candidates.extend(
+            [
+                ("Chrome", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+                ("Edge", "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"),
+                ("Brave", "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"),
+            ]
+        )
+    else:
+        for w in ("google-chrome-stable", "google-chrome", "chromium-browser", "chromium", "microsoft-edge"):
+            p = shutil.which(w)
+            if p:
+                candidates.append((w, p))
+
     for label, path in candidates:
         if path and os.path.isfile(path):
             return label, path
-    raise RuntimeError("Could not find Edge or Chrome on this machine")
+
+    pw = _find_playwright_chromium_executable()
+    if pw:
+        return pw
+
+    raise RuntimeError(
+        "Could not find Edge, Chrome, or Playwright Chromium on this machine. "
+        "Install Google Chrome, run `playwright install chromium`, or use Nexus **Popup login** in the browser."
+    )
 
 
 def _start_interactive_kite_login(user_id: int, payload: dict[str, Any]) -> dict[str, Any]:
@@ -1713,7 +1765,7 @@ def _start_interactive_kite_login(user_id: int, payload: dict[str, Any]) -> dict
                 final_url = text
 
         try:
-            browser_name, browser_path = _find_windows_browser()
+            browser_name, browser_path = _find_system_browser_for_kite_debug()
             debug_port = secrets.randbelow(1000) + 9223
             profile_dir = tempfile.mkdtemp(prefix="stockr_kite_login_")
             _set_kite_interactive_session(
@@ -1867,6 +1919,10 @@ def _public_broker(conn: sqlite3.Connection, user_id: int) -> dict[str, Any]:
     profile = _loads(row["profile_json"], {})
     capabilities = _loads(row["capabilities_json"], {})
     recent = conn.execute("SELECT * FROM saas_broker_order_log WHERE user_id=? ORDER BY id DESC LIMIT 10", (user_id,)).fetchall()
+    st_u = str(row["status"] or "").upper()
+    bc_u = str(row["broker_code"] or "").upper()
+    # Do not leak partial API credentials over the wire once Zerodha session is live.
+    hide_cred_preview = bc_u != "PAPER" and st_u in {"CONNECTED", "READY"}
     return {
         "id": int(row["id"]),
         "broker_code": row["broker_code"],
@@ -1884,9 +1940,9 @@ def _public_broker(conn: sqlite3.Connection, user_id: int) -> dict[str, Any]:
         "order_variety": row["order_variety"] or "regular",
         "account_label": row["account_label"] or "",
         "broker_user_id": row["broker_user_id"] or "",
-        "api_key_masked": _mask_secret(str(row["api_key"] or "")),
-        "api_secret_masked": _mask_secret(_unpack_secret(row["api_secret_enc"])),
-        "access_token_masked": _mask_secret(_unpack_secret(row["access_token_enc"])),
+        "api_key_masked": ("" if hide_cred_preview else _mask_secret(str(row["api_key"] or ""))),
+        "api_secret_masked": ("" if hide_cred_preview else _mask_secret(_unpack_secret(row["api_secret_enc"]))),
+        "access_token_masked": ("" if hide_cred_preview else _mask_secret(_unpack_secret(row["access_token_enc"]))),
         "last_error": row["last_error"] or "",
         "profile": profile,
         "capabilities": capabilities,
@@ -2902,7 +2958,9 @@ def kite_oauth_return_page() -> HTMLResponse:
       }});
     return;
   }}
-  setTimeout(function(){{ try {{ window.close(); }} catch (e2) {{}} }}, 500);
+  // Close popup tab quickly after notifying opener (retry: some browsers ignore first close).
+  setTimeout(function(){{ try {{ window.close(); }} catch (e2) {{}} }}, 350);
+  setTimeout(function(){{ try {{ window.close(); }} catch (e7) {{}} }}, 1600);
 }})();
   </script>
 </body>

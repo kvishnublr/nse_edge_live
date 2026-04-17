@@ -2370,14 +2370,53 @@ async def day_performance(date: str = None):
     except Exception:
         lsh = []
 
+    # OPEN spike/swing rows need live LTP for MTM. price_cache only tracks KITE_TOKENS;
+    # NIFTY-200 spikes (e.g. COCHINSHIP) are often missing → batch NSE quote fallback.
+    sym_need: list[str] = []
+    for r in lsh:
+        d0 = dict(r)
+        if str(d0.get("status") or "OPEN").upper() != "OPEN":
+            continue
+        sk = str(d0.get("symbol") or "").strip().upper()
+        if not sk:
+            continue
+        px0 = float(((prices_now.get(sk) or {}).get("price") or 0) or 0)
+        if px0 <= 0:
+            sym_need.append(sk)
+    sym_need = list(dict.fromkeys(sym_need))
+    quote_ltps: dict[str, float] = {}
+    if sym_need and (KITE_ACCESS_TOKEN or "").strip():
+        try:
+            from feed import get_kite
+
+            kite = get_kite()
+            keys = [f"NSE:{s}" for s in sym_need]
+            for i in range(0, len(keys), 400):
+                chunk = keys[i : i + 400]
+                qd = kite.quote(chunk) or {}
+                for k, q in (qd.items() if isinstance(qd, dict) else []):
+                    if not q or not isinstance(q, dict):
+                        continue
+                    parts = str(k).split(":", 1)
+                    if len(parts) != 2 or parts[0].upper() != "NSE":
+                        continue
+                    symu = parts[1].strip().upper()
+                    lp = float(q.get("last_price") or 0)
+                    if lp > 0:
+                        quote_ltps[symu] = lp
+        except Exception as exc:
+            logger.warning("day_performance: NSE quote fallback for open rows failed: %s", exc)
+
     for r in lsh:
         d = dict(r)
-        sym = d.get("symbol")
+        sym = str(d.get("symbol") or "").strip().upper()
         status = d.get("status") or "OPEN"
         entry = float(d.get("entry_price") or 0)
         exit_p = d.get("exit_price")
         dirn = (d.get("signal_type") or "LONG").upper()
         last_px = float(((prices_now.get(sym) or {}).get("price") or 0) or 0)
+        if last_px <= 0 and sym:
+            last_px = float(quote_ltps.get(sym) or 0)
         # MTM for open rows if we can
         if status == "OPEN" and entry and last_px:
             pnl_pts = (last_px - entry) if dirn != "SHORT" else (entry - last_px)
