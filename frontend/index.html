@@ -4,13 +4,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<meta name="description" content="STOCKR.IN — Live trading terminal: Zerodha Kite, 5-gate engine, spikes, and F&O context.">
+<meta name="description" content="STOKR.IN — Live trading terminal: Zerodha Kite, 5-gate engine, spikes, and F&O context.">
 <meta name="keywords" content="NSE, intraday signals, F&O, spike detector, zerodha, kite connect, EDGE">
-<meta property="og:site_name" content="STOCKR.IN">
-<meta property="og:title" content="STOCKR.IN">
+<meta property="og:site_name" content="STOKR.IN">
+<meta property="og:title" content="STOKR.IN">
 <meta property="og:description" content="AI-Powered Intraday Trading Signals with 70% Win Rate">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' stroke='%2300ff88' stroke-width='2' fill='none' opacity='0.3'/><path d='M8 12h8M12 8v8M9 10l3-4 3 4' stroke='%2300ff88' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' fill='none'/></svg>">
-<title>STOCKR.IN - Advanced Trading Edge</title>
+<title>STOKR.IN - Advanced Trading Edge</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0d1520">
 <!-- When the UI is on a different host than the FastAPI server, set this to the API origin (no trailing slash). Example: https://api.yourdomain.com -->
@@ -139,13 +139,19 @@ body{
 #tv-container{flex:1;min-height:0}
 .tv-link{cursor:pointer;transition:color .12s}
 .tv-link:hover{color:var(--go)!important;text-decoration:underline;text-underline-offset:2px}
-/* TOPBAR — STOCKR.IN (clean strip) */
+/* TOPBAR — STOKR.IN (clean strip) */
 #tb{
   height:36px;display:flex;align-items:center;justify-content:space-between;
+  overflow:hidden;
   padding:0 12px 0 14px;background:var(--s1);border-bottom:1px solid var(--b1);flex-shrink:0;
   gap:10px;
 }
-.tbl{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.tbl{
+  display:flex;align-items:center;gap:10px;min-width:0;flex:1 1 0;
+  overflow-x:auto;overflow-y:hidden;
+  scrollbar-width:none;-ms-overflow-style:none;
+}
+.tbl::-webkit-scrollbar{display:none;height:0}
 .logo{display:flex;align-items:center;gap:8px;cursor:default;user-select:none;flex-shrink:0}
 .logo-mark{display:flex;align-items:center;gap:8px}
 .logo-icon{flex-shrink:0;width:20px;height:20px;filter:drop-shadow(0 0 4px rgba(0,232,122,.35))}
@@ -2242,7 +2248,7 @@ button{font-weight:700}
   .tabs-viewport{-webkit-overflow-scrolling:touch}
   .tab{white-space:nowrap;flex-shrink:0}
   #tb .tbl>*:not(.logo):not(.sep):not(.lpill):not(.clk){display:none}
-  .tbr>*:not(.theme-tog){display:none}
+  .tbr>*:not(.theme-tog):not(.is-tb-keep){display:none}
   .mtog{display:none}
   .strow,.psgrid,.vrgrid,.cal-grid{grid-template-columns:1fr 1fr!important}
   .hm-grid{grid-template-columns:repeat(3,1fr)!important}
@@ -2262,7 +2268,7 @@ button{font-weight:700}
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   STOCKR.IN — GLOBAL VISUAL POLISH (readability & clarity pass)
+   STOKR.IN — GLOBAL VISUAL POLISH (readability & clarity pass)
    Injected last so it wins over all earlier rules.
    ═══════════════════════════════════════════════════════════════ */
 
@@ -2490,6 +2496,27 @@ html,body{
 body{ background:var(--bg); }
 #tb { background:var(--s1)!important; }
 
+/* NSE ADV CASH popup: dark panel + global `.light table td { color !important }` would paint body text ink on a black-green table — force readable fills */
+#acd-pop table.acd-tbl td,
+#acd-pop table.acd-tbl th{
+  color:#ecfdf5 !important;
+  -webkit-text-fill-color:#ecfdf5 !important;
+  opacity:1 !important;
+}
+#acd-pop table.acd-tbl thead th{
+  color:#5eead4 !important;
+  -webkit-text-fill-color:#5eead4 !important;
+}
+html.light #acd-pop table.acd-tbl td,
+html.light #acd-pop table.acd-tbl th{
+  color:#ecfdf5 !important;
+  -webkit-text-fill-color:#ecfdf5 !important;
+}
+html.light #acd-pop table.acd-tbl thead th{
+  color:#5eead4 !important;
+  -webkit-text-fill-color:#5eead4 !important;
+}
+
 /* ── 16. SIGNAL ENGINE inline-style classes ─────────────────────── */
 .se-hb-lbl     { font-size:9px!important;  letter-spacing:1.5px; font-weight:700!important; color:var(--t2)!important; }
 .se-hb-sub     { font-size:10px!important; color:var(--t2)!important; }
@@ -2586,7 +2613,7 @@ textarea[style*="font-size"] { font-size:12px!important; }
 .btpre { font-size:9px!important; }
 
 /* ══════════════════════════════════════════════════════════════════
-   STOCKR.IN — FULL-WINDOW + CONTRAST AUDIT PASS
+   STOKR.IN — FULL-WINDOW + CONTRAST AUDIT PASS
    ══════════════════════════════════════════════════════════════════ */
 
 /* ── A. TRUE FULL-WINDOW — remove floating-card look ─────────────── */
@@ -2609,6 +2636,7 @@ body {
 /* ── B. TOPBAR — taller, more breathing room ──────────────────────── */
 #tb {
   height:42px !important;
+  overflow:hidden !important;
   padding:0 14px !important;
   border-bottom:2px solid var(--b1) !important;
 }
@@ -3206,7 +3234,7 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
       <div id="vk-from"><span id="vk-from-txt">A Thought From..</span></div>
       <div id="vk-div"></div>
       <div id="vk-name"></div>
-      <div id="vk-sub">STOCKR.IN &nbsp;·&nbsp; Intraday Intelligence</div>
+      <div id="vk-sub">STOKR.IN &nbsp;·&nbsp; Intraday Intelligence</div>
       <div id="vk-text-sparkles" aria-hidden="true"></div>
     </div>
   </div>
@@ -3773,7 +3801,7 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
           <circle cx="12" cy="12" r="10" stroke="url(#logoGrad)" stroke-width="2" fill="none" opacity="0.35"/>
           <path d="M8 12h8M12 8v8M9 10l3-4 3 4" stroke="url(#logoGrad)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
         </svg>
-        <span class="logo-nse" aria-label="STOCKR.IN">STOCKR.IN</span>
+        <span class="logo-nse" aria-label="STOKR.IN">STOKR.IN</span>
       </div>
       <div class="logo-text">
         <span class="logo-sub">TRADING OS <span class="logo-ver">v5</span></span>
@@ -3801,7 +3829,7 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
     </div>
     <button class="sound-btn on" id="sound-tog" onclick="toggleSound()" title="Sound alerts (EXECUTE signal)"></button>
     <button class="tbbtn" id="strategy-prof-btn" onclick="toggleStrategyProfile()" title="Switch strategy profile">🧪 BALANCED V2</button>
-    <button class="tbbtn primary" onclick="openDayPerf()" title="Full-day performance (all alerts)">DAY</button>
+    <button type="button" class="tbbtn primary" id="tb-day-perf-btn" onclick="openDayPerf()" title="Full-day performance (all alerts)">DAY</button>
     <button class="tbbtn nx-launch-btn" id="nx-launch-btn" onclick="openNexusModal()" title="Open Login Nexus portal">LOGIN HUB</button>
     <button type="button" class="tb-util" onclick="exportCSV()" title="Export CSV">CSV</button>
     <button type="button" class="tb-util" onclick="testTelegram()" title="Telegram test">TG</button>
@@ -4061,6 +4089,18 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
           <span class="tab-txt">PLAYBOOK</span>
         </div>
 
+        <div class="tab" style="--tc:#22d3ee;--tg:rgba(34,211,238,.14);--ts:rgba(34,211,238,.5)"
+             onclick="sw('intradaysystem',this)" id="isd-tab" title="NSE Intraday System playbook — regime classifier + strategy matrix">
+          <span class="tab-glyph" aria-hidden="true">🧭</span>
+          <span class="tab-txt">INTRADAY SYSTEM</span>
+        </div>
+
+        <div class="tab" style="--tc:#a3e635;--tg:rgba(163,230,53,.14);--ts:rgba(163,230,53,.5)"
+             onclick="sw('etfswing',this)" id="etf-tab" title="ETF Swing Lab — FII streak + component delivery + proxy OBI; CNC swing backtest">
+          <span class="tab-glyph" aria-hidden="true">&#128202;</span>
+          <span class="tab-txt">ETF SWING</span>
+        </div>
+
         <div class="tab tab-nexus" style="--tc:#67e8f9;--tg:rgba(103,232,249,.14);--ts:rgba(103,232,249,.5)"
              onclick="sw('nexus',this)" title="LOGIN HUB: user access, wallets, strategy entitlements, and payments">
           <span class="tab-glyph" aria-hidden="true">N</span>
@@ -4150,6 +4190,8 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
         <button class="tmm-item" onclick="tabsMoreSw('journal')"><span>📝</span>TRADE LOG</button>
         <button class="tmm-item" onclick="tabsMoreSw('stats')"><span>📊</span>STATS</button>
         <button class="tmm-item" onclick="tabsMoreSw('playbook')"><span>📓</span>PLAYBOOK</button>
+        <button class="tmm-item" onclick="tabsMoreSw('intradaysystem')"><span>🧭</span>INTRADAY SYSTEM</button>
+        <button class="tmm-item" onclick="tabsMoreSw('etfswing')"><span>📊</span>ETF SWING</button>
         <button class="tmm-item" onclick="tabsMoreSw('policy')"><span>◆</span>POLICY</button>
                 <button class="tmm-item" onclick="tabsMoreSw('nexus')"><span>N</span>LOGIN HUB</button>
 <button class="tmm-item" onclick="tabsMoreSw('learnbt')"><span>ℹ</span>BT GUIDE</button>
@@ -5313,7 +5355,7 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
     <!-- header strip -->
     <div style="display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--b1);flex-shrink:0;background:rgba(245,158,11,.06);flex-wrap:wrap">
       <span style="font-size:9px;font-weight:900;letter-spacing:1.5px;color:#f59e0b;white-space:nowrap">◈ ADV PRIME STRIKE</span>
-      <span style="font-size:7px;color:var(--t3);flex:1;min-width:120px">Buying only · VIX day gate · PCR align · 10:00–13:00 · session lock · 15m hunt · ranked 1-3 trades/day</span>
+      <span style="font-size:7px;color:var(--t3);flex:1;min-width:120px">Backtest: NFO NIFTY + BANKNIFTY <b>index futures</b> (front month) for prices · VIX/PCR cross still on NSE index minutes · buying only · 10:00–13:00 · ranked 1–3/day</span>
     </div>
 
     <!-- sub-tabs: LIVE TODAY | BACKTEST -->
@@ -5365,7 +5407,7 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
           </div>
         </div>
         <div id="ps-status" style="font-size:7.5px;color:var(--t2);min-height:14px"></div>
-        <div class="ps-bt-hint">Scroll the panel below for results. Long 1Y runs use chunked Kite data and may take a minute.</div>
+        <div class="ps-bt-hint">Scroll below for results. Long ranges pull many NFO + index minute windows from Kite (rolled futures are batched); 1Y can take a few minutes.</div>
       </div>
 
       <div id="ps-bt-scroll" class="ps-bt-scroll" title="Scroll here for summary cards, walk-forward, and full trade log">
@@ -5891,6 +5933,16 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
     </div>
   </div>
 
+  <!-- TAB: ETF SWING (frontend/etf_swing_tab.js) -->
+  <div class="tp" id="tp-etfswing" style="flex-direction:column;overflow-y:auto;gap:10px;padding:10px">
+    <div id="etf-swing-root"></div>
+  </div>
+
+  <!-- TAB: INTRADAY SYSTEM (separate module: frontend/intraday_system.js) -->
+  <div class="tp" id="tp-intradaysystem" style="flex-direction:column;overflow-y:auto;gap:10px;padding:10px">
+    <div id="intraday-system-root"></div>
+  </div>
+
   <!-- TAB: EDGE ANALYTICS -->
   <div class="tp" id="tp-analytics">
     <div class="anav">
@@ -6358,7 +6410,7 @@ canvas#eg-equity-canvas { width:100%; height:90px; display:block; border-radius:
     <!-- Hero banner -->
     <div style="background:linear-gradient(135deg,#0f0a1e 0%,#13192e 60%,#0d2240 100%);border:1px solid rgba(167,139,250,.2);border-radius:8px;padding:18px 22px;margin-bottom:16px;position:relative;overflow:hidden">
       <div style="position:absolute;top:-20px;right:-20px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,rgba(167,139,250,.12),transparent 70%);pointer-events:none"></div>
-      <div style="font-size:7px;font-weight:700;letter-spacing:3px;color:rgba(167,139,250,.6);margin-bottom:6px">STOCKR.IN </div>
+      <div style="font-size:7px;font-weight:700;letter-spacing:3px;color:rgba(167,139,250,.6);margin-bottom:6px">STOKR.IN </div>
       <div style="font-family:var(--fh);font-size:17px;font-weight:900;letter-spacing:2px;color:#c4b5fd;margin-bottom:6px;line-height:1.1">OPTIONS BACKTEST<br>GUIDE</div>
       <div style="font-size:8.5px;color:var(--t1);line-height:1.6">Build, test, and validate intraday options strategies using Python and real 1-min data. Use the system's live backtest engine as the benchmark.</div>
     </div>
@@ -7934,7 +7986,7 @@ entry_time    strike  type  entry  max   exit  return%
   <div class="nx-modal-panel">
     <div class="nx-modal-bar">
       <div class="nx-modal-title">
-        <div class="nx-modal-kicker">STOCKR.IN CONTROL DECK</div>
+        <div class="nx-modal-kicker">STOKR.IN CONTROL DECK</div>
         <div class="nx-modal-head">Nexus</div>
         <div class="nx-modal-sub">Full-screen SaaS user, wallet, payment, and strategy workspace. Admin uses /admin OTP login.</div>
       </div>
@@ -8469,6 +8521,16 @@ function sw(name,btn){
     setTimeout(function(){
       if(typeof refreshPlaybookDesign === 'function') refreshPlaybookDesign();
       if(typeof pbLoadHistory === 'function') pbLoadHistory();
+    }, 40);
+  }
+  if(name==='intradaysystem'){
+    setTimeout(function(){
+      try{ if(typeof intradaySystemRender === 'function') intradaySystemRender(); }catch(e){}
+    }, 40);
+  }
+  if(name==='etfswing'){
+    setTimeout(function(){
+      try{ if(typeof etfSwingTabInit === 'function') etfSwingTabInit(); }catch(e){}
     }, 40);
   }
   if(name==='confluence'){
@@ -13048,6 +13110,10 @@ function ixFmtSignalTime(s) {
           +psBreakdownTable('CE vs PE ACCURACY', data.type_stats||{}, tyKeys, tyLabels, '#c084fc')
         +'</div>';
 
+      var psSrcNote = data.underlying_price_source
+        ? ('<div style="font-size:7px;color:var(--t3);margin:8px 0;line-height:1.45;padding:8px 10px;background:rgba(245,158,11,.06);border-radius:6px;border:1px solid var(--b1)"><b>Underlying 1m bars</b> — NFO NIFTY + BANKNIFTY front-month index futures for signal path &amp; outcomes. VIX/PCR day gate + 5m cross-index still use NSE NIFTY 50 / NIFTY BANK index minutes.</div>')
+        : '';
+
       // Trade table
       var trades = data.trades||[];
       var v2cols = !!(trades.length && (trades[0].book != null || trades[0].regime != null));
@@ -13117,7 +13183,7 @@ function ixFmtSignalTime(s) {
           : '<div style="text-align:center;padding:20px;color:var(--t2);font-size:9px">No trades passed all filters for this period</div>')
         +'</div>';
 
-      body.innerHTML = breakdownHtml + tableHtml;
+      body.innerHTML = breakdownHtml + psSrcNote + tableHtml;
     }
 
     function psRenderAdvReport(data){
@@ -14683,7 +14749,7 @@ async function cfLoadHistory(){
 // INIT
 // ═══════════════════════════════════════════════
 setMode('intraday');
-setTimeout(()=>notify('STOCKR.IN ready - connecting to live data...'),400);
+setTimeout(()=>notify('STOKR.IN ready - connecting to live data...'),400);
 
 (function stockrWelcomeVoice(){
   var spoken = false;
@@ -14695,7 +14761,7 @@ setTimeout(()=>notify('STOCKR.IN ready - connecting to live data...'),400);
     try{
       if(!window.speechSynthesis) return;
       if(sessionStorage.getItem('nse_stockr_welcome_sess') === '1'){ spoken = true; return; }
-      var u = new SpeechSynthesisUtterance('Welcome to STOCKR.IN, your advanced trading OS.');
+      var u = new SpeechSynthesisUtterance('Welcome to STOKR.IN, your advanced trading OS.');
       u.lang = 'en-IN';
       u.rate = 0.9;
       u.pitch = 1;
@@ -15615,6 +15681,15 @@ function _topActiveStocks(stocks){
       case 'ping':
         if(ws) ws.send(JSON.stringify({type:'pong'}));
         break;
+
+      case 'kite_login_required': {
+        // Headless login failed at startup — show banner and prompt browser login
+        const _b = document.getElementById('token-banner');
+        const _bm = document.getElementById('token-banner-msg');
+        if(_b) _b.style.display = 'flex';
+        if(_bm) { _bm.textContent = 'Auto-login failed — click ONE-TIME LOGIN to connect via browser (takes ~10s).'; _bm.style.color='var(--am)'; }
+        break;
+      }
 
       // ── PRICES ────────────────────────────────────
       case 'prices': {
@@ -19677,7 +19752,7 @@ function notifyExecuteDesktop(d){
   const pc = d.pass_count != null ? d.pass_count : '—';
   const body = sub + ' · ' + pc + '/5 gates';
   const go = function(){
-    try{ new Notification('STOCKR.IN — EXECUTE', { body: body, tag: 'stockrin-exec-edge' }); }catch(e){}
+    try{ new Notification('STOKR.IN — EXECUTE', { body: body, tag: 'stockrin-exec-edge' }); }catch(e){}
   };
   if(Notification.permission === 'granted') go();
   else if(Notification.permission !== 'denied') Notification.requestPermission().then(function(p){ if(p === 'granted') go(); });
@@ -21680,7 +21755,7 @@ function _renderSESCards() {
 
 <!-- PWA Install Banner -->
 <div id="pwa-banner" style="display:none;position:fixed;bottom:12px;right:12px;z-index:9997;background:var(--s1);border:1px solid var(--go-b);border-radius:6px;padding:10px 14px;align-items:center;gap:12px;box-shadow:0 4px 20px rgba(0,0,0,.4)">
-  <span style="font-size:9px;color:var(--t0)">📱 Install STOCKR.IN as app</span>
+  <span style="font-size:9px;color:var(--t0)">📱 Install STOKR.IN as app</span>
   <button id="pwa-install-btn" style="padding:3px 10px;font-family:var(--fn);font-size:8px;font-weight:700;border:1px solid var(--go-b);border-radius:3px;cursor:pointer;color:var(--go);background:var(--go-d)">INSTALL</button>
   <button onclick="document.getElementById('pwa-banner').style.display='none'" style="background:none;border:none;cursor:pointer;color:var(--t2);font-size:12px">✕</button>
 </div>
@@ -22905,7 +22980,11 @@ function hpRenderWrCanvas(days){
 })();
 </script>
 
+<script src="/frontend-static/intraday_system.js?v=34"></script>
+<script src="/frontend-static/etf_swing_tab.js?v=5"></script>
+<script src="/frontend-static/options_shadow_tracker.js?v=15"></script>
 <script src="/frontend-static/saas_nexus.js?v=30"></script>
+<a href="/frontend-static/expiry_only.html?v=4&edge_mode=backtest&tab=backtest" id="expiry-only-dash-link" style="position:fixed;bottom:4px;right:10px;z-index:99998;font-size:10px;font-weight:700;color:rgba(245,166,35,.9);text-decoration:none;font-family:system-ui,Segoe UI,sans-serif" title="EXPIRY ONLY — 9-step ladder + Thursday backtest">EXPIRY ONLY</a>
 </body>
 </html>
 
